@@ -1,24 +1,34 @@
 #!/usr/bin/env python3
-"""決まりの台帳。修正の指示（指摘）と、決まりの変更の提案・適用・却下を、ワークスペースの .factory/ledger.jsonl に 1 件 1 行で足していく。
+"""決まりの台帳。修正の指示（指摘）、決まりの変更の提案・適用・却下、判断待ち、レビューの結果を、ワークスペースの .factory/ledger.jsonl に 1 件 1 行で足していく。
 決まりの本文には ID（visual-<番号>・ws-visual-<番号> を角括弧で囲む）と短い理由だけを書き、日付・原文・どの資料か・ユーザーが決めたかは、ここに ID でつなぐ。
 決まりの層と戻し方は ../rules.md。ワークスペース（今いるフォルダから上へ、最初の factory.toml のフォルダ）で回す。標準ライブラリだけ。
 usage:
-  ledger.py add --deck <資料のフォルダ> --quote <ユーザーの言葉> [--fix <直した箇所>] [--to <決まりの ID・ファイル・未・戻さない>] [--check lint|レビュー|なし] [--session <会話 ID>] [--decided] [--once]
+  ledger.py add --deck <資料のフォルダ> --quote <ユーザーの言葉> [--fix <直した箇所>] [--to <決まりの ID・ファイル・未・戻さない>] [--check lint|レビュー|なし] [--session <会話 ID>] [--at <言われた時刻（UTC）>] [--decided] [--once]
+                                                   --at は会話の記録からあとで拾ったときの発言の時刻（再発の数に使う。既定は書いた時刻）
                                                    --once は前の形の構成案から取り込むときだけ（同じ資料・言葉・会話がもうあれば足さない）
   ledger.py route <c-ID> <戻し先>                 指摘の戻し先を決める・変える
   ledger.py list [--deck <フォルダ>] [--open] [--to <戻し先>]   指摘の一覧（--open は戻し先が「未」のものだけ）
-  ledger.py why <決まりの ID>                      その決まりの出典（指摘・日付・原文）と、資料・顧客の数、ユーザーが決めたか
+  ledger.py why <決まりの ID>                      その決まりの出典（指摘・日付・原文、再発か）と、資料・顧客の数、ユーザーが決めたか、レビューの結果
+  ledger.py rules                                  決まりごとの数（指摘・再発・資料・顧客・レビューの結果）
   ledger.py next <接頭辞>                          次の決まりの ID（ワークスペースの決まりは ws-visual のように ws- を付ける）
-  ledger.py propose --file <ワークスペースのファイル> --new <新しい文> [--old <今の文>] [--rule <ID>] --why <要点> [--src c-1,c-2] [--kind <種類>]
-  ledger.py pending [--status 却下|適用済み|戻した|all]   提案と差分（既定は未適用。却下は理由も）
-  ledger.py apply <P-ID ...|all>                   提案を当てる（今の文がそのまま 1 か所にあるときだけ）
-  ledger.py reject <P-ID> --reason <理由>           ユーザーが却下した（dreaming は同じ趣旨の提案をもう出さない）
-  ledger.py withdraw <P-ID> --reason <理由>         出した側が取り下げる（書き間違いの出し直しなど。却下には数えない）
+  ledger.py propose --file <ワークスペースのファイル> --new <新しい文> [--old <今の文>] [--rule <ID>] --why <要点> [--src c-1,c-2] [--kind <種類>] [--plugin]
+                                                   --plugin は変更先がプラグイン（--file は skills/ からのパス）。当てず、factory-kaizen で PR にする
+  ledger.py pending [--status 却下|適用済み|戻した|取り下げ|PR にした|all]   提案と差分（既定は未適用。却下は理由も）
+  ledger.py apply <P-ID ...|all>                   提案を当てる（今の文がそのまま 1 か所にあるときだけ。プラグインへの提案は当てない）
+  ledger.py sent <P-ID> --pr <URL> [--rule <ID>]   プラグインへの提案を PR にした（出典の指摘をその決まりにつなぐ。--rule は PR で提案と違う ID にしたとき）
+  ledger.py reject <P-ID> --reason <理由>           ユーザーが却下した（dreaming は同じ趣旨の提案をもう出さない）。PR にしたものが断られたときも（出典の指摘は前の戻し先に戻る）
+  ledger.py withdraw <P-ID か Q-ID> --reason <理由>   出した側が取り下げる（書き間違いの出し直しなど。却下には数えない）
   ledger.py undo <P-ID>                            当てた提案を逆向きに当てて戻す
   ledger.py drift                                  当てたあとに手で直された・消えた決まり（ユーザーが直したものとして扱う）
+  ledger.py ask --q <ユーザーに聞くこと> [--rule <ID>] [--src c-1,c-2]   判断待ち
+  ledger.py answer <Q-ID> --a <ユーザーの言葉>      判断待ちへの答え
+  ledger.py questions [--all]                      判断待ち（--all は答えたものと取り下げたものも）
+  ledger.py review --deck <資料のフォルダ> --table <指摘の表のファイル>   deck-review の指摘の表から、決まりの列のある行の結果を取り込む（同じ行は 2 度数えず、周をまたぐ同じ行はあとの周の結果）
   ledger.py --selftest
 台帳の原文には顧客のことが入る。.factory/ から外（PR・チャット）に写さない。"""
-import argparse, difflib, json, re, sys, tempfile, time
+import argparse, difflib, hashlib, json, re, sys, tempfile, time
+from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 
 try:
@@ -27,7 +37,11 @@ except ImportError:  # ponytail: Windows では鍵をかけない。同時に書
     fcntl = None
 
 PLUGIN = Path(__file__).resolve().parents[2]  # プラグインの skills/
-RULE_ID = re.compile(r"\[((?:ws-)?[a-z][\w-]*?-\d{3})\]")
+ID = r"(?:ws-)?[a-z][\w-]*?-\d{3}"  # 決まりの ID（visual-012・ws-visual-003）
+RULE_ID = re.compile(rf"\[({ID})\]")
+KEY = re.compile(rf"{ID}|lint:.+")  # レビューの表の「決まり」の列に書くもの（lint の規則は名前で lint:<名前>）
+RESULTS = ("直した", "残した（誤り）", "残した", "聞く")
+NO_RULE = ("未", "戻さない")  # 決まりにつないでいない戻し先
 
 
 def workspace():
@@ -59,21 +73,82 @@ def write(ws, rec, number=None):
     return rec
 
 
+def utc(s):
+    """--at を ts と同じ UTC の形にする（文字のまま ts と比べるので）。時差のない時刻は UTC とみなす（sessions.py の時刻は UTC）。"""
+    try:
+        t = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        sys.exit(f"--at は ISO 8601 の時刻（2026-10-12T09:30 など。時差がなければ UTC）: {s}")
+    return (t if t.tzinfo else t.replace(tzinfo=timezone.utc)).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def when(c):
+    return c.get("at") or c.get("date") or c["ts"]
+
+
+def introduces(p):
+    """提案が決まりの ID を新しく書き入れるか。今ある決まりを書き直す提案は、決まりを作らない。"""
+    tag = f"[{p['rule']}]"
+    return bool(p["rule"]) and tag in p["new"] and tag not in p["old"]
+
+
+def rule_arg(s):
+    """--rule は決まりの ID の形だけ（崩れた ID は next の番号を数えられない）。"""
+    if not re.fullmatch(ID, s):
+        raise argparse.ArgumentTypeError(f"決まりの ID の形でない（visual-012・ws-visual-003 など）: {s}")
+    return s
+
+
 def state(ws):
-    """台帳を読み直して、いまの指摘（戻し先は最後の route）と提案（状態は最後の出来事）にする。"""
-    cs, ps = {}, {}
+    """台帳を読み直して、いまの指摘（戻し先は最後の route）、提案と判断待ち（状態は最後の出来事）、レビューの結果にする。
+    指摘の recur（再発）は、初めてつないだ決まりの ID（first。ファイルは数えない）がもうあったときに言われたか（言われた時刻が、その決まりのできた時刻より後か）。
+    決まりのできた時刻は、つないだときに台帳の提案でできていたらその時刻（ID を書き入れた提案を当てた・PR にした時刻。戻した・断られたら消える）。
+    そうでなければ、プラグインの決まりは前からある（""）。ワークスペースの決まりは、その決まりに初めてつないだ指摘のうち、いちばん早く言われた時刻。
+    あとで別の決まりに移しても（大元に上げたときなど）first は変えない。未・戻さないに戻したら決め直す。"""
+    cs, ps, qs, rv, born, made = {}, {}, {}, {}, {}, {}  # born・made: 台帳の提案で作った決まりの ID → 作った時刻・その提案
+
+    def link(c, to):
+        if not re.fullmatch(ID, to):  # 未・戻さない・ファイル（1 つのファイルには別々の決まりが入るので、再発を数えない）
+            c.pop("first", None)
+            c.pop("born", None)
+        elif "first" not in c:
+            c["first"], c["born"] = to, born.get(to, None if to.startswith("ws-") else "")
+
     for n, r in enumerate(records(ws)):
         k = r["kind"]
         if k == "correction":
             cs[r["id"]] = dict(r)
+            link(cs[r["id"]], r["to"])
         elif k == "route" and r["ref"] in cs:
             cs[r["ref"]]["to"] = r["to"]
+            link(cs[r["ref"]], r["to"])
         elif k == "proposal":
             ps[r["id"]] = {**r, "status": "未適用"}
-        elif k in ("applied", "rejected", "withdrawn", "undone") and r["ref"] in ps:
-            ps[r["ref"]].update(status={"applied": "適用済み", "rejected": "却下", "withdrawn": "取り下げ", "undone": "戻した"}[k], seq=n,
-                                **{x: r[x] for x in ("appended", "reason", "prev") if x in r})
-    return cs, ps
+        elif k in ("applied", "rejected", "withdrawn", "undone", "sent") and r["ref"] in ps:
+            p = ps[r["ref"]]
+            intro = introduces(p)  # PR で別の ID にしたときも、もとの提案の文で見る
+            p.update(status={"applied": "適用済み", "rejected": "却下", "withdrawn": "取り下げ", "undone": "戻した", "sent": "PR にした"}[k], seq=n,
+                     **{x: r[x] for x in ("appended", "reason", "prev", "pr", "rule") if x in r})
+            if k in ("applied", "sent") and intro and p["rule"] not in born:  # 出典の指摘は、このあとの route で、再発でないとつなぐ
+                born[p["rule"]], made[p["rule"]] = r["ts"], p["id"]
+            elif k in ("undone", "rejected", "withdrawn") and made.get(p["rule"]) == p["id"]:  # 作った決まりがなくなった
+                del born[p["rule"]], made[p["rule"]]
+        elif k == "question":
+            qs[r["id"]] = {**r, "status": "未回答"}
+        elif k in ("answered", "withdrawn") and r["ref"] in qs:
+            qs[r["ref"]].update(status="回答済み" if k == "answered" else "取り下げ", **{x: r[x] for x in ("a", "reason") if x in r})
+        elif k == "review":
+            rv[r["key"]] = r  # 同じ行は、あとで取り込んだ結果にする
+    first_said = {}
+    for c in cs.values():
+        if c.get("born", "") is None:
+            first_said[c["first"]] = min(first_said.get(c["first"], when(c)), when(c))
+    for c in cs.values():
+        if "first" not in c:
+            continue
+        migrated = "date" in c and "at" not in c  # 前の形から移した、決まりを作った出典（日付だけ）
+        c["recur"] = not migrated and when(c) > (first_said[c["first"]] if c["born"] is None else c["born"])
+    return cs, ps, qs, list(rv.values())
 
 
 def rel(ws, p):
@@ -87,33 +162,77 @@ def add(ws, a):
     if same:  # 前の形の構成案の同じ行を、次の回でまた取り込んだとき。足し直さず、前の ID を返す（会話をまたぐくり返しは --once なしで足す）
         print(same["id"])
         return
-    rec = write(ws, {"kind": "correction", "deck": deck, "quote": a.quote, "fix": a.fix or "",
-                     "to": a.to, "check": a.check, "session": a.session or "", "decided": a.decided}, ("correction", "c-", 4))
+    rec = write(ws, {"kind": "correction", "deck": deck, "quote": a.quote, "fix": a.fix or "", "to": a.to, "check": a.check,
+                     "session": a.session or "", "decided": a.decided, **({"at": utc(a.at)} if a.at else {})}, ("correction", "c-", 4))
     print(rec["id"])
 
 
 def show(c):
     d = " ユーザーが決めた" if c.get("decided") else ""
-    return f"{c['id']} {c.get('date') or c['ts'][:10]} {c['deck'] or c.get('where') or '-'}「{c['quote'] or c.get('note', '')}」→ {c.get('fix') or '-'} [戻し先: {c['to']}][確かめ: {c.get('check', 'なし')}]{d}"
+    d += "（再発）" if c.get("recur") else ""
+    return f"{c['id']} {when(c)[:10]} {c['deck'] or c.get('where') or '-'}「{c['quote'] or c.get('note', '')}」→ {c.get('fix') or '-'} [戻し先: {c['to']}][確かめ: {c.get('check', 'なし')}]{d}"
+
+
+def customers(decks):
+    return {d.split("/")[1] for d in decks if d.startswith("Customers/")}
+
+
+def count(rows):
+    """件数と、それが出た資料の数（dreaming は資料の数で決める）。"""
+    return f"{len(rows)}（資料 {len({r['deck'] for r in rows} - {''})}）"
 
 
 def why(ws, rid):
-    cs = [c for c in state(ws)[0].values() if c["to"] == rid]
+    all_cs, _, _, rv = state(ws)
+    cs = [c for c in all_cs.values() if c["to"] == rid]
     for c in cs:
         print(show(c))
     decks = {c["deck"] for c in cs if c["deck"]}
-    custs = {c["deck"].split("/")[1] for c in cs if c["deck"].startswith("Customers/")}
-    print(f"== {rid}: 指摘 {len(cs)} 件・資料 {len(decks)} 本・顧客 {len(custs)} 社・ユーザーが決めた: {'あり' if any(c.get('decided') for c in cs) else 'なし'}")
+    print(f"== {rid}: 指摘 {len(cs)} 件（再発 {count([c for c in cs if c.get('recur')])}）・資料 {len(decks)} 本・顧客 {len(customers(decks))} 社・"
+          f"ユーザーが決めた: {'あり' if any(c.get('decided') for c in cs) else 'なし'}")
+    mine = [r for r in rv if r["rule"] == rid]
+    if mine:
+        print("   レビュー: " + "・".join(f"{k} {count([r for r in mine if r['result'] == k])}" for k in RESULTS if any(r["result"] == k for r in mine)))
     return cs
+
+
+def summary(ws):
+    """決まりごとの数。再発と「直した」が続くなら、文の決まりでは止まっていない。「残した（誤り）」が多いなら、決まりの書き方が外れている。"""
+    cs, _, _, rv = state(ws)
+    rows = {}
+    row = lambda k: rows.setdefault(k, {"指摘": [], "再発": [], "decks": set(), "決めた": False, **{x: [] for x in RESULTS}})
+    for c in cs.values():
+        if c["to"] not in NO_RULE:
+            x = row(c["to"])
+            x["指摘"].append(c)
+            if c.get("recur"):
+                x["再発"].append(c)
+            x["決めた"] |= bool(c.get("decided"))
+            x["decks"].add(c["deck"])
+    for r in rv:
+        x = row(r["rule"])
+        x[r["result"]].append(r)
+        x["decks"].add(r["deck"])
+    out = sorted(rows.items(), key=lambda kv: (-len(kv[1]["再発"]) - len(kv[1]["直した"]), -len(kv[1]["残した（誤り）"]), kv[0]))
+    print("再発とレビューの結果は「件数（出た資料の数）」。資料・顧客は、指摘かレビューの出た資料の数")
+    print("決まり\t指摘\t再発\t資料\t顧客\t" + "\t".join(RESULTS) + "\tユーザーが決めた")
+    counts = {}
+    for k, x in out:
+        print("\t".join(map(str, [k, len(x["指摘"]), count(x["再発"]), len(x["decks"] - {""}), len(customers(x["decks"])),
+                                   *(count(x[r]) for r in RESULTS), "あり" if x["決めた"] else ""])))
+        signals = ("再発", *RESULTS)
+        counts[k] = {**x, "指摘": len(x["指摘"]), **{f: len(x[f]) for f in signals}, "資料ごと": {f: len({r["deck"] for r in x[f]}) for f in signals}}
+    return counts
 
 
 def next_id(ws, prefix):
     roots = [PLUGIN, ws / "rules", ws / "AGENTS.md", ws / "Customers"]
     files = [f for r in roots if r.exists() for f in ([r] if r.is_file() else r.rglob("*"))
              if f.suffix in (".md", ".py") and f.is_file() and f.resolve() != Path(__file__).resolve()]  # このファイルの selftest の ID は数えない
-    used = [int(m.group(1)[len(prefix) + 1:]) for f in files for m in RULE_ID.finditer(f.read_text(encoding="utf-8", errors="ignore"))
-            if m.group(1).rsplit("-", 1)[0] == prefix]
-    used += [int(r["rule"].rsplit("-", 1)[1]) for r in records(ws) if r.get("rule", "").rsplit("-", 1)[0] == prefix]  # 提案だけで、まだ当てていない ID も使ったものにする
+    num = re.compile(rf"{re.escape(prefix)}-(\d{{3}})")
+    ids = [m.group(1) for f in files for m in RULE_ID.finditer(f.read_text(encoding="utf-8", errors="ignore"))]
+    ids += [r.get("rule", "") for r in records(ws) if r["kind"] in ("proposal", "sent")]  # 提案だけで、まだ当てていない ID と、PR で替えた ID も使ったものにする
+    used = [int(m.group(1)) for x in ids if (m := num.fullmatch(x))]
     return f"{prefix}-{max(used, default=0) + 1:03d}"
 
 
@@ -125,9 +244,12 @@ def target(ws, f):
 
 
 def propose(ws, a):
-    target(ws, a.file)
-    rec = write(ws, {"kind": "proposal", "file": a.file, "old": a.old or "", "new": a.new, "rule": a.rule or "",
-                     "why": a.why, "src": [x for x in (a.src or "").split(",") if x], "type": a.kind or ""}, ("proposal", "P", 4))
+    if a.plugin:  # 当てないので、skills/ の中を指していることだけ見る
+        (PLUGIN / a.file).resolve().is_relative_to(PLUGIN) or sys.exit(f"--plugin の --file は skills/ からのパス（deck-practices/visual.md など）: {a.file}")
+    else:
+        target(ws, a.file)
+    rec = write(ws, {"kind": "proposal", "file": a.file, "old": a.old or "", "new": a.new, "rule": a.rule or "", "why": a.why,
+                     "src": [x for x in (a.src or "").split(",") if x], "type": a.kind or "", **({"plugin": True} if a.plugin else {})}, ("proposal", "P", 4))
     print(rec["id"])
 
 
@@ -139,17 +261,22 @@ def pending(ws, status="未適用"):
     out = [p for p in state(ws)[1].values() if status in ("all", p["status"])]
     for p in out:
         why = f"、理由: {p['reason']}" if p.get("reason") else ""
-        print(f"### {p['id']} {p['why']}（{p['status']}、{p['type'] or '-'}、{p['file']}{'、' + p['rule'] if p['rule'] else ''}、出典 {','.join(p['src']) or '-'}{why}）\n{diff(p)}")
+        where = f"プラグインの skills/{p['file']}" if p.get("plugin") else p["file"]
+        pr = f"、{p['pr']}" if p.get("pr") else ""
+        print(f"### {p['id']} {p['why']}（{p['status']}、{p['type'] or '-'}、{where}{'、' + p['rule'] if p['rule'] else ''}、出典 {','.join(p['src']) or '-'}{why}{pr}）\n{diff(p)}")
     return out
 
 
 def apply(ws, ids):
     ps = state(ws)[1]
-    ids = [i for i, p in ps.items() if p["status"] == "未適用"] if ids == ["all"] else ids
+    ids = [i for i, p in ps.items() if p["status"] == "未適用" and not p.get("plugin")] if ids == ["all"] else ids
     for i in ids:
         p = ps.get(i) or sys.exit(f"提案がない: {i}")
         if p["status"] != "未適用":
             sys.exit(f"{i} は {p['status']}")
+        if p.get("plugin"):
+            print(f"{i}: プラグインへの提案なので当てない（factory-kaizen で PR にし、ledger.py sent {i} --pr <URL> で残す）")
+            continue
         f = target(ws, p["file"])
         text = f.read_text(encoding="utf-8") if f.exists() else ""
         if p["old"]:
@@ -160,11 +287,24 @@ def apply(ws, ids):
             text = text + ("" if not text or text.endswith("\n") else "\n") + p["new"] + "\n"
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(text, encoding="utf-8")
-        cs = state(ws)[0]
-        write(ws, {"kind": "applied", "ref": i, "appended": not p["old"], "prev": {c: cs[c]["to"] for c in p["src"] if c in cs}})
-        for c in p["src"]:
-            write(ws, {"kind": "route", "ref": c, "to": p["rule"] or p["file"]})
+        close(ws, p, "applied", appended=not p["old"])
         print(f"{i}: {p['file']} に当てた")
+
+
+def close(ws, p, kind, **extra):
+    """提案を当てた・PR にした出来事を書き、出典の指摘をその決まりにつなぐ。戻すときのために、前の戻し先を残す。"""
+    cs = state(ws)[0]
+    write(ws, {"kind": kind, "ref": p["id"], "prev": {c: cs[c]["to"] for c in p["src"] if c in cs}, **extra})
+    for c in p["src"]:
+        write(ws, {"kind": "route", "ref": c, "to": p["rule"] or p["file"]})
+
+
+def reopen(ws, p):
+    """close でつないだ出典の指摘を、前の戻し先に戻す（あとで別の決まりに移したものは、そのまま）。"""
+    cs = state(ws)[0]
+    for c, to in p.get("prev", {}).items():
+        if cs.get(c, {}).get("to") == (p["rule"] or p["file"]):
+            write(ws, {"kind": "route", "ref": c, "to": to})
 
 
 def undo(ws, i):
@@ -178,10 +318,7 @@ def undo(ws, i):
         sys.exit(f"{i}: 当てた文が {p['file']} に {text.count(new)} か所ある。手で直されたので、snapshot.sh restore か手で戻す")
     f.write_text(text.replace(new, p["old"], 1), encoding="utf-8")
     write(ws, {"kind": "undone", "ref": i})
-    cs = state(ws)[0]
-    for c, to in p.get("prev", {}).items():
-        if cs.get(c, {}).get("to") == (p["rule"] or p["file"]):
-            write(ws, {"kind": "route", "ref": c, "to": to})
+    reopen(ws, p)
     print(f"{i}: 戻した")
 
 
@@ -205,25 +342,74 @@ def drift(ws):
     return out
 
 
+def questions(ws, everything=False):
+    out = [q for q in state(ws)[2].values() if everything or q["status"] == "未回答"]
+    for q in out:
+        tail = ""
+        if q.get("a"):
+            tail = f" → 「{q['a']}」"
+        elif q.get("reason"):
+            tail = f"（{q['reason']}）"
+        print(f"{q['id']} [{q['status']}] {q['q']}（{q['rule'] or '-'}、出典 {','.join(q['src']) or '-'}）{tail}")
+    return out
+
+
+def result_of(cell):
+    if cell.startswith("残した（誤り"):
+        return "残した（誤り）"
+    return next((k for k in ("直した", "聞く", "残した") if cell.startswith(k)), None)
+
+
+def review(ws, deck, table):
+    """deck-review の指摘の表（1 件 1 行。`p3 | 出所 | 観点 | 重さ | 何が | 案 | 結果 | 決まり`）から、決まりの列のある行を取り込む。
+    資料の文は残さず、同じ行を見分けるハッシュだけにする。周をまたいで同じ行があれば、表の後ろ（あとの周）の結果にする。"""
+    deck, last = rel(ws, deck), {r["key"]: r["result"] for r in state(ws)[3]}
+    rows, skip = {}, 0
+    for line in Path(table).read_text(encoding="utf-8").splitlines():
+        cells = [x.strip() for x in re.sub(r"^[-*]\s+", "", line.strip()).strip("|").split("|")]
+        if len(cells) < 8 or not re.match(r"p\d|全体", cells[0]):
+            continue
+        res = result_of(cells[-2])
+        keys = [k for k in (x.strip(" []") for x in re.split(r"[,、]", cells[-1])) if KEY.fullmatch(k)]
+        if not res or not keys:
+            skip += 1
+            continue
+        for k in keys:
+            key = hashlib.sha1(f"{deck}|{cells[0]}|{cells[4]}|{k}".encode()).hexdigest()[:12]
+            rows.pop(key, None)  # あとの行を後ろに置き直す
+            rows[key] = {"kind": "review", "deck": deck, "rule": k, "page": cells[0], "from": cells[1], "result": res, "key": key}
+    new = [r for key, r in rows.items() if last.get(key) != r["result"]]
+    for r in new:
+        write(ws, r)
+    print(f"取り込んだ {len(new)} 件（決まりか結果のない行 {skip}、取り込み済み {len(rows) - len(new)}）")
+    return len(new)
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("add")
     s.add_argument("--deck", required=True); s.add_argument("--quote", required=True); s.add_argument("--fix")
-    s.add_argument("--to", default="未"); s.add_argument("--check", default="なし"); s.add_argument("--session"); s.add_argument("--decided", action="store_true"); s.add_argument("--once", action="store_true")
+    s.add_argument("--to", default="未"); s.add_argument("--check", default="なし"); s.add_argument("--session"); s.add_argument("--at"); s.add_argument("--decided", action="store_true"); s.add_argument("--once", action="store_true")
     s = sub.add_parser("route"); s.add_argument("id"); s.add_argument("to")
     s = sub.add_parser("list"); s.add_argument("--deck"); s.add_argument("--open", action="store_true"); s.add_argument("--to")
     s = sub.add_parser("why"); s.add_argument("id")
+    sub.add_parser("rules")
     s = sub.add_parser("next"); s.add_argument("prefix")
     s = sub.add_parser("propose")
-    s.add_argument("--file", required=True); s.add_argument("--new", required=True); s.add_argument("--old"); s.add_argument("--rule")
-    s.add_argument("--why", required=True); s.add_argument("--src"); s.add_argument("--kind")
+    s.add_argument("--file", required=True); s.add_argument("--new", required=True); s.add_argument("--old"); s.add_argument("--rule", type=rule_arg)
+    s.add_argument("--why", required=True); s.add_argument("--src"); s.add_argument("--kind"); s.add_argument("--plugin", action="store_true")
     s = sub.add_parser("pending"); s.add_argument("--status", default="未適用")
     s = sub.add_parser("apply"); s.add_argument("ids", nargs="+")
     s = sub.add_parser("reject"); s.add_argument("id"); s.add_argument("--reason", required=True)
     s = sub.add_parser("withdraw"); s.add_argument("id"); s.add_argument("--reason", required=True)
     s = sub.add_parser("undo"); s.add_argument("id")
     sub.add_parser("drift")
+    s = sub.add_parser("sent"); s.add_argument("id"); s.add_argument("--pr", required=True); s.add_argument("--rule", type=rule_arg)
+    s = sub.add_parser("ask"); s.add_argument("--q", required=True); s.add_argument("--rule", type=rule_arg); s.add_argument("--src")
+    s = sub.add_parser("answer"); s.add_argument("id"); s.add_argument("--a", required=True)
+    s = sub.add_parser("questions"); s.add_argument("--all", action="store_true")
+    s = sub.add_parser("review"); s.add_argument("--deck", required=True); s.add_argument("--table", required=True)
     a = ap.parse_args(argv)
     ws = workspace()
     if a.cmd == "add":
@@ -238,6 +424,8 @@ def main(argv):
                 print(show(c))
     elif a.cmd == "why":
         why(ws, a.id)
+    elif a.cmd == "rules":
+        summary(ws)
     elif a.cmd == "next":
         print(next_id(ws, a.prefix))
     elif a.cmd == "propose":
@@ -246,10 +434,29 @@ def main(argv):
         pending(ws, a.status)
     elif a.cmd == "apply":
         apply(ws, a.ids)
-    elif a.cmd in ("reject", "withdraw"):
-        p = state(ws)[1].get(a.id) or sys.exit(f"提案がない: {a.id}")
-        p["status"] == "未適用" or sys.exit(f"{a.id} は {p['status']}")
-        write(ws, {"kind": {"reject": "rejected", "withdraw": "withdrawn"}[a.cmd], "ref": a.id, "reason": a.reason})
+    elif a.cmd in ("reject", "withdraw", "sent"):
+        _, ps, qs, _ = state(ws)
+        p = ps.get(a.id) or (qs.get(a.id) if a.cmd == "withdraw" else None) or sys.exit(f"提案がない: {a.id}")
+        sent = p["status"] == "PR にした"  # PR が断られた・取り下げたときは閉じられる
+        p["status"] in ("未適用", "未回答") or (sent and a.cmd != "sent") or sys.exit(f"{a.id} は {p['status']}")
+        if a.cmd == "sent":
+            p.get("plugin") or sys.exit(f"{a.id} はワークスペースへの提案。apply で当てる")
+            renamed = {"rule": a.rule} if a.rule else {}  # PR で提案と違う ID にした
+            close(ws, {**p, **renamed}, "sent", pr=a.pr, **renamed)
+        else:
+            write(ws, {"kind": {"reject": "rejected", "withdraw": "withdrawn"}[a.cmd], "ref": a.id, "reason": a.reason})
+            if sent:
+                reopen(ws, p)
+    elif a.cmd == "ask":
+        print(write(ws, {"kind": "question", "q": a.q, "rule": a.rule or "", "src": [x for x in (a.src or "").split(",") if x]}, ("question", "Q", 4))["id"])
+    elif a.cmd == "answer":
+        q = state(ws)[2].get(a.id) or sys.exit(f"判断待ちがない: {a.id}")
+        q["status"] == "未回答" or sys.exit(f"{a.id} は {q['status']}")
+        write(ws, {"kind": "answered", "ref": a.id, "a": a.a})
+    elif a.cmd == "questions":
+        questions(ws, a.all)
+    elif a.cmd == "review":
+        review(ws, a.deck, a.table)
     elif a.cmd == "undo":
         undo(ws, a.id)
     elif a.cmd == "drift":
@@ -351,6 +558,152 @@ def selftest():
                 main(["add", "--deck", ".", "--quote", "見出しは短く", "--session", "s2", "--decided"])
             cs = state(ws)[0].values()
             assert sum(c["quote"] == "古い行" for c in cs) == 1 and sum(c["quote"] == "見出しは短く" for c in cs) == 2
+            # 再発: 決まりができたあとに言われた指摘だけ。前に言われてあとで拾ったもの（--at）と、決まりを作った指摘は数えない
+            with quiet():
+                main(["add", "--deck", ".", "--quote", "表はまた 2 枚に", "--to", "ws-visual-002", "--at", "2999-01-01T00:00"])
+                main(["add", "--deck", ".", "--quote", "前の会話でも表を分けてと", "--to", "ws-visual-002", "--at", "2000-01-01T00:00"])
+                main(["add", "--deck", ".", "--quote", "出典は 1 行に", "--to", "visual-012"])  # プラグインの決まりは前からある
+            cs = state(ws)[0]
+            assert [cs[i].get("recur") for i in ("c-0001", "c-0006", "c-0007", "c-0008")] == [False, True, False, True]
+            with quiet():
+                main(["route", "c-0001", "visual-099"])  # 大元に上げて移しても、決まりを作った指摘のまま
+                assert state(ws)[0]["c-0001"]["recur"] is False and summary(ws)["ws-visual-002"]["再発"] == 1
+            try:
+                main(["add", "--deck", ".", "--quote", "x", "--at", "きのう"])
+                raise AssertionError("時刻でない --at を通した")
+            except SystemExit:
+                pass
+            # プラグインへの提案は当てず、PR にしたか却下で閉じる。PR にしたら出典の指摘をつなぎ、断られたら前の戻し先に戻す
+            with quiet():
+                main(["add", "--deck", ".", "--quote", "表は分けて（別の会話）", "--at", "2000-01-01T09:00+09:00"])
+            assert state(ws)[0]["c-0009"]["at"] == "2000-01-01T00:00:00Z"  # --at は UTC にそろえる
+            with quiet():
+                main(["propose", "--plugin", "--file", "deck-practices/visual.md", "--new", "- [visual-099] 表は分ける。", "--rule", "visual-099", "--why", "上げる", "--kind", "プラグインに上げる", "--src", "c-0009"])
+                main(["propose", "--plugin", "--file", "deck-practices/content.md", "--new", "x", "--why", "上げる"])
+                main(["propose", "--file", "rules/w.md", "--new", "- [ws-w-001] 1 つ", "--rule", "ws-w-001", "--why", "足す"])
+                main(["apply", "P0010", "P0012"])  # 並びにプラグインへの提案があっても、残りは当てる
+                main(["apply", "all"])
+            ps = state(ws)[1]
+            assert [ps[i]["status"] for i in ("P0010", "P0011", "P0012")] == ["未適用", "未適用", "適用済み"]
+            for argv in (["sent", "P0012", "--pr", "u"], ["propose", "--plugin", "--file", "../../x.md", "--new", "x", "--why", "y"]):
+                try:
+                    with quiet():
+                        main(argv)
+                    raise AssertionError(f"通した: {argv}")
+                except SystemExit:
+                    pass
+            with quiet():
+                main(["sent", "P0010", "--pr", "https://github.com/o/r/pull/1"])
+                main(["reject", "P0011", "--reason", "この人だけの好み"])
+                assert [p["id"] for p in pending(ws, "PR にした")] == ["P0010"] and "P0011" in [p["id"] for p in pending(ws, "却下")]
+            c = state(ws)[0]["c-0009"]
+            assert c["to"] == "visual-099" and c["recur"] is False  # PR の決まりを作った指摘で、再発ではない
+            try:
+                main(["sent", "P0010", "--pr", "u"])
+                raise AssertionError("PR にしたものをもう一度 PR にした")
+            except SystemExit:
+                pass
+            with quiet():
+                main(["reject", "P0010", "--reason", "マージされなかった"])
+            assert state(ws)[1]["P0010"]["status"] == "却下" and state(ws)[0]["c-0009"]["to"] == "未"
+            # 決まりができた時刻は、その ID を書き入れた提案だけで決める。今ある決まりの書き直しは作らず、戻したら消す。PR で ID を変えたら追う
+            cid = lambda q: next(c["id"] for c in state(ws)[0].values() if c["quote"] == q)
+            pid = lambda w: next(p["id"] for p in state(ws)[1].values() if p["why"] == w)
+            with quiet():
+                main(["add", "--deck", ".", "--quote", "既存の決まりなのに", "--at", "2000-01-01T00:00"])
+                main(["propose", "--plugin", "--file", "deck-practices/visual.md", "--old", "- [visual-050] a", "--new", "- [visual-050] b", "--rule", "visual-050", "--why", "書き直す", "--src", cid("既存の決まりなのに")])
+                main(["sent", pid("書き直す"), "--pr", "u"])
+            assert state(ws)[0][cid("既存の決まりなのに")]["recur"] is True  # visual-050 は前からプラグインにある
+            with quiet():  # 当てる → 戻す → その間に言われる → 作り直す。時刻を離すため、出来事の行は ts を書いて足す
+                main(["propose", "--file", "rules/u.md", "--new", "- [ws-u-001] u", "--rule", "ws-u-001", "--why", "作って戻す"])
+                main(["propose", "--file", "rules/u.md", "--new", "- [ws-u-001] u", "--rule", "ws-u-001", "--why", "作り直す"])
+                write(ws, {"ts": "2001-01-01T00:00:00Z", "kind": "applied", "ref": pid("作って戻す"), "appended": True, "prev": {}})
+                write(ws, {"ts": "2002-01-01T00:00:00Z", "kind": "undone", "ref": pid("作って戻す")})
+                main(["add", "--deck", ".", "--quote", "戻したあとに言われた", "--at", "2003-01-01T00:00"])
+                write(ws, {"ts": "2004-01-01T00:00:00Z", "kind": "applied", "ref": pid("作り直す"), "appended": True, "prev": {}})
+                write(ws, {"ts": "2004-01-01T00:00:00Z", "kind": "route", "ref": cid("戻したあとに言われた"), "to": "ws-u-001"})
+            assert state(ws)[0][cid("戻したあとに言われた")]["recur"] is False  # 作り直した決まりの出典で、戻す前の決まりの再発ではない
+            with quiet():
+                main(["add", "--deck", ".", "--quote", "ID が変わる", "--at", "2000-01-01T00:00"])
+                main(["propose", "--plugin", "--file", "deck-practices/visual.md", "--new", "- [visual-060] x", "--rule", "visual-060", "--why", "ID を変える", "--src", cid("ID が変わる")])
+                main(["sent", pid("ID を変える"), "--pr", "u", "--rule", "visual-061"])
+            c = state(ws)[0][cid("ID が変わる")]
+            assert (c["to"], c["recur"], state(ws)[1][pid("ID を変える")]["rule"]) == ("visual-061", False, "visual-061")
+            with quiet():  # PR で替えた ID も、次の ID の取り置きに入る
+                main(["propose", "--plugin", "--file", "deck-practices/visual.md", "--new", "- [zz-900] x", "--rule", "zz-900", "--why", "zz"])
+                main(["sent", pid("zz"), "--pr", "u", "--rule", "zz-901"])
+            assert next_id(ws, "zz") == "zz-902"
+            # 台帳の外で書かれた決まりに、あとから 3 件まとめてつなぐと、いちばん早く言われたものだけが再発でない
+            with quiet():
+                for q, at in (("手書き 3", "2026-09-09T00:00"), ("手書き 1", "2026-09-01T00:00"), ("手書き 2", "2026-09-05T00:00")):
+                    main(["add", "--deck", ".", "--quote", q, "--to", "ws-h-001", "--at", at])
+            cs = state(ws)[0]
+            assert [cs[cid(f"手書き {i}")]["recur"] for i in (1, 2, 3)] == [False, True, True]
+            # 戻さないにしたら、前の決まりの再発を持ち越さない
+            with quiet():
+                main(["add", "--deck", ".", "--quote", "つなぎ違い", "--to", "visual-012"])
+                main(["route", cid("つなぎ違い"), "戻さない"])
+                main(["route", cid("つなぎ違い"), "ws-h-002"])
+            assert state(ws)[0][cid("つなぎ違い")]["recur"] is False
+            # ファイルにつないだ指摘は再発に数えない（1 つのファイルに別々の決まりが入る）
+            with quiet():
+                for q in ("敬称は様", "ロゴは右上"):
+                    main(["add", "--deck", ".", "--quote", q, "--to", "Customers/acme/CLAUDE.md"])
+                main(["add", "--deck", ".", "--quote", "プラグインのファイルへ", "--to", "deck-practices/content.md"])
+            cs = state(ws)[0]
+            assert not any(cs[cid(q)].get("recur") for q in ("敬称は様", "ロゴは右上", "プラグインのファイルへ"))
+            # 前の形から移した出典（日付だけ）は、プラグインの決まりを作ったもので再発でない。そのあと言われたものは再発
+            write(ws, {"kind": "correction", "id": "c-m001", "deck": "", "where": "前の本文", "note": "移した", "quote": "", "date": "2026-10-07", "to": "content-002"})
+            with quiet():
+                main(["add", "--deck", ".", "--quote", "移したあとに", "--to", "content-002"])
+            cs = state(ws)[0]
+            assert (cs["c-m001"]["recur"], cs[cid("移したあとに")]["recur"]) == (False, True)
+            # 崩れた ID は --rule で止め、台帳に前からあっても next は数えられる
+            for argv in (["propose", "--file", "rules/x.md", "--new", "x", "--why", "y", "--rule", "visual-new"], ["ask", "--q", "x", "--rule", "ws visual 1"]):
+                try:
+                    with quiet(), contextlib.redirect_stderr(io.StringIO()):
+                        main(argv)
+                    raise AssertionError(f"通した: {argv}")
+                except SystemExit:
+                    pass
+            write(ws, {"kind": "proposal", "id": "P9999", "file": "rules/x.md", "old": "", "new": "x", "rule": "visual-new", "why": "前の台帳", "src": [], "type": ""})
+            assert next_id(ws, "visual").startswith("visual-")
+            # 判断待ち: 答えたものは、もう未回答に出ない
+            with quiet():
+                main(["ask", "--q", "見出しは 1 行か 2 行か", "--rule", "ws-visual-002", "--src", "c-0007"])
+                main(["ask", "--q", "書き間違い"])
+                main(["answer", "Q0001", "--a", "1 行にする"])
+                main(["withdraw", "Q0002", "--reason", "出し直す"])
+                assert questions(ws) == [] and [q["status"] for q in questions(ws, True)] == ["回答済み", "取り下げ"]
+            # レビューの表: 決まりの列のある行だけ。2 度取り込んでも数えず、周をまたぐ同じ行はあとの周の結果
+            t = ws / "review.md"
+            t.write_text("p<ページ> | 出所 | 観点 | 重さ | 何 | 案 | 結果 | 決まり\n"
+                         "- p3 | 画像 | 5 | 直す | 表がはみ出す | 2 枚に | 直した | ws-visual-002\n"
+                         "| p4 | lint | 4 | 見直す | あおり | 言い換え | 残した（誤り。引用） | lint:あおり, [visual-012] |\n"
+                         "p5 | テキスト | 1 | 聞く | 筋 | 案 | 聞く | -\n"
+                         "p6 | 画像 | 5 | 直す | ずれ | 直す | まだ | ws-visual-002\n"
+                         "p7 | 画像 | 5 | 直す | 余白 | 詰める | 聞く | ws-visual-002\n"
+                         "p7 | 画像 | 5 | 直す | 余白 | 詰める | 直した | ws-visual-002\n"
+                         "p8 | テキスト | 2 | 直す | 数字 | 直す | 直した（数字の誤りを直した） | visual-012\n")
+            with quiet():
+                assert review(ws, ".", t) == 5 and review(ws, ".", t) == 0
+                s = summary(ws)
+            assert (s["ws-visual-002"]["直した"], s["ws-visual-002"]["聞く"]) == (2, 0)
+            assert s["lint:あおり"]["残した（誤り）"] == 1 and (s["visual-012"]["残した（誤り）"], s["visual-012"]["直した"]) == (1, 1)
+            t.write_text("p3 | 画像 | 5 | 直す | 表がはみ出す | 2 枚に | 残した（3 周で打ち切り） | ws-visual-002\n")
+            with quiet():
+                assert review(ws, ".", t) == 1
+                s = summary(ws)
+            assert (s["ws-visual-002"]["直した"], s["ws-visual-002"]["残した"]) == (1, 1)  # あとで取り込んだ結果に替わる
+            # 結果ごとに、出た資料の数を数える（1 本の資料の 3 件は、2 本の資料に出たことにならない）
+            t.write_text("".join(f"p{i} | 画像 | 5 | 直す | 字 {i} | 直す | 直した | ws-r-001\n" for i in (1, 2, 3)))
+            with quiet():
+                review(ws, ".", t)
+                t.write_text("p1 | 画像 | 5 | 直す | 字 | 直す | 残した（誤り） | ws-r-001\n")
+                review(ws, "../../beta/deck_x", t)
+                r = summary(ws)["ws-r-001"]
+            assert (r["直した"], r["資料ごと"]["直した"], r["資料ごと"]["残した（誤り）"], len(r["decks"])) == (3, 1, 1, 2)
+            assert next_id(ws, "visual") != "visual-099"  # プラグインへの提案の ID も使ったもの
             # プラグインのファイルは変更先にしない
             try:
                 target(ws, str(PLUGIN / "skills" / "deck-practices" / "visual.md"))

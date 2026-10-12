@@ -75,7 +75,7 @@ pi install git:github.com/mats16/ai-deck-factory        # git から
 - `AGENTS.md`（と `@AGENTS.md` を読む `CLAUDE.md`）: どの会話でも要る決まり。
 - `rules/<スキル>/<ファイル>`: 資料を作る場面だけで要る、このワークスペースの決まり。
 - `Customers/`・`Internal/`・`Research/`、`references_index.md`: 資料と台帳。`Research/deck_research/` は `deck-research` の調べ直しの記録（`state.md`・`log/`。代表の 3 枚の選び方の記録も）。
-- `.factory/`: スクリプトが書く記録。`ledger.jsonl`（決まりの台帳。修正の指示、決まりの ID ごとの出典、dreaming の提案・適用・却下。`deck-practices/scripts/ledger.py` が読み書きする）、`lint_runs.jsonl`（`lint.py --stats` が読む）、`dreaming/last_run`・`dreaming/log/`・`dreaming/backup/`。
+- `.factory/`: スクリプトが書く記録。`ledger.jsonl`（決まりの台帳。修正の指示、決まりの ID ごとの出典と再発、dreaming の提案・適用・却下とプラグインへの提案の PR、判断待ちと答え、deck-review の指摘の結果。`deck-practices/scripts/ledger.py` が読み書きする）、`lint_runs.jsonl`（`lint.py --stats` が読む）、`dreaming/last_run`・`dreaming/log/`・`dreaming/backup/`。
 
 自分だけの画像は `assets/` に置く。`slides.asset()` はここを先に探し、なければ `deck-build/assets/` を使う。
 
@@ -118,6 +118,7 @@ gcloud の既定の OAuth クライアントで作った認証情報は、`googl
 - 2026-10-12: PR を作るスキルの名前を `factory-pr` から `factory-kaizen` にした（ユーザー「factory-pr ではなく、工場を改修・発展のようなニュアンスの方がいいかな」。候補から factory-kaizen を選んだ）。
 
 - 2026-10-12: 継続改善の仕組みを、Devin の Dreaming（Agent Memory Repo）・Hermes Agent・Letta・Codex の memories・GitHub Copilot Memory・ACE と比べて直す。修正の指示は構成案の節をやめ、ワークスペースの決まりの台帳（`.factory/ledger.jsonl`）に置き換える（ユーザー「1 は問題ありません」）。ワークスペースの git は前提にしない。dreaming の提案と適用・却下・戻すことも台帳で持つ（ユーザー「ワークスペースの git は前提としたくないです。その前提で再考してください。」）。プラグインの本文の日付と原文は台帳へ移し、ID と短い理由だけを残す。コンパクションの前に指摘を拾う hook は後回しのままにし、dreaming が取りこぼしを数えてから決める（推奨を説明したあと、ユーザー「ではその方針で進めてください。」）。
+- 2026-10-12: 決まりが効いたかの手ごたえを、決まりの台帳で数える。プラグインに上げる提案と判断待ちも台帳に入れ（却下と答えを覚え、出し直さない）、決まりがあるのに言われた指摘を「再発」として数え、deck-review の指摘の表に「決まり」の列を足して結果（直した・残した（誤り）・聞く）を取り込む。`.factory/review_runs.jsonl` は作らず、台帳 1 つにまとめる。指摘の出ない決まりは、守られているのかもしれないので、それだけで外さない（案を説明したあと、ユーザー「1, 2, 5 を対応しようと思いますがどうですか？」「ではその方針で 5 まで含めて実装して」）。
 
 - 2026-10-12: Claude Code・pi に貼るだけで初期設定が終わるプロンプトを README に置く。フォルダ・ツールの指定もその会話でする。エージェントが読む手順は `INSTALL.md`（oh-my-openagent の貼り付けのプロンプトと、Cline の `llms-install.md` を参考にした）（ユーザー「Claude や Pi にコピペするだけで初期設定が完了するプロンプトを README に追加してください。フォルダやツール指定もそのチャット内で行い、完了できるように、コピペした後に読み込むスキル等も整備してください。」）。
 
@@ -128,7 +129,7 @@ gcloud の既定の OAuth クライアントで作った認証情報は、`googl
 ## 残っている課題
 
 - **hooks の残り（後回し）:** 前の検討の corrections・guard・review_gate。corrections（コンパクションの前に指摘を拾う）は、dreaming の報告の「取りこぼし」の数が続けて多ければ入れる（Claude Code と pi の両方に要る。pi にきっかけがあるかは確かめていない）。入れたのは `rules/` を続けて出すものだけ。pi の `/skill:<名前>`（読むツールを通らない）では出ない。
-- **継続改善の残り:** レビューの指摘に、拾った決まりの ID を書いて数える（`.factory/review_runs.jsonl`。役に立った・拾えなかった・効かないを決まりごとに出す）。資料が続けて効かない決まりを外す候補にする（ユーザーが決めたものは外さない）。顧客フォルダの `CLAUDE.md` を、pi でも hook で続けて出す。
+- **継続改善の残り:** 指摘を誰が書いたか（作る会話・dreaming・取り込み）を台帳に残し、取りこぼしの割合を週ごとに出す（コンパクションの hook を入れるかの材料）。ワークスペースの決まりがどのプラグインの決まりを上書きしているかを ID で書き（上書きの数、プラグインを入れ直したあとに古くなった上書き）、上げた PR がマージされたら `rules/` の写しを消す提案を dreaming が出す。顧客フォルダの `CLAUDE.md` を、pi でも hook で続けて出す。
 - **スキルの中の経緯:** 2026-10-12 に、スキルの本文の持ち主の決めたこと（「ユーザーが決めた」と日付、ユーザーの言葉）を、決まりの ID に置き換えた。移した経緯は、持ち主のワークスペースの決まりの台帳に入れる（`git show <この直しの前>:skills/...` からも見られる）。測った日・調べた日・その日より前のファイルを指す日付は、意味が変わるので残した。PR に顧客の名前が入らないかは、`kaizen.py open` が見て止める（`Customers/` の顧客と資料のフォルダの名前、`[factory] private` の語）。
 - **外部に出すとき:** 2026-10-12 に会社ごとの値をワークスペースに分けた。材料を集める道具は `factory.toml` の `[sources]`、社名・著作権表示・表紙のロゴは `[brand]`（`copyright` がないか仮の値なら組めない。factory-doctor が要修正）、テーマは `[slides.themes.<名前>]`・`[docs.themes.<名前>]`（`url`・`description`・`base`）、会社の素材はワークスペースの `assets/`、ドキュメントのテンプレートは `rules/doc-build/templates/`、会社の道具の使い方は `rules/`。プラグインに残る会社の前提は、組み込みのテーマ visual・company の色（Databricks のブランドの色）だけ。
 - **Documents を移す:** `~/Documents` は今も自分の `.agents/skills/` で動いている（factory-doctor が「スキルの重なり」を出す）。移すときは、Documents の AGENTS.md の表を雛形の形（スキルの名前で指す。`rules/` も開く）にし、`.agents/skills/` の中核の 6 つを外し、`.agents/skills/dreaming/log/` を `.factory/dreaming/log/` に、`.agents/skills/deck-build/log/lint_runs.jsonl` を `.factory/lint_runs.jsonl` に移す。`deck-research` の記録は 2026-10-12 に `Research/deck_research/` へ移した。旧い場所の `.agents/skills/deck-research/log` は、移したときに進んでいた会話のための symlink なので、`.agents/skills/` と一緒に消す。
