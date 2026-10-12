@@ -2,8 +2,8 @@
 
 スライドとドキュメントに貼る画像・アイコン・ロゴの出どころを、ここにまとめる。貼り方の決まり（どれを先に使うか、`d.image`・`d.icon`・`png()`・`asset()` の使い方）は `../slides.md` の 6。調べた経緯と、試した URL の結果は `Research/google_slides_public_image_urls_20261008.md`。
 
-- **URL のまま貼れるものを先に使う**（2026-10-08 にユーザーが決めた）。Slides API が URL で読めるのは PNG・JPG・GIF だけ。SVG は `png(<SVG の URL>)`（wsrv.nl）で PNG の URL にする。
-- **ファイルでしか配られないものだけ、このフォルダに置く**（2026-10-08 にユーザーが決めた）。資料のフォルダの `build/assets/` に写さず、`asset("gcp/bigquery.png")` で指す。その資料だけの画像（画面の写し、流用元のデッキの図）は、今までどおり `build/assets/`。
+- [assets-001] **URL のまま貼れるものを先に使う**。Slides API が URL で読めるのは PNG・JPG・GIF だけ。SVG は `png(<SVG の URL>)`（wsrv.nl）で PNG の URL にする。
+- [assets-002] **ファイルでしか配られないものだけ、このフォルダに置く**。資料のフォルダの `build/assets/` に写さず、`asset("gcp/bigquery.png")` で指す。その資料だけの画像（画面の写し、流用元のデッキの図）は、今までどおり `build/assets/`。
 - 足すときは、名前を英小文字・数字・ハイフンにし（`<製品>.png`）、下の「このフォルダのもの」に 1 行足す（元の URL、取った日、使ってよい範囲、社外に出せるか）。PNG と SVG の両方が配られていれば、両方を置く。
 - ロゴとアイコンは各社の商標。構成図や説明に使い、変形しない・色を変えない・自社のものに見せない（各社の条件は下の表）。
 
@@ -20,8 +20,8 @@
 | 写真（Unsplash） | `https://images.unsplash.com/photo-<ID>?w=1600&fm=jpg` | 指定どおり | Unsplash License（商用可、クレジットは任意） |
 | SVG のロゴ（Wikimedia Commons） | `https://upload.wikimedia.org/wikipedia/commons/thumb/<a>/<ab>/<ファイル>.svg/<幅>px-<ファイル>.svg.png`。幅は 20・40・60・120・250・330・500・960・1280・1920・3840 だけ | 指定どおり | ファイルごと |
 | Google の製品のアイコン | `https://www.gstatic.com/images/branding/product/2x/<slides・sheets・drive>_2020q4_48dp.png`、`google_cloud_48dp.png`、`gemini_48dp.png` | 96 | Google のブランドのガイドライン。公式の一覧はなく、変わりうる |
-| pi（pi coding agent）のマーク | `png("https://pi.dev/favicon.svg")`。黒 1 色（`#111111`）なので、白いカードの上に置く（2026-10-09、社内向けの資料の p.3） | 1024 | 記載なし。pi.dev の公式のサイトのマーク。製品の箱のロゴとして使う |
-| T3 Code のマーク | `https://raw.githubusercontent.com/pingdotgg/t3code/main/assets/prod/black-universal-1024.png`（黒地の角丸に白の T3。2026-10-10、社内向けの資料の p.3） | 1024 | リポジトリは MIT。マークの商標の条件は記載なし。製品の箱のロゴとして使う |
+| [assets-003] pi（pi coding agent）のマーク | `png("https://pi.dev/favicon.svg")`。黒 1 色（`#111111`）なので、白いカードの上に置く | 1024 | 記載なし。pi.dev の公式のサイトのマーク。製品の箱のロゴとして使う |
+| [assets-004] T3 Code のマーク | `https://raw.githubusercontent.com/pingdotgg/t3code/main/assets/prod/black-universal-1024.png`（黒地の角丸に白の T3） | 1024 | リポジトリは MIT。マークの商標の条件は記載なし。製品の箱のロゴとして使う |
 | 絵文字（Fluent Emoji、Microsoft） | `https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/<名前>/3D/<名前>_3d.png` | 256 | MIT |
 
 使わないもの:

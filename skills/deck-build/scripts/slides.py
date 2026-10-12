@@ -55,9 +55,9 @@ LOGO = _BRAND.get("logo")  # ドキュメントの表紙のロゴ（assets/ の�
 COPYRIGHT_PT = 9  # 著作権表示だけは 11pt 以上の例外。本文を邪魔しない（2026-10-08）
 # 結論バンドの内側の余白（in）。枠と文字の間は 1 字分より大きめに取る（見た目 1-8。13pt の 1 字は 0.18 in）。左右は pptx 版と同じ 18pt
 BAND_PAD_X, BAND_PAD_Y = 0.25, 0.2
-# 正円の番号の直径（in）と数字（pt）。M・L は数字の高さが円の 4 割ほど。S は周りの 11pt の文字に合わせて 11pt（赤に白の 14pt の決まりの例外。visual.md の 1。2026-10-08、ユーザーが選んだ）
+# [slides_py-001] 正円の番号の直径（in）と数字（pt）。M・L は数字の高さが円の 4 割ほど。S は周りの 11pt の文字に合わせて 11pt（赤に白の 14pt の決まりの例外。visual.md の 1）
 NUM = {"S": (0.3, 11), "M": (0.36, 14), "L": (0.48, 18)}  # 図の中の印／カードと手順（既定）／大きな段
-# 赤（RED）の線の太さ（pt）。強調の囲みは実線でも点線でも 2pt（2026-10-08、ユーザー「2pt でいい」「赤い枠線が細いです。2pt にできますか？」）。ほかの枠線は 0.75pt
+# [slides_py-002] 赤（RED）の線の太さ（pt）。強調の囲みは実線でも点線でも 2pt（強調のための線なので、細くしない）。ほかの枠線は 0.75pt
 EMPH_PT = 2
 
 # ---- 色の役割（visual.md の 1）。テーマの色の枠の名前 ----
@@ -85,8 +85,8 @@ THEME_NOTES = {  # 組み込みのテーマの使い分け（slides.py themes �
 }
 
 
-# 英数字と記号の幅（em）。Noto Sans CJK JP Regular の実測（2026-10-08）。前は英数字を一律 0.57 にしていて、大文字の多い行（「People DB（…）を見る」）を
-# 2.52 in と見込み、2.56 in の枠に収まるとしたが、実際は 2.57 in で Google が最後の 1 字を折り返した（顧客向けの資料の p3）
+# [slides_py-003] 英数字と記号の幅（em）。Noto Sans CJK JP Regular の実測（2026-10-08）。前は英数字を一律 0.57 にしていて、大文字の多い行を
+# 2.52 in と見込み、2.56 in の枠に収まるとしたが、実際は 2.57 in で Google が最後の 1 字を折り返した
 ASCII_EM = dict(zip(" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", (
     .22, .32, .47, .56, .56, .92, .68, .28, .34, .34, .47, .56, .28, .35, .28, .39, .56, .56, .56, .56, .56, .56, .56, .56, .56, .56, .28, .28, .56, .56,
     .56, .47, .95, .61, .66, .64, .69, .59, .55, .69, .73, .29, .54, .65, .54, .81, .72, .74, .63, .74, .64, .60, .60, .72, .57, .88, .57, .53, .60, .34,
@@ -152,7 +152,7 @@ def png(url, w=1024):
 @functools.lru_cache(maxsize=None)
 def iconify(name, color=TEXT, w=512):
     """Iconify のアイコン（"tabler:database"、"logos:aws"）の PNG の URL。color（6 桁）は 1 色のセットにだけ効く。名前がなければ止める。
-    同じアイコンは 1 回だけ確かめる（20 枚で 60 回ほど問い合わせると 429 が返った。2026-10-08、顧客向けの資料）。"""
+    [slides_py-004] 同じアイコンは 1 回だけ確かめる（20 枚で 60 回ほど問い合わせると 429 が返った）。"""
     svg = "https://api.iconify.design/" + name.replace(":", "/", 1) + ".svg"
     try:  # 名前の間違いは、組むときに Slides API の「画像を取れない」としか出ないので、先に確かめる。既定の User-Agent は 403 になる
         urllib.request.urlopen(urllib.request.Request(svg, method="HEAD", headers={"User-Agent": "slides.py"}), timeout=15)
@@ -275,7 +275,7 @@ class Deck:
         戻りは文字を入れる透明の枠の ID。finish で背景とまとめ、編集可能な 1 グループにする。
         inner（in）は、文字の枠を左右だけ箱の内に縮める幅（枠の内側の余白 0.1 in に足す。text の pad）。
         dash で枠線を点線にし、weight（pt）で枠線の太さを変える。角丸の点線は、辺の線と角の円弧に点線を付けるので、半径は 0.1 in のまま
-        （Google 標準の角丸に点線を付けると、半径が短い辺の約 1/6 になって中のカードと曲率が合わない。2026-10-08、ユーザー）。
+        [slides_py-005] （Google 標準の角丸に点線を付けると、半径が短い辺の約 1/6 になって中のカードと曲率が合わない）。
         weight を省くと、赤（RED）の線は EMPH_PT（2pt。強調の囲み）、ほかは 0.75pt。"""
         weight = weight or (EMPH_PT if line == RED else 0.75)
         kind = kind or ("ROUND_RECTANGLE" if fill else "RECTANGLE")
@@ -319,7 +319,7 @@ class Deck:
             ring()
         elif fill:
             # 枠線は線で引かず、線の色の角丸に、線の太さ（_shape と同じ 0.75 pt）だけ内側へ縮めた塗りの角丸を重ねる。
-            # 円の輪郭と辺の線をつなぐと、Google の描画で継ぎ目に 1〜2 px の段が出た（2026-10-08、社内向けの資料の p.3）
+            # [slides_py-006] 円の輪郭と辺の線をつなぐと、Google の描画で継ぎ目に 1〜2 px の段が出た
             lw = weight / 72 if line else 0
             if line:
                 parts += solid(x, y, w, h, r, line)
@@ -357,7 +357,7 @@ class Deck:
         smallest = min((p[1].get("size", size) if isinstance(p, tuple) else size for p in parts if (p[0] if isinstance(p, tuple) else p).strip()), default=size)
         inner = max((smallest / 72 if pad is None else pad) - INSET, 0) if (fill or line) and align != "CENTER" and kind != "ELLIPSE" else 0
         # Google は正円の文字を、内接する四角のさらに 0.1 in 内側に置く。0.3〜0.36 in の円では 14pt の数字より狭く、数字が右上にずれる
-        # （0.3 in で右 3.5 pt・上 2 pt。書体を替えても直らない。2026-10-08、顧客向けの資料）。
+        # [slides_py-007] （0.3 in で右 3.5 pt・上 2 pt。書体を替えても直らない）。
         # 円は塗りだけにし、円と同じ大きさの透明の枠を重ねて、1 グループにする。四角の枠なら、文字の場所が数字より狭くても、はみ出しを上下・左右に
         # 均等に振って中央に置く。ただし 2 字以上は幅が足りないと折り返す（「10」は文字の場所 0.20 in で折り返し、0.22 in で 1 行）ので、横だけ数字の幅まで広げる
         ring = (x, y, w, h) if kind == "ELLIPSE" else None
@@ -434,7 +434,7 @@ class Deck:
 
     def code(self, sid, x, y, w, h, lines, hot=(), size=11):
         """濃紺のコードの箱。lines は 1 行ずつの文字列で、英数字は等幅（MONO）。hot の行（0 始まりの番号）は濃紺の上の赤の太字。
-        3 つ目の資料で要ったので pages.py から移した（slides.md の 2。agent_bricks_2_intro・lakebase_partner_workshop・pi_setup）。"""
+        [slides_py-008] 3 つ目の資料で要ったので pages.py から移した（slides.md の 2）。"""
         self.box(sid, x, y, w, h, NAVY)
         parts = [(ln + ("\n" if i < len(lines) - 1 else ""), {"color": RED_ON_NAVY, "bold": True} if i in hot else {}) for i, ln in enumerate(lines)]
         return self.text(sid, x + 0.22, y + 0.14, w - 0.4, h - 0.24, parts, size=size, color=WHITE, spacing=110, edge=True, mono=True)
@@ -444,8 +444,8 @@ class Deck:
         head・body・items を省くと、白い地に罫線の箱だけを置く（中身を自分で組むカード）。
         body は 1 つの文字の枠に入れるもの（text の parts と同じ。bullets で箇条書き）。
         items は (見出し, 説明) の並びで、既定では 1 つの文字の枠に空行を挟んで流す（1 行と 2 行の項目が混ざっても間がそろう）。
-        step（in）を渡すと、前のように項目ごとに決まった間隔で置く（左右のカードで項目の上端をそろえたいときだけ。
-        2026-10-11、社内向けの資料で、決まった間隔の項目の間がそろわないとレビューが 2 周続けて指摘した）。"""
+        [slides_py-009] step（in）を渡すと、前のように項目ごとに決まった間隔で置く（左右のカードで項目の上端をそろえたいときだけ。
+        決まった間隔だと、行数の違う項目の間がそろわない）。"""
         self.box(sid, x, y, w, h, fill, line)
         if head:
             self.text(sid, x + PAD, y + 0.1, w - 2 * PAD, 0.34, head, size=12, color=NAVY, bold=True)
@@ -644,7 +644,7 @@ def make_deck(make, name):
 def carry(paths):
     """手元の画像（PNG・JPG・GIF・SVG）を Slides API が読める URL にする。API は公開された URL の画像しか読めないので、pptxgenjs で 1 枚に
     1 つずつ入れた pptx を Drive で Google Slides に変換し、その画像の URL（30 分で切れる）を取る。SVG は API が貼れないので sharp で PNG にする。
-    build の中で呼ぶので、pages.py では手元のパスを d.image に渡すだけでよい（2026-10-08、ユーザー「透過的に」）。戻り: (URL の並び, あとで消す仮のファイルの ID)。"""
+    [slides_py-010] build の中で呼ぶので、pages.py では手元のパスを d.image に渡すだけでよい。戻り: (URL の並び, あとで消す仮のファイルの ID)。"""
     with tempfile.TemporaryDirectory() as d:
         out = os.path.join(d, "images.pptx")
         js = ("const p = new (require('pptxgenjs'))(); p.layout = 'LAYOUT_WIDE';"
@@ -655,7 +655,7 @@ def carry(paths):
               "  await p.writeFile({ fileName: process.argv[1] }); })();")
         root = subprocess.run(["npm", "root", "-g"], capture_output=True, text=True, check=True).stdout.strip()
         subprocess.run(["node", "-e", js, out, *paths], check=True, env={**os.environ, "NODE_PATH": root})
-        # 仮のファイルは My Drive の直下に置く（フォルダの ID を持つと、スクリプトをほかの人に渡したときに動かない。2026-10-08 にユーザーが決めた）
+        # [slides_py-011] 仮のファイルは My Drive の直下に置く（フォルダの ID を持つと、スクリプトをほかの人に渡したときに動かない）
         fid = upload(open(out, "rb").read(), PPTX, "tmp_images", convert=GSLIDES)["id"]
     try:
         p = request("GET", f"{SLIDES}/{fid}?fields=slides(pageElements(image(contentUrl)))")

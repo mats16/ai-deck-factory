@@ -32,8 +32,9 @@ def overlays(cwd, text, skill=None):
         p = ws / "rules" / name / f
         if p.is_file() and p not in seen:
             seen.add(p)
-            out.append(f"## ワークスペースの決まり: rules/{name}/{f}\n\nプラグインの {name}/{f} への足しと上書き。食い違うところは、こちらに従う（deck-practices/rules.md の「決まりの層」）。\n\n{p.read_text()[:LIMIT]}")
-    return "\n\n".join(out)[:LIMIT]
+            out.append(f"## ワークスペースの決まり: rules/{name}/{f}\n\nプラグインの {name}/{f} への足しと上書き。食い違うところは、こちらに従う（deck-practices/rules.md の「決まりの層」）。\n\n{p.read_text()}")
+    text = "\n\n".join(out)
+    return text if len(text) <= LIMIT else text[:LIMIT] + f"\n\n（ここで切った。残りは rules/ のファイルを自分で開いて読む。{LIMIT} 字を超えたので、dreaming で分ける）"
 
 
 def main(mode):
@@ -61,6 +62,8 @@ def selftest():
         assert overlays(ws, "/plug/skills/deck-practices/content.md") == ""  # rules/ に同じファイルがない
         assert "最初に聞くこと" in overlays(ws, "", "ai-deck-factory:deck-practices")
         assert overlays("/", "/plug/skills/deck-practices/visual.md") == ""  # ワークスペースの外
+        (Path(ws) / "rules" / "deck-practices" / "visual.md").write_text("あ" * (LIMIT + 10))
+        assert "ここで切った" in overlays(ws, "deck-practices/visual.md")  # 切ったら黙らない
     print("selftest ok")
 
 

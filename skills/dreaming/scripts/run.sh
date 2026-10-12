@@ -3,7 +3,7 @@
 # launchd や cron から、定期の整理を CLI で回す（launchd は WorkingDirectory にワークスペースを書く）。T3 Code・Claude Code Desktop・Codex app ではアプリに登録する（../schedule.md）。
 set -eu
 case ${1:-} in claude|codex|pi) ;; *) sed -n '2,3p' "$0" >&2; exit 2 ;; esac
-ROOT=$(pwd)
+ROOT=$(pwd -P)  # /tmp のようなリンクでも、Claude Code がメモリに使う実際のパスにする
 [ -f "$ROOT/factory.toml" ] || { echo "factory.toml のあるフォルダ（ワークスペース）で回す: $ROOT" >&2; exit 2; }
 MEM=$HOME/.claude/projects/$(printf %s "$ROOT" | tr '/._' '---')/memory
 PROMPT=$(cat "$(dirname "$0")/../prompt.txt")

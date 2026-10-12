@@ -329,8 +329,11 @@ def is_delegated(said):  # T3 Code が任せたサブエージェントの会話
     return bool(said) and re.match(r"Act as the [\w-]+ sub-agent for this task", said[0][1]) is not None
 
 
-def is_dreaming(said):  # 整理を回す会話と、提案を適用する会話。最初の発言だけを見る（資料づくりの途中で dreaming に触れた会話は残す）
-    return bool(said) and "dreaming" in said[0][1].lower()
+DREAMING = re.compile(r"[/:]dreaming\b|スキル dreaming|dreaming/SKILL\.md|dreaming ?(して|を回|の P\d)|提案を適用", re.I)
+
+
+def is_dreaming(said):  # 整理を回す会話と、提案を適用する会話。最初の発言で、dreaming を呼んだものだけ（dreaming を説明する資料を作る会話は残す）
+    return bool(said) and DREAMING.search(said[0][1]) is not None
 
 
 def since_epoch(since):
@@ -448,6 +451,8 @@ def selftest():
         assert a.md(root).count("（確認のあと）") == 1 and "（確認のあと）: 「矢印がずれている」" in a.md(root)  # 確認が通ったあとの発言だけに印
         assert not is_dreaming(a.said) and is_dreaming([(ts, '…/skills/dreaming/SKILL.md を読み')])
         assert not is_dreaming([(ts, '資料を作って'), (ts, 'dreaming でこの指示を拾って')])
+        assert not is_dreaming([(ts, '決まりの台帳と dreaming の流れを紹介する資料を作って')])
+        assert all(is_dreaming([(ts, x)]) for x in ("スキル dreaming（Claude Code は /ai-deck-factory:dreaming）を読み", "/skill:dreaming", "dreaming の P0001 を適用して", "dreaming して"))
         folder = Path(home) / '.codex/sessions/2026/10/06'
         folder.mkdir(parents=True)
         rows = [{"type": "session_meta", "payload": {"id": "c", "cwd": root}}]

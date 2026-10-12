@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from slides import BAND_BOTTOM, COPYRIGHT_PT, EMU, FONT, INSET, MONO, STAGE_FILL, Y_BODY, Y_BODY_NOLEAD, Y_FOOT, Y_LEAD, deck_font, em_width  # 版面・書体・字幅の見積もりは、組む側（slides.py）と同じものを使う
 
 DOC_MIN_PT = 9  # ドキュメントの文字の下限。図表の題・出典・表の中・フッターが 9pt（visual_doc.md の 1）
-MIN_PT = 11  # スライドの文字の下限（2026-10-06 にユーザーが決めた）。社内資料の差し替え用（名前に「差し替え用」）は元の大きさのままなので見ない
+MIN_PT = 11  # [lint-001] スライドの文字の下限。社内資料の差し替え用（名前に「差し替え用」）は元の大きさのままなので見ない
 COPYRIGHT_FOOTER = re.compile(r"^©\s*\d{4}\s+.+?\s+All rights reserved\.(?:\s*｜\s*(?:Internal Only|Confidential))?\s*$", re.I)
 COPYRIGHT_NG = f"{COPYRIGHT_PT}pt 未満の著作権フッター"
 JA = r"぀-ゟァ-ヺー-ヿ㐀-鿿"  # かなと漢字（中黒「・」と全角の記号は含めない）
@@ -56,9 +56,9 @@ def contrast(a, b):
 
 BODY_LINES = "本文が 8 行を超える見込み"
 NO_LINK = "出典の行にリンクがない"
-TALK_MAX = 125  # 話す資料の 1 枚の本文の目安。5 行 × 1 行 25 字（Research/deck_research/log/20261006_jp_content.md の 1-13、visual.md の 2。2026-10-06 にユーザーの指示で足した）
+TALK_MAX = 125  # [lint-002] 話す資料の 1 枚の本文の目安。5 行 × 1 行 25 字（Research/deck_research/log/20261006_jp_content.md の 1-13、visual.md の 2）
 TALK = f"話す資料で本文が {TALK_MAX} 字を超える"
-# 章の扉（濃紺の地）。本編が長いのに扉がないと、テーマの切り替わりが唐突になる。扉の間が 1 枚だけなら細切れ（2026-10-07 にユーザーの指示で足した。visual.md の 1）
+# [lint-003] 章の扉（濃紺の地）。本編が長いのに扉がないと、テーマの切り替わりが唐突になる。扉の間が 1 枚だけなら細切れ（visual.md の 1）
 DIVIDER_MIN = 12
 NO_DIVIDER = f"{DIVIDER_MIN} 枚を超えるのに章の扉がない"
 SHORT_CH = "扉のあとが 1 枚だけの章"
@@ -67,21 +67,21 @@ ARROW_MID = "横向きの矢印が、両側の箱の上下の中央にない"
 LINE_GRID = "格子を線で組んでいる（標準の表にできないか）"
 NO_NOTES = "ノートがない"
 TWO_LINES = "見出しかリードが 2 行の見込み"  # 見出しは 1 行、リードは 1 文（visual.md の 1）
-# 空きと結論バンド（2026-10-08、ユーザー「入れていい」）。目安は顧客向けの状況整理（12 枚）の一覧で、空いて見えたページ（下: p3・p7・p8・p11、箱: p7・p11）を拾う値にした
+# [lint-004] 空きと結論バンド。目安は、空いて見えたページを拾う値にした
 EMPTY_BELOW = "本文の下が空いている"
 EMPTY_BOX = "箱の中の下が空いている"
-EMPTY_HOLE = "本文の中ほどが空いている"  # 要素と要素の間・結論バンドの上・本文の上の大きな空き。中身より大きい箱やページの中の穴を、レビューより先に出す（2026-10-11、社内向けの資料で、画像で見た重さ「中」の欠陥 7 件のうち lint が出せたのは 2 件だった）
+EMPTY_HOLE = "本文の中ほどが空いている"  # [lint-005] 要素と要素の間・結論バンドの上・本文の上の大きな空き。中身より大きい箱やページの中の穴を、レビューより先に出す
 PAD_NG = "塗りの箱の端と文字の間が 1 字分より狭い"  # visual.md の 4
-NUM_NO_UNIT = "大きな数字に単位がない"  # visual.md の 2。数字だけの段落は何の数か分からない（2026-10-09、社内向けの資料の p.10）
-OPEN_HEAD = "手の改行のあとの行頭に全角の開き括弧"  # visual.md の 2 の「改行」。行頭の「（」「「」は半字下がって見え、左端がそろわない（2026-10-11 にユーザーが決めた。社内向けの資料の Opus 5.5 medium の提案）
-COL_SHIFT = "隣り合う列の箱の上端か下端がずれている"  # visual.md の 4。片方の列にだけ小見出しを置くと、箱の上下がそろわない（同じ資料の p.17）
+NUM_NO_UNIT = "大きな数字に単位がない"  # [lint-006] visual.md の 2。数字だけの段落は何の数か分からない
+OPEN_HEAD = "手の改行のあとの行頭に全角の開き括弧"  # [lint-007] visual.md の 2 の「改行」。行頭の「（」「「」は半字下がって見え、左端がそろわない
+COL_SHIFT = "隣り合う列の箱の上端か下端がずれている"  # [lint-008] visual.md の 4。片方の列にだけ小見出しを置くと、箱の上下がそろわない
 BIG_NUM_PT, COL_TOL, COL_MAX, NEST = 28, 0.03 * EMU, 1.0 * EMU, 0.25 * EMU  # 大きな数字の大きさ。列のずれは 0.03〜1.0 in を出す（それより大きいのは中身の量の違いとみなす）
 DASH_ROUND = "点線の角丸が Google 標準の丸み"  # slides.md の 5。中のカード（半径 0.1 in）と曲率が合わない。d.box(…, dash=True) にする（2026-10-08）
-CODE_NOT_MONO = f"濃紺の地のコードが等幅の {MONO} でない"  # visual.md の 2。pages.py に残った古いコードの箱の部品で、等幅にならなかった（2026-10-09、社内向けの資料の p.5・p.43。代表の 3 枚にも 2 周のレビューにも残った）
+CODE_NOT_MONO = f"濃紺の地のコードが等幅の {MONO} でない"  # [lint-009] visual.md の 2。pages.py に残った古いコードの箱の部品で、等幅にならなかった（レビューでも見落としやすい）
 CODE_LINE = re.compile(r"\s*(SELECT|UPDATE|INSERT|DELETE|CREATE|ALTER|WITH|FROM|WHERE|SET|ANALYZE|GROUP BY|ORDER BY|import|def|pip|uv|curl|psql|python3?|databricks)(?=[\s(;]|$)")  # コードの行の頭（URL の databricks.com などは数えない）
-BLOCK_ON_NAVY = "濃紺の箱の上に NAVY_BLOCK の箱"  # visual.md の 1。地との差が小さく、群の境が見えない。本文ページでは淡色（PANEL・CARD）にする（2026-10-09、社内向けの資料の p.6 でユーザー「コントラスト差が少なく見にくい」）。扉（濃紺の地）は見ない
-STAGE_NG = "提供ステージの札の塗りが言葉と合わない"  # visual.md の 1。Public Preview（本番で使える）を Beta・Private Preview の黄と分ける（2026-10-09、社内向けの資料）
-MANY_BANDS = "結論バンドが本文の 3 分の 1 を超える"  # visual.md の 1「要るページにだけ」。同じデッキは 11 枚中 4 枚
+BLOCK_ON_NAVY = "濃紺の箱の上に NAVY_BLOCK の箱"  # [lint-010] visual.md の 1。地との差が小さく、群の境が見えない。本文ページでは淡色（PANEL・CARD）にする。扉（濃紺の地）は見ない
+STAGE_NG = "提供ステージの札の塗りが言葉と合わない"  # [lint-011] visual.md の 1。Public Preview（本番で使える）を Beta・Private Preview の黄と分ける
+MANY_BANDS = "結論バンドが本文の 3 分の 1 を超える"  # [lint-012] visual.md の 1「要るページにだけ」
 GAP_BELOW, GAP_BOX = 1.0 * EMU, 0.6 * EMU  # 本文の下（本文の領域 5 in の 2 割）と、箱の中の文字より下
 GAP_HOLE, GAP_TOP = 0.65 * EMU, 1.0 * EMU  # 要素の間の穴と、本文の上の空き
 THIN = 0.05 * EMU  # これより細い四角は線として数える（四角で罫線や軸を引いても、格子と矢印の確かめから漏れないように）  # 全ページにスピーカーノートを書く（visual.md の 1）
@@ -264,7 +264,7 @@ def is_band(e, b, scheme):  # 結論バンド（slides.py の band）: 濃紺の
 
 def empty_space(els, scheme):
     """(結論バンドがあるか, 本文の下の空き, [箱の中の文字より下の空き]) を返す（EMU）。本文は、結論バンド（なければ 6.60 in）より上で、1.62 in より下に届く要素。
-    下の空きは、上の空き（本文の上端 1.78 in から最初の要素まで）を引いたもの。上下の中央に置いた図（時系列など）は出さない（2026-10-08、顧客向けの状況整理の p3）。"""
+    [lint-013] 下の空きは、上の空き（本文の上端 1.78 in から最初の要素まで）を引いたもの。上下の中央に置いた図（時系列など）は出さない。"""
     band = next((b for e, b in els if "shape" in e and is_band(e, b, scheme)), None)
     floor = band[1] if band else BODY_BOTTOM
     body = [(e, b, ink_bottom(e, b, scheme)) for e, b in els if b[1] < floor - 0.01 * EMU and b[1] + b[3] > BODY_TOP]
@@ -315,7 +315,7 @@ def page_holes(els, scheme):
     return out
 
 
-def tight_pad(sh, b, box):  # 塗りの箱に左寄せ・右寄せで置いた文字と、箱の端の間が 1 字分（文字の大きさ）より狭い（visual.md の 4。2026-10-08、社内向けの資料で、pptx から作り直した札の余白が枠の内側の余白 0.1 in のままだった）
+def tight_pad(sh, b, box):  # [lint-014] 塗りの箱に左寄せ・右寄せで置いた文字と、箱の端の間が 1 字分（文字の大きさ）より狭い（visual.md の 4。pptx から作り直した札の余白は、枠の内側の余白 0.1 in のままになりやすい）
     ps = [x for x in paras(sh.get("text")) if ptext(x).strip()]
     if not box or not ps or ps[0][0].get("alignment", "START") not in ("START", "END"):
         return None
@@ -339,12 +339,12 @@ def has_text(e):
     return bool(sh and "".join(ptext(x) for x in paras(sh.get("text"))).strip())
 
 
-def src_without_link(sh):  # 出典の行なのに、リンクが 1 つもない（2026-10-06 にユーザーが決めた。ブログや講演はそのページから飛べるようにする）
+def src_without_link(sh):  # [lint-015] 出典の行なのに、リンクが 1 つもない（ブログや講演はそのページから飛べるようにする）
     ps = paras(sh.get("text"))
     return not is_mono(sh) and any(re.match(r"(出典|Sources?)[：:]", ptext(x).strip(), re.I) for x in ps) and not any("link" in st for x in ps for _, st in x[1])
 
 
-def off_center_arrows(lines, boxes):  # 2 つの箱をつなぐ横の線の高さが、どちらかの箱の上下の中央から 0.02 in を超えてずれている（2026-10-07、顧客向けの資料の p.6 でユーザーが指摘。言葉の置き場所のために矢印をずらしていた）
+def off_center_arrows(lines, boxes):  # [lint-016] 2 つの箱をつなぐ横の線の高さが、どちらかの箱の上下の中央から 0.02 in を超えてずれている（言葉の置き場所のために矢印をずらすことがある）
     out, gap, tol = [], 0.3 * EMU, 0.02 * EMU
     for x, y, w, h in lines:
         if h > 0:
@@ -391,7 +391,7 @@ def column_shift(cards, filled):
     return out
 
 
-def line_grid(lines):  # 上端と長さが同じ縦線が 3 本以上。ガントや表の格子を線と四角で組んでいる（2026-10-07、顧客向けのスケジュールでユーザー「基本は PPT 標準の表を使い」）
+def line_grid(lines):  # [lint-017] 上端と長さが同じ縦線が 3 本以上。ガントや表の格子を線と四角で組んでいる
     seen = Counter((round(b[1]), round(b[3])) for b in lines if b[2] == 0 and b[3] > 0)
     return [n for n in seen.values() if n >= 3]
 
@@ -560,7 +560,7 @@ def lint_slides(p, r, reuse=False, talk=False):
             if t.strip():
                 r.scan(f"p{i} のノート", t, {**HARD, **NOTES_ONLY})
 
-    if dark and not dark[0] and not reuse:  # どの資料にも表紙を付ける（2026-10-07 にユーザーが決めた。visual.md の 1）
+    if dark and not dark[0] and not reuse:  # [lint-018] どの資料にも表紙を付ける（visual.md の 1）
         r.hits[NO_COVER].append("p1 が濃紺の地でない。表紙を付ける（定例の資料も）")
     divs = [i for i, d in enumerate(dark, 1) if d and i > 1]  # 1 枚目（表紙）は扉に数えない
     if len(dark) > DIVIDER_MIN and not divs:
@@ -655,7 +655,7 @@ def lint_gdoc(doc, r, template=False):
     if not a4 and not themed:
         r.hits[A4_NG].append(f"用紙 {pw:.0f} × {ph:.0f}pt（A4 は 595 × 842。テーマの用紙は factory.toml の [docs.themes]）。docs.py build で入れ直す")
     per_line = width / base.get("fontSize", {}).get("magnitude", 11)
-    if per_line > LINE_MAX + 1 and not themed:  # テーマの版面は会社のテンプレートに合わせたもので、1 行の字数が多くなることがある（2026-10-10、ユーザーが版面を英語版に合わせると選んだ）
+    if per_line > LINE_MAX + 1 and not themed:  # [lint-019] テーマの版面は会社のテンプレートに合わせたもので、1 行の字数が多くなることがある
         r.hits["1 行の字数が多い"].append(f"本文の 1 行が約 {per_line:.0f} 字（{LINE_MAX} 字まで）。余白か本文の大きさを docs.py の値に戻す")
     images = {k: v["inlineObjectProperties"]["embeddedObject"] for k, v in doc.get("inlineObjects", {}).items()}
     paras = gdoc_paras(doc)
@@ -937,7 +937,7 @@ def selftest():
     cb = lambda x, y, w, h: [x * EMU, y * EMU, w * EMU, h * EMU]
     assert not column_shift([cb(0, 2, 3, 1), cb(4, 2, 3, 1)], [])  # そろっている
     assert not column_shift([cb(0, 2.1, 3, 0.8), cb(0.1, 2, 2.8, 1), cb(4, 2.1, 3, 0.8), cb(4.1, 2, 2.8, 1)], [])  # 角丸のカードの横長・縦長の四角
-    assert len(column_shift([cb(0, 2.16, 3, 2.8), cb(4, 1.78, 3, 2.85)], [])) == 2  # 上端 0.38・下端 0.33 ずれる（p.17 の前の形）
+    assert len(column_shift([cb(0, 2.16, 3, 2.8), cb(4, 1.78, 3, 2.85)], [])) == 2  # [lint-020] 上端 0.38・下端 0.33 ずれる
     assert not column_shift([cb(0, 2, 3, 1), cb(4, 2.3, 3, 1)], [cb(3.5, 1.5, 4, 3)])  # 右は入れ子なので見ない
     vl = lambda n: [[k * EMU, EMU, 0, 4 * EMU] for k in range(n)]
     assert line_grid(vl(3)) == [3] and not line_grid(vl(2))  # 格子の縦線は 3 本から
@@ -1015,7 +1015,7 @@ def selftest():
     stat["shape"]["text"]["textElements"][1]["textRun"]["style"]["fontSize"]["magnitude"] = 40
     assert pads([card(2, 4), stat]) == 0
     frame = {"objectId": "f", "shape": {"shapeType": "RECTANGLE", "shapeProperties": {}}, **box(0.6, 2, 6, 4)}  # 角丸のカードを組む、文字のない枠
-    assert hits([card(2, 4), frame, shape(1, y=2.1)]) == (0, 1)  # 文字のない部品は中身に数えない（2026-10-11、Kimi K3 high p2）
+    assert hits([card(2, 4), frame, shape(1, y=2.1)]) == (0, 1)  # [lint-021] 文字のない部品は中身に数えない
     # 本文の中ほどの穴: 1 行の文字が 2 つ、2 in 離れていれば出す。近ければ出さない
     holes = lambda els: len(run(deck([(OAT, [title()] + els)]))[0].hits[EMPTY_HOLE])
     assert holes([shape(1, y=2), shape(1, y=4.5)]) == 1 and holes([shape(1, y=2), shape(1, y=2.6)]) == 0
