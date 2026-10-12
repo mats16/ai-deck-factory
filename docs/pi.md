@@ -13,7 +13,7 @@ pi install -l git:github.com/mats16/ai-deck-factory   # git から
 ```
 
 - 書き込まれるのは `<ワークスペース>/.pi/settings.json` の `packages`。手元のパスは `.pi/` からの相対のパスで入るので、ワークスペースか checkout を動かしたら入れ直す。
-- 入るもの（`package.json` の `pi`）: `skills/` の 10 個のスキルと、`extensions/rules.ts`（プラグインのファイルを read・bash で開いたら、ワークスペースの `rules/` の同じパスを続けて出す）。
+- 入るもの（`package.json` の `pi`）: `skills/` の 10 個のスキルと、`extensions/rules.ts`（プラグインのファイルを read・bash で開いたら、ワークスペースの `rules/` の同じパスを、顧客の資料の `構成案*.md` などを開いたら顧客の `memory.md` を続けて出す）。
 - スキルは `/skill:factory-init` のように呼ぶ。入れたら `factory-init`、続けて `factory-doctor`（README の「入れ方」）。
 
 ## project trust

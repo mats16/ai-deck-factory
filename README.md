@@ -25,7 +25,7 @@ INSTALL.md                        会話で入れるときに、エージェン�
 .claude-plugin/marketplace.json   このリポジトリをそのままマーケットプレイスにする
 package.json                      pi のパッケージ（pi.skills: ./skills）
 skills/                           上の 10 個（Claude Code と pi で共通）
-hooks/hooks.json                  Claude Code の hook（プラグインのファイルを読んだら rules/ を続けて出す）
+hooks/hooks.json                  Claude Code の hook（プラグインのファイルを読んだら rules/ を、顧客の資料を読んだら memory.md を続けて出す）
 hooks/rules_overlay.py            その中身（Claude Code と pi で共有）
 extensions/rules.ts               pi の拡張（同じことを pi の read・bash で）
 docs/                             設定のガイド（claude-code-plugin.md: Claude Code に入れる範囲と確かめ方。pi.md: pi に入れる範囲と確かめ方。development.md: 開発しながら動作を見る）
@@ -74,6 +74,7 @@ pi install git:github.com/mats16/ai-deck-factory        # git から
 - `factory.toml`: 人ごとに変わる値（認証、テンプレート、テーマ〔`[slides.themes.<名前>]`: テンプレートの `url` と使い分けの `description`。エージェントが `slides.py themes` の一覧から資料ごとに選ぶ〕と社名、Drive の置き場所、材料を集める道具〔`[sources]`: 社内の検索・チャット・会議の記録・wiki など〕、プラグインの元のリポジトリ）。テンプレートは `deck-build/scripts/template.py visual --from-base`（`company` も）で作ると URL が書き込まれる。
 - `AGENTS.md`（と `@AGENTS.md` を読む `CLAUDE.md`）: どの会話でも要る決まり。
 - `rules/<スキル>/<ファイル>`: 資料を作る場面だけで要る、このワークスペースの決まり。
+- `Customers/<顧客>/memory.md`: その顧客の好みと、資料をまたいで効く相手のこと（顧客の memory）。その顧客の資料の `構成案*.md` などを開くと、hook が続けて出す。
 - `Customers/`・`Internal/`・`Research/`、`references_index.md`: 資料と台帳。`Research/deck_research/` は `deck-research` の調べ直しの記録（`state.md`・`log/`。代表の 3 枚の選び方の記録も）。
 - `.factory/`: スクリプトが書く記録。`ledger.jsonl`（決まりの台帳。修正の指示、決まりの ID ごとの出典と再発、dreaming の提案・適用・却下とプラグインへの提案の PR、判断待ちと答え、deck-review の指摘の結果。`deck-practices/scripts/ledger.py` が読み書きする）、`lint_runs.jsonl`（`lint.py --stats` が読む）、`dreaming/last_run`・`dreaming/log/`・`dreaming/backup/`。
 
@@ -85,11 +86,13 @@ pi install git:github.com/mats16/ai-deck-factory        # git から
 
 | 層 | 置き場所 | 中身 | 誰が変えるか |
 |---|---|---|---|
+| 顧客の memory（その顧客の資料で、いちばん優先） | `Customers/<顧客>/memory.md` | その顧客の好みと、資料をまたいで効く相手のこと | 作る会話がその場で書く。dreaming は提案する。2 社以上で同じ趣旨なら `rules/` に寄せる |
 | ワークスペース（優先） | `AGENTS.md`、`rules/<スキル>/<ファイル>`、`rules/deck-build/checks.py` | その人・その組織の決まりと点検、修正の指示で育つもの | 作る会話がその場で戻す。dreaming は提案し、「適用」で当てる。経緯は決まりの台帳（`.factory/ledger.jsonl`）に残す（git は前提にしない） |
 | プラグイン | `skills/`（入った場所は読むだけ） | 誰が使っても同じ決まり、点検、スクリプト、テンプレート | `factory-kaizen` で PR。マージされたら `update` で届く |
 
 - **決まりの本文と経緯を分ける。** 決まりは 1 項目ごとに ID（プラグインは `[visual-<番号>]`、ワークスペースは `[ws-visual-<番号>]`）と短い理由だけを書く。日付・ユーザーの言葉・どの資料か・ユーザーが決めたかは、ワークスペースの決まりの台帳に ID でつなぐ（`ledger.py why <ID>`）。資料・顧客の数から、ワークスペースに寄せるか、プラグインに上げるかを決める。
-- **`rules/` は読み忘れない。** プラグインのファイルを開くと（Claude Code は Read・Bash・Skill、pi は read・bash）、hook が同じパスの `rules/` のファイルを続けて出す。
+- **`rules/` と memory は読み忘れない。** プラグインのファイルを開くと（Claude Code は Read・Bash・Skill、pi は read・bash）、hook が同じパスの `rules/` のファイルを続けて出す。顧客の資料の `構成案*.md`・`社内メモ_*.md`・`references.md` を開くと、その顧客の `memory.md` を続けて出す。
+- **次の一手は台帳が出す。** `ledger.py candidates` が、決まりごとの数から、下ろす（点検か作る手順へ）・書き直す・条件を足す・上げる・写しを消す・上書きを見直すを出す。境目（2 本以上の資料、2 社以上の顧客）はスクリプトが持ち、dreaming は趣旨と提案の文を考える。
 - **点検もワークスペースで育てる。** `rules/deck-build/checks.py` の `slides(p, r)`・`doc(doc, r)` を、lint（`gslides.py check`・`docs.py check`）が毎回呼ぶ。`HARD` に入れた名前は要修正。書き方は `factory-init/templates/rules/README.md`。
 - **大元に上げる。** ほかの人にも効くものは、dreaming が「プラグインに上げる」提案にし、`factory-kaizen` で出す。
   1. 元のリポジトリの worktree で直す。
@@ -122,17 +125,19 @@ gcloud の既定の OAuth クライアントで作った認証情報は、`googl
 
 - 2026-10-12: Claude Code・pi に貼るだけで初期設定が終わるプロンプトを README に置く。フォルダ・ツールの指定もその会話でする。エージェントが読む手順は `INSTALL.md`（oh-my-openagent の貼り付けのプロンプトと、Cline の `llms-install.md` を参考にした）（ユーザー「Claude や Pi にコピペするだけで初期設定が完了するプロンプトを README に追加してください。フォルダやツール指定もそのチャット内で行い、完了できるように、コピペした後に読み込むスキル等も整備してください。」）。
 
+- 2026-10-13: 継続改善の仕組みを直す。会話の抜き出しに触った資料のフォルダを出し、指摘を誰が書いたか（作る会話・dreaming・取り込み）を台帳に残して週ごとの取りこぼしを出し、決まりごとの次の一手（上げた決まりの写しを消す、上書きを ID で書いて見直す、も含む）を `ledger.py candidates` が出す。顧客の `CLAUDE.md` は `memory.md` にし、hook が Claude Code と pi で続けて出す（ユーザー「1・2・3（4 と 5 を含む）と 6 を a で進めてください。」）。顧客ごとのものは決まりではなく好みとして memory に持つ（ユーザー「6 は顧客ごとのスライドのルールというより、嗜好に近い気がするので、いわゆる memory として持ったほうがいい気もしています。」）。
+
 ## 入れていないもの
 
 `databricks-updates`（毎朝のアップデートのまとめ）と `pi-compaction-report`（pi の運用レポート）は、使う人のチャット・フォルダ・セッションに結びついた個人の定期の作業なので入れていない。
 
 ## 残っている課題
 
-- **hooks の残り（後回し）:** 前の検討の corrections・guard・review_gate。corrections（コンパクションの前に指摘を拾う）は、dreaming の報告の「取りこぼし」の数が続けて多ければ入れる（Claude Code と pi の両方に要る。pi にきっかけがあるかは確かめていない）。入れたのは `rules/` を続けて出すものだけ。pi の `/skill:<名前>`（読むツールを通らない）では出ない。
-- **継続改善の残り:** 指摘を誰が書いたか（作る会話・dreaming・取り込み）を台帳に残し、取りこぼしの割合を週ごとに出す（コンパクションの hook を入れるかの材料）。ワークスペースの決まりがどのプラグインの決まりを上書きしているかを ID で書き（上書きの数、プラグインを入れ直したあとに古くなった上書き）、上げた PR がマージされたら `rules/` の写しを消す提案を dreaming が出す。顧客フォルダの `CLAUDE.md` を、pi でも hook で続けて出す。
+- **hooks の残り（後回し）:** 前の検討の corrections・guard・review_gate。corrections（コンパクションの前に指摘を拾う）は、dreaming の報告の「取りこぼし」の数が続けて多ければ入れる（Claude Code と pi の両方に要る。pi にきっかけがあるかは確かめていない）。入れたのは `rules/` と顧客の memory を続けて出すものだけ。pi の `/skill:<名前>`（読むツールを通らない）では出ない。
+- **継続改善の残り:** コンパクションの前に拾う hook は、`ledger.py rules` の週ごとの取りこぼしの割合を見てから決める。顧客の memory の古さ（担当が変わった）は、食い違う発言が出たときに直すだけで、日付から外すことはしていない。ワークスペースの決まりの上書きは、ワークスペースの中でしか数えていない（ほかの人のワークスペースの上書きは、プラグインに上げる提案で届いたものだけ見える）。
 - **スキルの中の経緯:** 2026-10-12 に、スキルの本文の持ち主の決めたこと（「ユーザーが決めた」と日付、ユーザーの言葉）を、決まりの ID に置き換えた。移した経緯は、持ち主のワークスペースの決まりの台帳に入れる（`git show <この直しの前>:skills/...` からも見られる）。測った日・調べた日・その日より前のファイルを指す日付は、意味が変わるので残した。PR に顧客の名前が入らないかは、`kaizen.py open` が見て止める（`Customers/` の顧客と資料のフォルダの名前、`[factory] private` の語）。
 - **外部に出すとき:** 2026-10-12 に会社ごとの値をワークスペースに分けた。材料を集める道具は `factory.toml` の `[sources]`、社名・著作権表示・表紙のロゴは `[brand]`（`copyright` がないか仮の値なら組めない。factory-doctor が要修正）、テーマは `[slides.themes.<名前>]`・`[docs.themes.<名前>]`（`url`・`description`・`base`）、会社の素材はワークスペースの `assets/`、ドキュメントのテンプレートは `rules/doc-build/templates/`、会社の道具の使い方は `rules/`。プラグインに残る会社の前提は、組み込みのテーマ visual・company の色（Databricks のブランドの色）だけ。
-- **Documents を移す:** `~/Documents` は今も自分の `.agents/skills/` で動いている（factory-doctor が「スキルの重なり」を出す）。移すときは、Documents の AGENTS.md の表を雛形の形（スキルの名前で指す。`rules/` も開く）にし、`.agents/skills/` の中核の 6 つを外し、`.agents/skills/dreaming/log/` を `.factory/dreaming/log/` に、`.agents/skills/deck-build/log/lint_runs.jsonl` を `.factory/lint_runs.jsonl` に移す。`deck-research` の記録は 2026-10-12 に `Research/deck_research/` へ移した。旧い場所の `.agents/skills/deck-research/log` は、移したときに進んでいた会話のための symlink なので、`.agents/skills/` と一緒に消す。
+- **Documents を移す:** 顧客フォルダの `CLAUDE.md` は `memory.md` に名前を変える（factory-doctor が「顧客の memory」で出す）。`~/Documents` は今も自分の `.agents/skills/` で動いている（factory-doctor が「スキルの重なり」を出す）。移すときは、Documents の AGENTS.md の表を雛形の形（スキルの名前で指す。`rules/` も開く）にし、`.agents/skills/` の中核の 6 つを外し、`.agents/skills/dreaming/log/` を `.factory/dreaming/log/` に、`.agents/skills/deck-build/log/lint_runs.jsonl` を `.factory/lint_runs.jsonl` に移す。`deck-research` の記録は 2026-10-12 に `Research/deck_research/` へ移した。旧い場所の `.agents/skills/deck-research/log` は、移したときに進んでいた会話のための symlink なので、`.agents/skills/` と一緒に消す。
 
 ## ライセンス
 

@@ -35,6 +35,9 @@ def check(ws, local=False):
         return out
     for name, need in (("AGENTS.md", ng), ("CLAUDE.md", warn), ("references_index.md", warn)):
         (ok if (root / name).is_file() else need)(name, "" if (root / name).is_file() else "ない。factory-init で置く")
+    if old := sorted((root / "Customers").glob("*/CLAUDE.md")):
+        how = lambda p: f"{p.relative_to(root)}（{'memory.md に中身を移して消す' if (p.parent / 'memory.md').exists() else 'memory.md に名前を変える'}）"
+        warn("顧客の memory", f"前の形の CLAUDE.md がある。Claude Code しか読まない（hook が Claude Code と pi で続けて出すのは memory.md）: {', '.join(map(how, old))}")
     if src := cfg.get("factory", {}).get("source"):
         p = Path(src).expanduser()
         if (p / ".git").exists() and (p / "skills").is_dir():
@@ -130,6 +133,14 @@ def selftest():
         (Path(tmp) / ".agents" / "skills" / "deck-build" / "SKILL.md").write_text("x")
         k = kinds()
         assert k["AGENTS.md"] == "OK" and k["スキルの重なり"] == "要確認" and k["slides.themes の url"] == "要確認" and k["drive.customers"] == "要確認"
+        (Path(tmp) / "Customers" / "acme").mkdir(parents=True, exist_ok=True)
+        (Path(tmp) / "Customers" / "acme" / "CLAUDE.md").write_text("x")
+        assert kinds()["顧客の memory"] == "要確認"
+        (Path(tmp) / "Customers" / "acme" / "memory.md").write_text("y")
+        assert "中身を移して消す" in next(d for _, n, d in check(Path(tmp), local=True) if n == "顧客の memory")  # 名前を変えると memory.md を上書きする
+        (Path(tmp) / "Customers" / "acme" / "memory.md").unlink()
+        (Path(tmp) / "Customers" / "acme" / "CLAUDE.md").rename(Path(tmp) / "Customers" / "acme" / "memory.md")
+        assert "顧客の memory" not in kinds()
         toml = Path(tmp) / "factory.toml"
         assert kinds()["brand.copyright"] == "要修正" and kinds()["brand.company"] == "要確認"
         toml.write_text(toml.read_text().replace("[brand]", '[brand]\ncopyright = "© Acme 2026"', 1))
