@@ -61,7 +61,7 @@ def write(ws, rec, number=None):
 def state(ws):
     """台帳を読み直して、いまの指摘（戻し先は最後の route）と提案（状態は最後の出来事）にする。"""
     cs, ps = {}, {}
-    for r in records(ws):
+    for n, r in enumerate(records(ws)):
         k = r["kind"]
         if k == "correction":
             cs[r["id"]] = dict(r)
@@ -70,7 +70,8 @@ def state(ws):
         elif k == "proposal":
             ps[r["id"]] = {**r, "status": "未適用"}
         elif k in ("applied", "rejected", "withdrawn", "undone") and r["ref"] in ps:
-            ps[r["ref"]].update(status={"applied": "適用済み", "rejected": "却下", "withdrawn": "取り下げ", "undone": "戻した"}[k], **{x: r[x] for x in ("appended", "reason") if x in r})
+            ps[r["ref"]].update(status={"applied": "適用済み", "rejected": "却下", "withdrawn": "取り下げ", "undone": "戻した"}[k], seq=n,
+                                **{x: r[x] for x in ("appended", "reason", "prev") if x in r})
     return cs, ps
 
 
@@ -80,7 +81,12 @@ def rel(ws, p):
 
 
 def add(ws, a):
-    rec = write(ws, {"kind": "correction", "deck": rel(ws, a.deck), "quote": a.quote, "fix": a.fix or "",
+    deck = rel(ws, a.deck)
+    same = next((c for c in state(ws)[0].values() if c["deck"] == deck and c["quote"] == a.quote), None)
+    if same:  # 前の形の構成案から取り込み直したときなど。足し直さず、前の ID を返す
+        print(same["id"])
+        return
+    rec = write(ws, {"kind": "correction", "deck": deck, "quote": a.quote, "fix": a.fix or "",
                      "to": a.to, "check": a.check, "session": a.session or "", "decided": a.decided}, ("correction", "c-", 4))
     print(rec["id"])
 
@@ -153,7 +159,8 @@ def apply(ws, ids):
             text = text + ("" if not text or text.endswith("\n") else "\n") + p["new"] + "\n"
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(text, encoding="utf-8")
-        write(ws, {"kind": "applied", "ref": i, "appended": not p["old"]})
+        cs = state(ws)[0]
+        write(ws, {"kind": "applied", "ref": i, "appended": not p["old"], "prev": {c: cs[c]["to"] for c in p["src"] if c in cs}})
         for c in p["src"]:
             write(ws, {"kind": "route", "ref": c, "to": p["rule"] or p["file"]})
         print(f"{i}: {p['file']} に当てた")
@@ -170,14 +177,19 @@ def undo(ws, i):
         sys.exit(f"{i}: 当てた文が {p['file']} に {text.count(new)} か所ある。手で直されたので、snapshot.sh restore か手で戻す")
     f.write_text(text.replace(new, p["old"], 1), encoding="utf-8")
     write(ws, {"kind": "undone", "ref": i})
+    cs = state(ws)[0]
+    for c, to in p.get("prev", {}).items():
+        if cs.get(c, {}).get("to") == (p["rule"] or p["file"]):
+            write(ws, {"kind": "route", "ref": c, "to": to})
     print(f"{i}: 戻した")
 
 
 def drift(ws):
-    out = []
-    for p in state(ws)[1].values():
+    out, done = [], [p for p in state(ws)[1].values() if p["status"] == "適用済み"]
+    for p in done:
         f = ws / p["file"]
-        if p["status"] == "適用済み" and p["new"] and (not f.exists() or p["new"] not in f.read_text(encoding="utf-8")):
+        later = any(q["file"] == p["file"] and q["seq"] > p["seq"] and q["old"] and (q["old"] in p["new"] or p["new"] in q["old"]) for q in done)
+        if p["new"] and not later and (not f.exists() or p["new"] not in f.read_text(encoding="utf-8")):
             out.append(p["id"])
             print(f"{p['id']} {p['file']}{' ' + p['rule'] if p['rule'] else ''}: 当てた文がない（手で直されたか消えた。ユーザーが直したものとして扱い、覆さない）")
     return out
@@ -292,6 +304,30 @@ def selftest():
             v.write_text(v.read_text().replace("2 枚に分ける", "分ける"))
             with quiet():
                 assert drift(ws) == ["P0001"]
+            # 足した文をあとの提案で置き換えても、手の直しに数えない。置き換えたほうを手で直せば出る
+            with quiet():
+                main(["propose", "--file", "rules/x.md", "--new", "A です", "--why", "足す"])
+                main(["propose", "--file", "rules/x.md", "--old", "A です", "--new", "B です", "--why", "替える"])
+                main(["apply", "P0005", "P0006"])
+                assert drift(ws) == ["P0001"]
+            x = ws / "rules" / "x.md"
+            x.write_text("C です\n")
+            with quiet():
+                assert drift(ws) == ["P0001", "P0006"]
+            x.write_text("B です\n")
+            # 戻すと、出典の指摘の戻し先も前に戻る
+            with quiet():
+                main(["add", "--deck", ".", "--quote", "見出しは短く"])
+                main(["propose", "--file", "rules/y.md", "--new", "- [ws-y-001] 見出しは短く。", "--rule", "ws-y-001", "--why", "短く", "--src", "c-0003"])
+                main(["apply", "P0007"])
+            assert state(ws)[0]["c-0003"]["to"] == "ws-y-001"
+            with quiet():
+                main(["undo", "P0007"])
+            assert state(ws)[0]["c-0003"]["to"] == "未" and (ws / "rules" / "y.md").read_text() == ""
+            # 同じ資料・同じ言葉の指摘は足し直さない
+            with quiet():
+                main(["add", "--deck", ".", "--quote", "見出しは短く"])
+            assert sum(c["quote"] == "見出しは短く" for c in state(ws)[0].values()) == 1
             # プラグインのファイルは変更先にしない
             try:
                 target(ws, str(PLUGIN / "skills" / "deck-practices" / "visual.md"))
