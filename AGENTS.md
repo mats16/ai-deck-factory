@@ -43,7 +43,7 @@ worktree の直下に検証用のワークスペース `sandbox/` を置き、wo
    done
    ```
 
-   すべて `selftest ok` になる。
+   すべて `selftest ok` になる。PR と `main` への push では、GitHub Actions（`.github/workflows/selftest.yml`）が Ubuntu で sandbox を作り、2 を回す。
 
 3. **Claude Code で開く。** `sandbox/` で、入れずに `--plugin-dir` で渡す。
 

@@ -1,0 +1,28 @@
+# AGENTS.md の「sandbox で確かめる」の 1 で sandbox を作り、2 の selftest を回す（doctor は雛形のままでは要修正が残るので回さない）。
+name: selftest
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - name: selftest
+        run: |
+          python3 skills/factory-init/scripts/init.py sandbox
+          cd sandbox
+          fail=0
+          for f in ../hooks/*.py ../skills/*/scripts/*.py; do
+            grep -q -e --selftest "$f" || continue
+            out=$(uv run -q --python 3.11 "$f" --selftest 2>&1) && last=$(tail -1 <<<"$out") || last="exit $?"
+            echo "$f: $last"
+            [ "$last" = "selftest ok" ] || { echo "$out"; fail=1; }
+          done
+          exit $fail
