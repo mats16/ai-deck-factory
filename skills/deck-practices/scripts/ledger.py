@@ -101,18 +101,18 @@ def rule_arg(s):
 
 def state(ws):
     """台帳を読み直して、いまの指摘（戻し先は最後の route）、提案と判断待ち（状態は最後の出来事）、レビューの結果にする。
-    指摘の recur（再発）は、初めてつないだ決まりの ID（first。ファイルは数えない）がもうあったときに言われたか（言われた時刻が、その決まりのできた時刻より後か）。
-    決まりのできた時刻は、つないだときに台帳の提案でできていたらその時刻（ID を書き入れた提案を当てた・PR にした時刻。戻した・断られたら消える）。
-    そうでなければ、プラグインの決まりは前からある（""）。ワークスペースの決まりは、その決まりに初めてつないだ指摘のうち、いちばん早く言われた時刻。
+    指摘の recur（再発）は、初めてつないだ決まりの ID（first。ファイルは数えない）が、言われたときにあったか。つないだ時刻ではなく、言われた時刻で見る。
+    台帳の提案で作った決まり（ID を書き入れた提案を当てた・PR にした時から、戻した・断られた時まで）は、その間に言われたか（作り直したら、どの間でもよい）。
+    台帳で作っていなければ、プラグインの決まりは前からある。ワークスペースの決まりは、初めてつないだ指摘のうち、いちばん早く言われたときにできたとみなす。
     あとで別の決まりに移しても（大元に上げたときなど）first は変えない。未・戻さないに戻したら決め直す。"""
-    cs, ps, qs, rv, born, made = {}, {}, {}, {}, {}, {}  # born・made: 台帳の提案で作った決まりの ID → 作った時刻・その提案
+    cs, ps, qs, rv = {}, {}, {}, {}
+    life, made = {}, {}  # 台帳の提案で作った決まりの ID → あった間 [[できた時刻, なくなった時刻か None], …]・いまの決まりを作った提案
 
     def link(c, to):
         if not re.fullmatch(ID, to):  # 未・戻さない・ファイル（1 つのファイルには別々の決まりが入るので、再発を数えない）
             c.pop("first", None)
-            c.pop("born", None)
         elif "first" not in c:
-            c["first"], c["born"] = to, born.get(to, None if to.startswith("ws-") else "")
+            c["first"] = to
 
     for n, r in enumerate(records(ws)):
         k = r["kind"]
@@ -129,10 +129,12 @@ def state(ws):
             intro = introduces(p)  # PR で別の ID にしたときも、もとの提案の文で見る
             p.update(status={"applied": "適用済み", "rejected": "却下", "withdrawn": "取り下げ", "undone": "戻した", "sent": "PR にした"}[k], seq=n,
                      **{x: r[x] for x in ("appended", "reason", "prev", "pr", "rule") if x in r})
-            if k in ("applied", "sent") and intro and p["rule"] not in born:  # 出典の指摘は、このあとの route で、再発でないとつなぐ
-                born[p["rule"]], made[p["rule"]] = r["ts"], p["id"]
+            if k in ("applied", "sent") and intro and p["rule"] not in made:
+                life.setdefault(p["rule"], []).append([r["ts"], None])
+                made[p["rule"]] = p["id"]
             elif k in ("undone", "rejected", "withdrawn") and made.get(p["rule"]) == p["id"]:  # 作った決まりがなくなった
-                del born[p["rule"]], made[p["rule"]]
+                life[p["rule"]][-1][1] = r["ts"]
+                del made[p["rule"]]
         elif k == "question":
             qs[r["id"]] = {**r, "status": "未回答"}
         elif k in ("answered", "withdrawn") and r["ref"] in qs:
@@ -141,13 +143,18 @@ def state(ws):
             rv[r["key"]] = r  # 同じ行は、あとで取り込んだ結果にする
     first_said = {}
     for c in cs.values():
-        if c.get("born", "") is None:
+        if c.get("first", "").startswith("ws-") and c["first"] not in life:
             first_said[c["first"]] = min(first_said.get(c["first"], when(c)), when(c))
     for c in cs.values():
         if "first" not in c:
             continue
-        migrated = "date" in c and "at" not in c  # 前の形から移した、決まりを作った出典（日付だけ）
-        c["recur"] = not migrated and when(c) > (first_said[c["first"]] if c["born"] is None else c["born"])
+        t, f = when(c), c["first"]
+        if "date" in c and "at" not in c:  # 前の形から移した、決まりを作った出典（日付だけ）
+            c["recur"] = False
+        elif f in life:
+            c["recur"] = any(start < t and (end is None or t < end) for start, end in life[f])
+        else:
+            c["recur"] = t > first_said[f] if f.startswith("ws-") else True
     return cs, ps, qs, list(rv.values())
 
 
@@ -623,6 +630,19 @@ def selftest():
                 write(ws, {"ts": "2004-01-01T00:00:00Z", "kind": "applied", "ref": pid("作り直す"), "appended": True, "prev": {}})
                 write(ws, {"ts": "2004-01-01T00:00:00Z", "kind": "route", "ref": cid("戻したあとに言われた"), "to": "ws-u-001"})
             assert state(ws)[0][cid("戻したあとに言われた")]["recur"] is False  # 作り直した決まりの出典で、戻す前の決まりの再発ではない
+            with quiet():  # 前の決まりがあった間に言われ、作り直したあとでつないだものは再発。同じ分の中でも秒で比べる
+                main(["propose", "--file", "rules/v.md", "--new", "- [ws-v-001] v", "--rule", "ws-v-001", "--why", "v を作る"])
+                main(["propose", "--file", "rules/v.md", "--new", "- [ws-v-001] v", "--rule", "ws-v-001", "--why", "v を作り直す"])
+                write(ws, {"ts": "2005-01-01T09:30:20Z", "kind": "applied", "ref": pid("v を作る"), "appended": True, "prev": {}})
+                main(["add", "--deck", ".", "--quote", "前の v のあいだに", "--at", "2005-01-02T00:00"])
+                main(["add", "--deck", ".", "--quote", "同じ分のあとの秒", "--at", "2005-01-01T09:30:45.123Z"])
+                main(["add", "--deck", ".", "--quote", "同じ分の前の秒", "--at", "2005-01-01T09:30:05Z"])
+                write(ws, {"ts": "2005-01-03T00:00:00Z", "kind": "undone", "ref": pid("v を作る")})
+                write(ws, {"ts": "2005-01-04T00:00:00Z", "kind": "applied", "ref": pid("v を作り直す"), "appended": True, "prev": {}})
+                for q in ("前の v のあいだに", "同じ分のあとの秒", "同じ分の前の秒"):
+                    main(["route", cid(q), "ws-v-001"])
+            cs = state(ws)[0]
+            assert [cs[cid(q)]["recur"] for q in ("前の v のあいだに", "同じ分のあとの秒", "同じ分の前の秒")] == [True, True, False]
             with quiet():
                 main(["add", "--deck", ".", "--quote", "ID が変わる", "--at", "2000-01-01T00:00"])
                 main(["propose", "--plugin", "--file", "deck-practices/visual.md", "--new", "- [visual-060] x", "--rule", "visual-060", "--why", "ID を変える", "--src", cid("ID が変わる")])
