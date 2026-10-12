@@ -1,0 +1,3 @@
+{"hooks": {
+  "PostToolUse": [{"matcher": "Read|Bash|Skill", "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/rules_overlay.py\" claude", "timeout": 5}]}]
+}}

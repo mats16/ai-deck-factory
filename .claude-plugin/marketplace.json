@@ -1,0 +1,15 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "ai-deck-factory",
+  "description": "AI Deck Factory（日本語のスライドとドキュメントを組むプラグイン）",
+  "owner": {
+    "name": "Kazuki Matsuda"
+  },
+  "plugins": [
+    {
+      "name": "ai-deck-factory",
+      "description": "日本語のスライドとドキュメントを Google Slides・Google Docs に組み、確かめ、決まりを直していく。",
+      "source": "./"
+    }
+  ]
+}

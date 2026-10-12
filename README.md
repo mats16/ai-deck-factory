@@ -1,0 +1,120 @@
+# AI Deck Factory
+
+日本語のスライド（Google Slides）とドキュメント（Google Docs）を Slides API・Docs API で直接組み、lint・Google が描いたページの画像・別の目のレビューで確かめて渡す仕組み。会話の記録から、決まりに戻し忘れた指示を拾って決まりを育てていく（dreaming）。
+
+同じソースを、Claude Code のプラグインと pi のパッケージの両方から入れられる。
+
+## 中身
+
+| スキル | すること |
+|---|---|
+| `factory-init` | ワークスペースを作る（AGENTS.md・CLAUDE.md・factory.toml・references_index.md・rules/ の雛形と資料のフォルダ。あるファイルは上書きしない） |
+| `factory-doctor` | 前提を確かめる（Python・uv、ワークスペース、スキルの重なり、Google の認証、テンプレートと Drive のフォルダ、gh） |
+| `factory-kaizen` | プラグインの改善を、過去の資料で前後を比べてから PR にする（理由・背景・検証の結果・見た目なら画像） |
+| `deck-practices` | 資料を作る・直すときに最初に読む。作業の始め方、構成案と言葉、見た目の決まり、決まりの層と修正の指示の戻し方 |
+| `deck-template` | 会社のテンプレートから、AI Deck Factory のテンプレート（テーマ）を作る。日本語のテンプレートがある・英語しかない・ない、の 3 つ。書体・大きさ・大枠の色を残し、和文の書体とコントラストを合わせる（`template.py audit`・`check`） |
+| `deck-build` | Google Slides を組む（`slides.py`）・確かめる（`gslides.py check`・`lint.py`）。Drive への置き方。スクリプトはドキュメントと共有。使い回す画像は `assets/` |
+| `doc-build` | Google Docs を `build/doc.md` から組む・確かめる（`docs.py`）。テンプレートはワークスペースの `rules/doc-build/templates/` |
+| `deck-review` | 返す前の全体のレビュー。会話を渡さない新しいサブエージェント（メインと同じモデル）に頼む |
+| `deck-research` | ベストプラクティスの調べ直し。調べた記録（`state.md`・`log/`）はワークスペースの `Research/deck_research/` |
+| `dreaming` | 会話の記録から、決まりを定期的に整理する |
+
+```
+.claude-plugin/plugin.json        Claude Code のプラグイン
+.claude-plugin/marketplace.json   このリポジトリをそのままマーケットプレイスにする
+package.json                      pi のパッケージ（pi.skills: ./skills）
+skills/                           上の 10 個（Claude Code と pi で共通）
+hooks/hooks.json                  Claude Code の hook（プラグインのファイルを読んだら rules/ を続けて出す）
+hooks/rules_overlay.py            その中身（Claude Code と pi で共有）
+extensions/rules.ts               pi の拡張（同じことを pi の read・bash で）
+docs/                             設定のガイド（claude-code-plugin.md: Claude Code に入れる範囲と確かめ方。pi.md: pi に入れる範囲と確かめ方。development.md: 開発しながら動作を見る）
+```
+
+## 入れ方
+
+Python 3.11 以上と `uv` が要る。Google の認証は下の「Google の認証」。
+
+**Claude Code**
+
+```sh
+claude plugin marketplace add https://github.com/mats16/ai-deck-factory.git   # 手元の checkout なら ~/Projects/ai-deck-factory
+claude plugin install ai-deck-factory@ai-deck-factory
+claude plugin update ai-deck-factory@ai-deck-factory               # プラグインを直して commit・push したあと
+```
+
+`plugin.json` に版を書いていないので、commit の SHA が版になり、commit ごとに `update` で届く（マーケットプレイスが GitHub を指していれば push してから。手元のパスで足したなら commit だけでよい）。手元で直しながら試すときは `claude --plugin-dir ~/Projects/ai-deck-factory`（worktree と検証用のワークスペースで試す手順は [docs/development.md](docs/development.md)）。スキルは `/ai-deck-factory:factory-init` のように呼ぶ。資料のフォルダだけで効かせる（`--scope project`）入れ方と、効いている範囲の確かめ方は [docs/claude-code-plugin.md](docs/claude-code-plugin.md)。
+
+**pi**
+
+```sh
+pi install ~/Projects/ai-deck-factory                                # 手元の checkout をそのまま読む（写さない）
+pi install git:github.com/mats16/ai-deck-factory        # git から
+```
+
+スキルは `/skill:factory-init` のように呼ぶ。資料のフォルダだけで効かせる（`-l`）入れ方と、project trust、効いている範囲の確かめ方は [docs/pi.md](docs/pi.md)。
+
+入れたら、ワークスペースにするフォルダで `factory-init`、続けて `factory-doctor` を呼ぶ。
+
+## ワークスペース
+
+資料を置くフォルダ（例: `~/Documents`）。スクリプトは、今いるフォルダから上へたどって最初に見つかった `factory.toml` のフォルダをワークスペースとして扱う。`factory-init` が置くもの:
+
+- `factory.toml`: 人ごとに変わる値（認証、テンプレート、テーマ〔`[slides.themes.<名前>]`: テンプレートの `url` と使い分けの `description`。エージェントが `slides.py themes` の一覧から資料ごとに選ぶ〕と社名、Drive の置き場所、材料を集める道具〔`[sources]`: 社内の検索・チャット・会議の記録・wiki など〕、プラグインの元のリポジトリ）。テンプレートは `deck-build/scripts/template.py visual --from-base`（`company` も）で作ると URL が書き込まれる。
+- `AGENTS.md`（と `@AGENTS.md` を読む `CLAUDE.md`）: どの会話でも要る決まり。
+- `rules/<スキル>/<ファイル>`: 資料を作る場面だけで要る、このワークスペースの決まり。
+- `Customers/`・`Internal/`・`Research/`、`references_index.md`: 資料と台帳。`Research/deck_research/` は `deck-research` の調べ直しの記録（`state.md`・`log/`。代表の 3 枚の選び方の記録も）。
+- `.factory/`: スクリプトが書く記録。`lint_runs.jsonl`（`lint.py --stats` が読む）、`dreaming/last_run`・`dreaming/log/`・`dreaming/backup/`。
+
+自分だけの画像は `assets/` に置く。`slides.asset()` はここを先に探し、なければ `deck-build/assets/` を使う。
+
+## 決まりの層と育て方
+
+ワークスペースは、やり取りの積み重ねで決まりと点検を育てていく 1 つのプロダクト。大元（プラグイン）を直すべきものだけを PR にする。
+
+| 層 | 置き場所 | 中身 | 誰が変えるか |
+|---|---|---|---|
+| ワークスペース（優先） | `AGENTS.md`、`rules/<スキル>/<ファイル>`、`rules/deck-build/checks.py` | その人・その組織の決まりと点検、修正の指示で育つもの | 作る会話がその場で戻す。dreaming は提案する。git にしていれば履歴に残す |
+| プラグイン | `skills/`（入った場所は読むだけ） | 誰が使っても同じ決まり、点検、スクリプト、テンプレート | `factory-kaizen` で PR。マージされたら `update` で届く |
+
+- **`rules/` は読み忘れない。** プラグインのファイルを開くと（Claude Code は Read・Bash・Skill、pi は read・bash）、hook が同じパスの `rules/` のファイルを続けて出す。
+- **点検もワークスペースで育てる。** `rules/deck-build/checks.py` の `slides(p, r)`・`doc(doc, r)` を、lint（`gslides.py check`・`docs.py check`）が毎回呼ぶ。`HARD` に入れた名前は要修正。書き方は `factory-init/templates/rules/README.md`。
+- **大元に上げる。** ほかの人にも効くものは、dreaming が「プラグインに上げる」提案にし、`factory-kaizen` で出す。
+  1. 元のリポジトリの worktree で直す。
+  2. 過去の資料で確かめる。lint は前の版と変えた版をかけ比べ、見た目は正本から両方の版で仮に組み直してページの画像を並べる。
+  3. 理由・背景・検証の結果・画像を入れた PR を作る。PR には資料の名前・URL・本文を出さず、「資料 1」の番号と規則ごとの数の変化、ユーザーが選んだ画像だけを載せる。
+  4. マージされたら、`rules/` の写しを消す。
+- `deck-research` の調べ直しの結果も、`factory-kaizen` で PR にする（PR に入れるのはスキルの直しと `sources.md`。調べた記録はワークスペースに残す）。
+
+## Google の認証
+
+API を直接呼ぶ（MCP は使わない）。トークンは `deck-build/scripts/gapi.py` が次の順に取る。gcloud も、ほかの Google のスキルも、動かすときには要らない。
+
+1. 環境変数 `GOOGLE_OAUTH_ACCESS_TOKEN`（ほかの仕組みで取ったトークンを渡すとき）
+2. `authorized_user` の認証情報の JSON（`GOOGLE_APPLICATION_CREDENTIALS`、なければ gcloud の ADC のファイル）の refresh_token。作るのは `gcloud auth application-default login --scopes=…`（`factory-doctor` がコマンドを出す）
+
+gcloud の既定の OAuth クライアントで作った認証情報は、`google.quota_project` がないと 403 になる。
+
+## 決めたこと
+
+- 2026-10-11: setup は前の検討の `/deck-init`・`/deck-doctor` の案を、今の作りに合わせて入れる。名前は `factory-init`・`factory-doctor`（ユーザー「名前は `factory-init` `factory-doctor` のほうがいい気がします」）。
+- 2026-10-11: プラグインの決まりとワークスペースの決まりがぶつかったら、ワークスペースの AGENTS.md を優先する。hooks（rules・corrections・guard・review_gate）は後回し（ユーザー「AGENTS.md 優先です。なお、hooks は後回しで良いです」）。
+- 2026-10-11: Google Slides・Docs は MCP に切り替えず、API を直接呼ぶ。認証情報を渡せば単独で動く形にする。Unity Gateway の Google Drive MCP には `google_file_create`・`google_file_edit`・`google_slides_add_slide` などがある（ユーザー「ツール的には認証情報渡したら単独で動作するコードのほうが使い勝手がいい気がしました」）。`factory.toml` の `auth_command`（トークンを出すコマンド）はいったん入れたが、Databricks の社員は ADC で足りるので廃止した（ADC で足りる）。ほかの取り方は環境変数 `GOOGLE_OAUTH_ACCESS_TOKEN` で渡す（ユーザー「auth_command も廃止で良いです」）。
+
+- 2026-10-11: `rules/` の開き忘れは、hook で防ぐ（ユーザー「開き忘れても止まらない …こちらも対応してください」）。ワークスペースは 1 つのプロダクトとして育て、大元は PR で直す。PR には理由・背景、見た目なら画像、過去の資料での検証の結果を入れる（ユーザー「基本的にセットアップ対象のフォルダ配下を1プロダクトのように育てていく方針で、やり取りの蓄積からルール・チェックすべき項目を改善、大元を改善すべき場合は PR 作成のようなコンセプトでおねがします」「PR には理由・背景情報の他、デザインに関するものであればスクリーンショットを含めるようにしてください。また、ローカルで変更して過去資料で検証した結果も提出する流れが望ましいです」）。
+
+- 2026-10-12: PR を作るスキルの名前を `factory-pr` から `factory-kaizen` にした（ユーザー「factory-pr ではなく、工場を改修・発展のようなニュアンスの方がいいかな」。候補から factory-kaizen を選んだ）。
+
+## 入れていないもの
+
+`databricks-updates`（毎朝のアップデートのまとめ）と `pi-compaction-report`（pi の運用レポート）は、使う人のチャット・フォルダ・セッションに結びついた個人の定期の作業なので入れていない。
+
+## 残っている課題
+
+- **hooks の残り（後回し）:** 前の検討の corrections・guard・review_gate。入れたのは `rules/` を続けて出すものだけ。pi の `/skill:<名前>`（読むツールを通らない）では出ない。
+- **スキルの中の経緯:** スキルの本文に、持ち主の決めたこと（「ユーザーが決めた」と日付）が残っている。2026-10-12 に、出典の括弧の顧客のフォルダと顧客の名前は「顧客向けの資料」「（顧客）」にした。PR に顧客の名前が入らないかは、`kaizen.py open` が見て止める（`Customers/` の顧客と資料のフォルダの名前、`[factory] private` の語）。
+- **外部に出すとき:** 2026-10-12 に会社ごとの値をワークスペースに分けた。材料を集める道具は `factory.toml` の `[sources]`、社名・著作権表示・表紙のロゴは `[brand]`（`copyright` がないか仮の値なら組めない。factory-doctor が要修正）、テーマは `[slides.themes.<名前>]`・`[docs.themes.<名前>]`（`url`・`description`・`base`）、会社の素材はワークスペースの `assets/`、ドキュメントのテンプレートは `rules/doc-build/templates/`、会社の道具の使い方は `rules/`。プラグインに残る会社の前提は、組み込みのテーマ visual・company の色（Databricks のブランドの色）だけ。
+- **Documents を移す:** `~/Documents` は今も自分の `.agents/skills/` で動いている（factory-doctor が「スキルの重なり」を出す）。移すときは、Documents の AGENTS.md の表を雛形の形（スキルの名前で指す。`rules/` も開く）にし、`.agents/skills/` の中核の 6 つを外し、`.agents/skills/dreaming/log/` を `.factory/dreaming/log/` に、`.agents/skills/deck-build/log/lint_runs.jsonl` を `.factory/lint_runs.jsonl` に移す。`deck-research` の記録は 2026-10-12 に `Research/deck_research/` へ移した。旧い場所の `.agents/skills/deck-research/log` は、移したときに進んでいた会話のための symlink なので、`.agents/skills/` と一緒に消す。
+
+## ライセンス
+
+MIT（[LICENSE](LICENSE)）。

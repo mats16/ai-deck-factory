@@ -1,0 +1,8 @@
+{
+  "name": "ai-deck-factory",
+  "description": "日本語のスライド（Google Slides）とドキュメント（Google Docs）を API で組み、lint・画像・別の目のレビューで確かめ、会話の記録から決まりを直していく（dreaming）。",
+  "author": { "name": "Kazuki Matsuda" },
+  "license": "MIT",
+  "repository": "https://github.com/mats16/ai-deck-factory",
+  "keywords": ["slides", "docs", "google-slides", "google-docs", "japanese"]
+}

@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""usage: doctor.py [<ワークスペース>] [--local]   （--selftest で自己確認）
+AI Deck Factory を動かす前提を確かめる。--local は手元だけ見て、Google の API を呼ばない。
+1 行 1 項目で「OK」「要修正」「要確認」を出す。要修正が 1 つでもあれば exit 1。標準ライブラリだけ。"""
+import io, contextlib, os, shutil, subprocess, sys, tempfile, tomllib
+from pathlib import Path
+
+SKILLS = Path(__file__).resolve().parents[2]  # プラグインの skills/
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(SKILLS / "deck-build" / "scripts"))
+
+
+def find_ws(start):
+    return next((d for d in (start, *start.parents) if (d / "factory.toml").is_file()), None)
+
+
+def check(ws, local=False):
+    """(区分, 項目, 詳しく) の並び。区分は OK・要修正・要確認。"""
+    out = []
+    ok = lambda name, detail="": out.append(("OK", name, detail))
+    ng = lambda name, detail: out.append(("要修正", name, detail))
+    warn = lambda name, detail: out.append(("要確認", name, detail))
+
+    (ok if sys.version_info >= (3, 11) else ng)("Python 3.11 以上", sys.version.split()[0])
+    (ok if shutil.which("uv") else ng)("uv", shutil.which("uv") or "ない。画像での測り（box_pad.py・doc_layout.py・sheet.py）が動かない。https://docs.astral.sh/uv/ で入れる")
+    root = find_ws(ws)
+    if not root:
+        ng("factory.toml", f"{ws} から上にない。factory-init で作る")
+        return out
+    ok("ワークスペース", str(root))
+    try:
+        cfg = tomllib.loads((root / "factory.toml").read_text())
+    except tomllib.TOMLDecodeError as e:
+        ng("factory.toml の書き方", str(e))
+        return out
+    for name, need in (("AGENTS.md", ng), ("CLAUDE.md", warn), ("references_index.md", warn)):
+        (ok if (root / name).is_file() else need)(name, "" if (root / name).is_file() else "ない。factory-init で置く")
+    if src := cfg.get("factory", {}).get("source"):
+        p = Path(src).expanduser()
+        if (p / ".git").exists() and (p / "skills").is_dir():
+            ok("factory.source", str(p))
+            gh = shutil.which("gh") and subprocess.run(["gh", "auth", "status"], capture_output=True).returncode == 0
+            (ok if gh else warn)("gh（factory-kaizen で PR を出す）", "ログイン済み" if gh else "gh がないか、ログインしていない。gh auth login")
+        else:
+            warn("factory.source", f"{p} がプラグインの git の checkout でない（プラグインに上げる提案を入れられない）")
+    names = sorted(p.parent.name for p in SKILLS.glob("*/SKILL.md"))
+    found = {}  # 実体ごとに 1 回（.claude/skills は .agents/skills へのリンクのことが多い）
+    for d in (".agents/skills", ".claude/skills"):
+        for name in names:
+            if (root / d / name / "SKILL.md").is_file():
+                found.setdefault((root / d / name).resolve(), f"{d}/{name}")
+    dup = list(found.values())
+    (warn if dup else ok)("スキルの重なり", f"ワークスペースにも同じ名前のスキルがある（プラグインと二重に読まれる）: {', '.join(dup)}" if dup else "")
+    g, sl, dr = cfg.get("google", {}), cfg.get("slides", {}), cfg.get("drive", {})
+    if not g.get("quota_project"):
+        warn("google.quota_project", "空。gcloud の既定の OAuth クライアントで取ったトークンなら、Slides・Docs が 403 になる")
+    from lint import COPYRIGHT_FOOTER  # 9pt で通す著作権表示の形（slides.py が全ページに書く）
+    import slides  # 仮の著作権表示（PLACEHOLDER_COPYRIGHT。need_brand と同じ）と、組み込みのテーマの説明（THEME_NOTES）
+    brand = cfg.get("brand", {})
+    if not (c := str(brand.get("copyright", "")).strip()):
+        ng("brand.copyright", "空。スライドもドキュメントも組めない（全ページの左下に書く著作権表示がない）。自分の会社の著作権表示を書く")
+    elif c == slides.PLACEHOLDER_COPYRIGHT:
+        ng("brand.copyright", f"「{c}」は書いていないときの仮の値。スライドもドキュメントも組めない。自分の会社の著作権表示を書く")
+    elif not COPYRIGHT_FOOTER.fullmatch(c):
+        ng("brand.copyright", f"「{c}」は「© <年> <社名> All rights reserved.」の形でない。lint が全ページの著作権表示を 11pt 未満として止める")
+    if not brand.get("company"):
+        warn("brand.company", "空。表紙の左下に社名を置かない")
+    mine, docs = sl.get("themes", {}), cfg.get("docs", {})
+    theme, temps = sl.get("default_theme", "visual"), {k: t["url"] for k, t in mine.items() if t.get("url")}
+    if old := {k: v for k, v in sl.get("templates", {}).items() if not mine.get(k, {}).get("url")}:  # 2026-10-12 までの書き方
+        ng("slides.templates", f"{', '.join(old)} のテンプレートの URL を [slides.themes.<名前>] の url に移す（[slides.templates] の visual = \"…\" → [slides.themes.visual] の url = \"…\"）")
+    if sl.get("template_folder"):  # 2026-10-12 までの書き方
+        warn("slides.template_folder", "プラグインは読まない。新しく作るテンプレートは [drive] factory の下の Themes に作る（前の版のスクリプトで動かさなくなったら消す）")
+    if sl.get("templates") and not old:
+        warn("slides.templates", "プラグインは読まない（[slides.themes.<名前>] の url を読む）。前の版のスクリプト（.agents/skills/）で動かさなくなったら消す")
+    (ok if temps.get(theme) else warn)("slides.themes の url", ", ".join(temps) if temps.get(theme) else f"既定のテーマ {theme} のテンプレートがない。template.py {theme} --from-base で作る")
+    if bad := [n for n in temps if not mine.get(n, {}).get("description") and n not in slides.THEME_NOTES]:
+        warn("slides.themes の説明", f"{', '.join(bad)} に description がない。エージェントが資料ごとにテーマを選べない（[slides.themes.<名前>] の description に、どの資料・聞き手に使うかを書く）")
+    if bad := [n for n, t in docs.get("themes", {}).items() if not t.get("description")]:
+        warn("docs.themes の説明", f"{', '.join(bad)} に description がない。エージェントが資料ごとにテーマを選べない")
+    if (d := docs.get("default_theme")) and d not in docs.get("themes", {}) and d != "standard":  # standard は組み込み（docs.py の STANDARD）
+        ng("docs.default_theme", f"{d} が [docs.themes] にない。theme を書かない doc.md が組めない")
+    for k in ("customers", "internal", "docs", "factory"):
+        if not dr.get(k):
+            warn(f"drive.{k}", "空。資料の置き場所が決まらない")
+    if local:
+        return out
+
+    os.chdir(root)  # gapi は今いるフォルダから factory.toml を探す
+    import gapi
+    try:
+        who = gapi.request("GET", f"{gapi.DRIVE}/about?fields=user(emailAddress)")["user"]["emailAddress"]
+        ok("Google の認証", who)
+    except gapi.ApiError as e:
+        how = "GOOGLE_OAUTH_ACCESS_TOKEN" if os.environ.get("GOOGLE_OAUTH_ACCESS_TOKEN") else str(gapi.credentials_path())  # gapi.token() と同じ順
+        first = str(e).splitlines()[0]
+        fix = "google.quota_project を書く（空だと gcloud の既定の OAuth クライアントのトークンは 403）" if first.startswith("403") and not g.get("quota_project") else f"作り直す: {gapi.LOGIN}"
+        ng("Google の認証", f"{how} で通らない: {first}。{fix}")
+        return out
+    targets = [(f"slides.themes.{k}.url", v) for k, v in temps.items()] + [(f"docs.templates.{k}", v) for k, v in cfg.get("docs", {}).get("templates", {}).items()]
+    targets += [(f"slides.themes.{k}.base", t["base"]) for k, t in mine.items() if t.get("base")]
+    targets += [(f"drive.{k}", v) for k, v in dr.items() if v] + ([("slides.base_template", sl["base_template"])] if sl.get("base_template") else [])
+    for name, url in targets:
+        fid = gapi.folder_id(url) if "/folders/" in url else gapi.file_id(url)
+        try:
+            f = gapi.request("GET", f"{gapi.DRIVE}/files/{fid}?supportsAllDrives=true&fields=name,trashed")
+            (warn if f.get("trashed") else ok)(name, f"{f['name']}{'（ゴミ箱にある）' if f.get('trashed') else ''}")
+        except gapi.ApiError as e:
+            ng(name, f"開けない（{str(e).split()[0]}）: {url}")
+    return out
+
+
+def main(args):
+    local = "--local" in args
+    rest = [a for a in args if a != "--local"]
+    rows = check(Path(rest[0] if rest else ".").expanduser().resolve(), local)
+    for kind, name, detail in rows:
+        print(f"{kind}\t{name}\t{detail}")
+    n = sum(k == "要修正" for k, _, _ in rows)
+    print(f"\n要修正 {n}・要確認 {sum(k == '要確認' for k, _, _ in rows)}" + ("（--local: Google の API は見ていない）" if local else ""))
+    return 1 if n else 0
+
+
+def selftest():
+    with tempfile.TemporaryDirectory() as tmp:
+        kinds = lambda: {n: k for k, n, _ in check(Path(tmp), local=True)}
+        assert kinds()["factory.toml"] == "要修正"
+        subprocess.run([sys.executable, str(SKILLS / "factory-init" / "scripts" / "init.py"), tmp], check=True, capture_output=True)
+        (Path(tmp) / ".agents" / "skills" / "deck-build").mkdir(parents=True)
+        (Path(tmp) / ".agents" / "skills" / "deck-build" / "SKILL.md").write_text("x")
+        k = kinds()
+        assert k["AGENTS.md"] == "OK" and k["スキルの重なり"] == "要確認" and k["slides.themes の url"] == "要確認" and k["drive.customers"] == "要確認"
+        toml = Path(tmp) / "factory.toml"
+        assert kinds()["brand.copyright"] == "要修正" and kinds()["brand.company"] == "要確認"
+        toml.write_text(toml.read_text().replace("[brand]", '[brand]\ncopyright = "© Acme 2026"', 1))
+        assert kinds()["brand.copyright"] == "要修正"
+        toml.write_text(toml.read_text().replace('"© Acme 2026"', '"© 2026 Example, Inc. All rights reserved."'))
+        assert kinds()["brand.copyright"] == "要修正"  # 仮の値をそのまま書いた
+        toml.write_text(toml.read_text().replace('"© 2026 Example, Inc. All rights reserved."', '"© 2026 Acme, Inc. All rights reserved."'))
+        assert "brand.copyright" not in kinds()
+        toml.write_text(toml.read_text() + '\n[slides.templates]\nvisual = "x"\n')
+        assert kinds()["slides.templates"] == "要修正"  # 古い書き方だけ
+        toml.write_text(toml.read_text().replace('[slides.templates]\nvisual = "x"\n', ""))
+        toml.write_text(toml.read_text() + '\n[docs]\ndefault_theme = "acme"\n\n[docs.themes.us]\npage = [215.9, 279.4]\n')
+        assert kinds()["docs.default_theme"] == "要修正" and kinds()["docs.themes の説明"] == "要確認"  # 既定のテーマがない、説明がない
+        toml.write_text(toml.read_text().replace('default_theme = "acme"', 'default_theme = "standard"'))
+        assert "docs.default_theme" not in kinds()  # 組み込みの standard
+        toml.write_text(toml.read_text().replace('default_theme = "standard"', 'default_theme = "us"').replace("[docs.themes.us]\n", '[docs.themes.us]\ndescription = "米国向け"\n'))
+        assert "docs.default_theme" not in kinds() and "docs.themes の説明" not in kinds()
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert main([tmp, "--local"]) == (0 if shutil.which("uv") else 1)
+    print("selftest ok")
+
+
+if __name__ == "__main__":
+    sys.exit(selftest() if sys.argv[1:] == ["--selftest"] else main(sys.argv[1:]))

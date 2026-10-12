@@ -1,0 +1,21 @@
+{
+  "name": "ai-deck-factory",
+  "private": true,
+  "license": "MIT",
+  "description": "日本語のスライド（Google Slides）とドキュメント（Google Docs）を API で組み、確かめ、会話の記録から決まりを直していく。",
+  "keywords": [
+    "pi-package"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mats16/ai-deck-factory.git"
+  },
+  "pi": {
+    "skills": [
+      "./skills"
+    ],
+    "extensions": [
+      "./extensions"
+    ]
+  }
+}

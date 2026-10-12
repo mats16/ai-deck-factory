@@ -1,0 +1,70 @@
+# AI Deck Factory の設定（factory-init がワークスペースの直下に置く。自分の値にして、factory-doctor で確かめる）
+#
+# ワークスペースは、資料のフォルダ（Customers/・Internal/・Research/）と、この factory.toml を置くフォルダ（例: ~/Documents）。
+# スクリプトは、今いるフォルダから上へたどって最初に見つかった factory.toml を読み、そのフォルダをワークスペースとして扱う。
+# 実行のたびに書く記録（lint の記録、dreaming の前回の時刻・報告・写し）は、ワークスペースの .factory/ に置かれる。
+#
+# - ここに書くもの: 人や組織で変わる値だけ（会社のテンプレートの書体と色、社名を含む）。見た目の決まり（色の役割・余白・版面）は slides.py と deck-practices/visual.md。
+# - 値の形: Google Slides と Drive のフォルダは URL のまま書く（スクリプトが ID を取り出す）。
+# - テーマ: [slides.themes.<名前>] に、テンプレートの url と、使い分けの description を書く（エージェントが slides.py themes で一覧を見て、資料ごとに選ぶ）。
+#   url は template.py <名前> --from-base が書き込む。
+
+[factory]
+# private = ["アクメ", "ロードランナー"]  # factory-kaizen が PR に入れたら止める語（顧客の日本語の名前、顧客の製品名など）。Customers/ の顧客と資料のフォルダの名前は書かなくても見る
+# source = "~/Projects/ai-deck-factory"  # プラグインのリポジトリの git の checkout（持ち主でなければ gh repo fork --clone で作った fork）。factory-kaizen が、ここに worktree を作って PR を出す。PR を出さない人は書かない（提案は報告に出るだけ）
+
+[user]
+profile = ""  # 使う人の名前・メール・会社・役割・担当の顧客を書いたファイル（markdown か text）。エージェントが要るときに読む
+
+[google]
+# トークンの取り方: 環境変数 GOOGLE_OAUTH_ACCESS_TOKEN、なければ認証情報の JSON
+# （GOOGLE_APPLICATION_CREDENTIALS、なければ gcloud の ADC。作るのは factory-doctor が出す gcloud auth application-default login のコマンド）
+quota_project = ""  # gcloud の既定の OAuth クライアントで取ったトークンは、これがないと Slides・Docs で 403。自分の OAuth クライアントなら空でよい
+
+[slides]
+default_theme = "visual"  # 説明で決まらないときのテーマ。テーマは資料ごとに選ぶ（slides.py themes が名前と説明を出す）
+
+[brand]  # 表紙の社名と著作権表示（ドキュメントのフッターも）、ドキュメントの表紙のロゴ。copyright は要る（factory-doctor が見る）
+# company = "アクメ・ジャパン株式会社"  # 表紙の左下。書かなければ置かない
+# copyright = "© 2026 Acme, Inc. All rights reserved."  # 全ページの左下。lint が 9pt を通すのは「© <年> <社名> All rights reserved.」の形だけ
+# logo = "acme/logo.png"  # ドキュメントの表紙のロゴ。ワークスペースの assets/ の中のパスか URL。書かなければ置かない
+
+# [slides.themes.acme]  # 会社のテンプレートから作るテーマ（deck-template）。base は元のテンプレート、font は書体、色は役割の名前（visual.md の 1）。template.py check acme で測る
+# description = "アクメの会社の色。顧客向けの提案と、社外の登壇"  # どの資料・聞き手に使うか。エージェントが資料ごとに選ぶときに読む（slides.py themes）
+# base = ""
+# font = "Noto Sans JP"
+# NAVY = "002B5C"
+
+[slides.themes.visual]  # 組み込みのテーマ（色は slides.py）。url・description・base だけを書ける
+base = ""  # template.py visual --from-base が元にする Google Slides（会社のテンプレート）
+# url = ""  # template.py visual --from-base が書き込む
+# description = ""  # 書かなければ組み込みの説明（slides.py themes で見る）
+
+# [docs]
+# default_theme = "acme"  # doc.md に theme: を書かないときのテーマ。書かなければ既定（A4）
+
+# [docs.themes.acme]  # 会社の文書のテンプレートに合わせたドキュメントのテーマ（doc-build の SKILL.md の 1.2）。doc.md の頭に theme: acme
+# description = "米国の本社に出す文書。Letter の版面"  # どの資料・聞き手に使うか（docs.py themes）
+# page = [215.9, 279.4]  # 用紙（mm）
+# margins = [12.7, 12.7]  # 上下・左右の余白（mm）
+# body = 10  # 本文（pt）
+# headings = [12, 11, 10.5]  # 見出し 1〜3（pt）
+# heading = "4A86E8"  # 見出しの色
+# table_head = ["F3F3F3", "303F47"]  # 表の見出しの行の地と文字の色
+
+[docs.templates]  # ドキュメントのテンプレート（Google Docs）。正本は rules/doc-build/templates/<名前>/doc.md。そのフォルダで docs.py new して URL を書く
+
+[sources]  # 材料を集める道具（deck-practices/materials.md）。値は MCP のサーバーかスキルの名前。使わない役割は書かない（資料や URL を貼ってもらう）
+# 道具ごとの使い方とその会社の探し場所は rules/deck-practices/materials.md に書く。factory-doctor が、書いた道具が使えるかを見る
+# search   = "glean"       # 社内の横断検索
+# chat     = "slack"       # 社内のチャット（Microsoft Teams なら、その MCP の名前）
+# meetings = ""            # 会議の記録（議事録・文字起こし）
+# wiki     = "confluence"  # 社内の wiki（Notion などでもよい）
+# crm      = "salesforce"  # 顧客の台帳
+# usage    = ""            # 顧客の利用額・利用状況
+
+[drive]
+factory = ""    # 個人の資料の根元（例: My Drive の AI Deck Factory）。template.py --from-base は、この下の Themes にテンプレートを作る（なければ作る）。gslides.py keep の差し替え用の複製は直下に作る
+customers = ""  # 顧客向けの資料の置き場所の根元（例: 共有ドライブ 10_Customers）
+internal = ""   # 顧客に紐づかないスライドの置き場所（例: AI Deck Factory/Slides）
+docs = ""       # 顧客に紐づかないドキュメントの置き場所（例: AI Deck Factory/Docs）

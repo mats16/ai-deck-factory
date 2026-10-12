@@ -1,0 +1,1 @@
+スキル dreaming（Claude Code は /ai-deck-factory:dreaming、pi は /skill:dreaming）を読み、その手順で、このワークスペースの指示とスキルの定期の整理（dreaming）をしてください。

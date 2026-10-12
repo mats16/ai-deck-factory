@@ -1,0 +1,68 @@
+# 開発しながら動作を見る
+
+プラグインを直す人のための手順。直すのは元のリポジトリの worktree でし、その worktree の下に検証用のワークスペース `sandbox/` を置いて、資料を作って確かめる。`sandbox/` はリポジトリの `.gitignore` で無視しているので commit に入らず、worktree を消せば一緒に消える。worktree ごとに分かれるので、いくつかのブランチを並べて試せる。2026-10-12 に Claude Code と pi 1.0.0 で確かめた。利用者の入れ方は [claude-code-plugin.md](claude-code-plugin.md)・[pi.md](pi.md)。
+
+元の checkout（`~/Projects/ai-deck-factory`）は `main` のままにしておく。ほかのワークスペースにこの checkout のパスで入れたプラグインはここを読むので、利用者と同じものが動く（GitHub や git の URL で入れたものは、checkout とは別の版を読む）。
+
+## 作る
+
+```sh
+cd <worktree>
+mkdir sandbox && cd sandbox
+cp ~/Documents/factory.toml .         # 本番のワークスペースから写す。なければ factory-init
+cp -R ~/Documents/rules ~/Documents/AGENTS.md ~/Documents/CLAUDE.md .   # 本番の決まりで試すときだけ
+```
+
+写した `factory.toml` は、Google の側で本番のものを書き換えないように替える。
+
+- `[drive]` は、検証用の Drive のフォルダにする（下の「消す」）。
+- テンプレートを試すときは、`[slides] template_folder` を検証用のフォルダにし、`[slides.templates]` は検証用に複製したテンプレートの URL にする（空でもよい）。`template.py <テーマ>` は `[slides.templates]` のテンプレートをその場で書き換える。
+- `sandbox/` で `git init` はしない（factory-init が聞いてくる）。入れ子のリポジトリになり、worktree の `git clean` で消えなくなる。
+- `factory-kaizen` だけは、この worktree を試さない。`kaizen.py start` は `[factory] source` の `origin/main` から別の worktree（`sandbox/.factory/kaizen/<名前>/repo`）を作る。
+
+## Claude Code
+
+`sandbox/` で、入れずに `--plugin-dir` で渡して開く。
+
+```sh
+claude --plugin-dir ..
+```
+
+- 起動したときの `plugins` の `path` が worktree を指し、`ai-deck-factory:` のスキルが 10 個読まれる。
+- `claude plugin marketplace add .. --scope project` で入れてはいけない。マーケットプレイスの名前（`ai-deck-factory`）は `~/.claude/plugins/known_marketplaces.json` に 1 つしか持てず、本番のワークスペースで足したものとぶつかる。外すと、ほかで足したものの記録も消える。
+- そこから起こす `claude -p` の子（dreaming の `run.sh claude` など）には、プラグインが入っていない。子まで確かめるときは pi で試す。
+
+## pi
+
+`sandbox/` で、worktree をパッケージとして入れる。
+
+```sh
+pi install -l ..
+```
+
+- `.pi/settings.json` に `../..`（`.pi/` からの相対のパス）で入り、worktree の 10 個のスキルと `extensions/rules.ts` が読まれる。`pi -p` の子（dreaming の `run.sh pi`、レビューを頼むとき）も同じものを読む（`sandbox/` で `pi -p` を起こし、deck-build の `SKILL.md` が worktree のパスで出ることと、`../skills/deck-practices/visual.md` を read すると `sandbox/rules/deck-practices/visual.md` が続けて差し込まれることを確かめた）。
+- trust は、`sandbox/` で対話の pi を開いて `/trust` で保存する（`pi -p` の子は聞けないので、先に済ませる）。親のフォルダの決定も子に効く。ホームを信頼してあれば、`--approve` なしの `pi -p`・`--mode rpc` でも読まれた。worktree を置くフォルダ（T3 Code なら `~/.t3/worktrees`）ごと信頼すると、聞かれなくなる代わりに、あとからそこに置くほかのリポジトリの拡張も黙って読まれる（[pi.md](pi.md) の「project trust」）。
+- 同じ名前のスキルがほかにあると、パッケージのものは負ける（[pi.md](pi.md) の「同じ名前のスキルがあるとき」）。`get_commands` の `sourceInfo.path` が worktree を指しているかを確かめる。
+
+## 本番のワークスペースで worktree の版を試す
+
+本番のワークスペースの決まりや資料のまま試すときは、そのワークスペースの直下で、起動オプションで worktree を渡す。入れてあるものは変えない。
+
+```sh
+cd ~/Documents
+claude --plugin-dir <worktree>
+pi -ns --skill <worktree>/skills -ne -e <worktree>/extensions/rules.ts
+```
+
+- Claude Code は、入れてあるものと重ねても、読まれるのは `--plugin-dir` の版だけ（二重にならない）。
+- pi は、`--skill` だけを足すと入れてあるパッケージのほうが勝つ。`-ns`（スキルを探さない）・`-ne`（拡張を探さない）を付けると、渡したものだけが読まれる。ほかのスキル（`~/.agents/skills` など）と拡張も止まる。
+- どちらも、子のプロセスには伝わらない。子は入れてある版（checkout のパスで入れたなら `~/Projects/ai-deck-factory`）を読む。
+
+## 消す
+
+worktree を消せば `sandbox/` も消える。worktree を残して作り直すときは `rm -rf sandbox`。worktree の中で `git clean -fdx` を回すと、`sandbox/` もほかの無視したファイル（`node_modules/` など）も消える。
+
+残るもの:
+
+- Google Drive に組んだスライドとドキュメント。`[drive]` に替えた検証用のフォルダごと消す。
+- Claude Code のメモリと会話の記録（`~/.claude/projects/<sandbox のパスの / . _ を - にしたもの>/`）と、pi の会話の記録（`~/.pi/agent/sessions/--<sandbox のパスの / を - にしたもの>--/`）。害はないが、たまに消す。
