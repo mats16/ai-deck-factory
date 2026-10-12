@@ -40,13 +40,14 @@ git --version
 
 ```sh
 cd <ワークスペース>
-claude plugin marketplace list | grep -A1 ai-deck-factory   # もうあれば、次の add は飛ばす（名前は 1 つしか持てない。足すと前のものとぶつかる）
+claude plugin marketplace list --json | python3 -c "import json,sys; [print(m) for m in json.load(sys.stdin) if m['name']=='ai-deck-factory']"   # もうあるか
 claude plugin marketplace add https://github.com/mats16/ai-deck-factory.git --scope project   # checkout なら URL の代わりにそのパス
 claude plugin install ai-deck-factory@ai-deck-factory --scope project
-claude plugin list --json | python3 -c "import json,sys; [print(p['readFromFolder']) for p in json.load(sys.stdin) if p['id']=='ai-deck-factory@ai-deck-factory' and p['enabled']]"
+claude plugin list --json | python3 -c "import json,sys; [print(p.get('readFromFolder') or p['installPath']) for p in json.load(sys.stdin) if p['id']=='ai-deck-factory@ai-deck-factory' and p['enabled']]"
 ```
 
-最後に出たパスが `<プラグイン>`。
+- 1 つめで `ai-deck-factory` が出たら、`add` は飛ばす（名前は 1 つしか持てない。足すと前のものとぶつかる）。出た入れ元（`path`・`url`・`repo`）が、ここで入れるもの（GitHub か、1 の 2 の checkout）と違うときは、そのことと、ほかのワークスペースもその入れ元を読んでいることを伝え、そのまま使うかをユーザーに聞く。入れ元を勝手に替えない。
+- 最後に出たパスが `<プラグイン>`。手元のパスから入れたなら checkout（`readFromFolder`）、GitHub から入れたなら写し（`installPath`）。
 
 **pi**
 
