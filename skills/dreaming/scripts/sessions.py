@@ -82,9 +82,12 @@ def shell_evidence(command):
     return reads, checks, piped
 
 
+PUNCT = "();<>|&`"  # コマンドの区切り
+
+
 def words(text):
     """コマンドの語。引用符の外の ; | & ( ) < > ` と空白で区切る（引用符の中はそのまま。hooks/rules_overlay.py と同じ）。"""
-    lex = shlex.shlex(text, posix=True, punctuation_chars="();<>|&`")
+    lex = shlex.shlex(text, posix=True, punctuation_chars=PUNCT)
     lex.whitespace_split, lex.commenters = True, ""  # # は語の中にも出る（deck#2）
     try:
         return list(lex)
@@ -95,16 +98,31 @@ def words(text):
 PATH_KEYS, COMMAND_KEYS = ("file_path", "path", "notebook_path"), ("command", "cmd")  # 資料のフォルダを見る引数（書く本文や prompt の文は見ない）
 
 
+def walk(toks):
+    """コマンドの語を、その語のときの cd の先（コマンドの始めからの相対パス）と組にする。区切りとオプションは外す。
+    サブシェルの中の cd は、閉じたら戻す（hooks/rules_overlay.py の memories と同じたどり方）。"""
+    base, outer = "", []
+    for i, tok in enumerate(toks):
+        if all(c in PUNCT for c in tok):  # 続いた区切りは 1 語になる（「);」など）
+            for c in tok:
+                if c == "(":
+                    outer.append(base)
+                elif c == ")" and outer:
+                    base = outer.pop()
+        elif not tok.startswith("-"):
+            yield base, tok
+            if i and toks[i - 1] == "cd":
+                base = os.path.join(base, os.path.expanduser(tok))
+
+
 def deck_words(kind, args):
-    """道具の引数のうち、資料のフォルダを指すかもしれない語。パスの引数は切らない（空白のあるフォルダ）。コマンドは語に区切る。"""
+    """道具の引数のうち、資料のフォルダを指すかもしれない語と、その語のときの cd の先。パスの引数は切らない（空白のあるフォルダ）。"""
     if isinstance(args, dict):
-        found = [args[k] for k in PATH_KEYS if isinstance(args.get(k), str)]
-        found += [w for k in COMMAND_KEYS if isinstance(args.get(k), str) for w in words(args[k])]
-    elif kind in ("exec", "functions.exec") and isinstance(args, str):  # Codex の code mode の JS（call_evidence と同じ名前）。コマンドは JS の引用符の中にあるので、もう一度区切る
-        found = [v.strip("\"'{}(),;") for w in words(args) for v in words(w)]
-    else:
-        found = []
-    return [w for w in found if w and w[0] not in "-;|&()<>`"]  # 資料のフォルダかは md() が、会話を始めたフォルダからたどって決める
+        return [("", args[k]) for k in PATH_KEYS if isinstance(args.get(k), str) and args[k]] + \
+            [x for k in COMMAND_KEYS if isinstance(args.get(k), str) for x in walk(words(args[k]))]
+    if kind in ("exec", "functions.exec") and isinstance(args, str):  # Codex の code mode の JS（call_evidence と同じ名前）。コマンドは JS の引用符の中にあるので、もう一度区切る
+        return list(walk([v.strip("\"'{}(),;") for w in words(args) for v in words(w) if v.strip("\"'{}(),;")]))
+    return []
 
 
 def deck_of(path, root):
@@ -237,8 +255,12 @@ class Session:
         state = "、確認の成功確認" if self.built else "、確認（gslides.py check・docs.py check・check.sh）への言及あり（成功未確認）" if self.check_mentioned else ""
         out = [f"## {self.kind} {self.sid[:8]} {self.start[:16]} {self.title} （{where}{state}）", f"- ファイル: {self.path}"]
         decks = Counter()
-        for call in [*self.decks, *([[self.cwd]] if self.cwd else [])]:  # 呼び出しごとに 1 回。資料のフォルダで始めた会話は、そのフォルダも数える
-            found = dict.fromkeys(deck_of(os.path.join(self.cwd or root, os.path.expanduser(w)), root) for w in call)  # 重ねず、出た順に
+        for call in [*self.decks, *([[("", self.cwd)]] if self.cwd else [])]:  # 呼び出しごとに 1 回。資料のフォルダで始めた会話は、そのフォルダも数える
+            found = {}  # 重ねず、出た順に
+            for base, w in call:
+                p = os.path.join(self.cwd or root, base, os.path.expanduser(w))
+                if "/" in w or os.path.exists(p):  # cat・sed のようなコマンドの名前を、始めたフォルダの資料に数えない
+                    found[deck_of(p, root)] = True
             decks.update(d for d in found if d and os.path.isdir(os.path.join(root, d)))  # ワークスペースにあるフォルダだけ（コマンドで書いた本文の中の語は資料でない）
         if decks:
             out.append("- 資料: " + ", ".join(f"{k} ×{v}" for k, v in decks.most_common()))
@@ -426,14 +448,15 @@ def selftest_decks():
             os.environ["HOME"] = home
         e = Session("claude", "deck2", "test")
         e.tool_input("Bash", {"command": "cd Customers/acme/d1; python3 build/pages.py|head"}, "a")
-        e.tool_input("Bash", {"command": "cd /tmp\nCustomers/acme/d1/x.md && echo $(ls Internal/m1)"}, "b")
+        e.tool_input("Bash", {"command": "ls /tmp\nCustomers/acme/d1/x.md && echo $(ls Internal/m1)"}, "b")
         e.tool_input("Read", {"file_path": root + "/Customers/Acme Inc./d 2/構成案.md"}, "c")
         e.tool_input("exec", 'text(await tools.exec_command({cmd:"cat Customers/acme/d1/references.md"}));', "d")
         e.tool_input("Write", {"file_path": "/tmp/notes.md", "content": "Internal/m1 は `x` → [it's](y)"}, "e")  # 書く本文は見ない
         e.tool_input("Bash", {"command": "cat > a.md <<'EOF'\nInternal/m2 → [it's](y) と Customers/acme/d9 のこと\nEOF"}, "f")  # コマンドで書く本文の語は、ないフォルダなら出さない
         assert "- 資料: Customers/acme/d1 ×3, Internal/m1 ×1, Customers/Acme Inc./d 2 ×1" in e.md(root), e.md(root)  # 区切り・改行・空白・. のある名前
         f = Session("codex", "deck3", "test")
-        f.tool_input("Bash", {"command": "cd Customers/acme/v1.2 && cat Customers/acme/deck#2/x.md Customers/acme/../acme/d1/y.md Customers/acme/../../etc/z"}, "a")
+        f.tool_input("Bash", {"command": "cd Customers/acme/v1.2"}, "a0")
+        f.tool_input("Bash", {"command": "cat Customers/acme/deck#2/x.md Customers/acme/../acme/d1/y.md Customers/acme/../../etc/z"}, "a")
         f.tool_input("functions.exec", 'tools.exec_command({cmd:"ls Internal/m1"})', "b")
         f.tool_input("Bash", {"command": "cat Customers/acme/memory.md"}, "c")
         g = Session("pi", "deck4", "test")
@@ -442,7 +465,17 @@ def selftest_decks():
         h = Session("codex", "deck5", "test")
         h.cwd = os.path.join(root, "Customers/acme/d1")
         h.tool_input("exec_command", {"cmd": "sed -n 1,80p 構成案.md"}, "a")
-        assert "- 資料: Customers/acme/d1 ×1" in g.md(root) and "- 資料: Customers/acme/d1 ×2" in h.md(root), (g.md(root), h.md(root))  # 顧客・資料のフォルダで始めた会話の相対パス
+        open(os.path.join(root, "Customers/acme/d1/構成案.md"), "w").close()
+        assert "- 資料: Customers/acme/d1 ×1" in g.md(root) and "- 資料: Customers/acme/d1 ×2" in h.md(root), (g.md(root), h.md(root))
+        k = Session("claude", "deck6", "test")
+        k.tool_input("Bash", {"command": "cd Customers/acme && cat d1/references.md"}, "a")  # cd のあとの相対パス
+        k.tool_input("Bash", {"command": "(cd Internal && ls); cat m1/x.md Customers/acme/v1.2/y.md"}, "b")  # サブシェルの cd は戻す
+        assert "- 資料: Customers/acme/d1 ×1, Customers/acme/v1.2 ×1\n" in k.md(root) + "\n", k.md(root)
+        m = Session("claude", "deck7", "test")
+        m.cwd = os.path.join(root, "Customers/acme/d1")
+        for i in range(3):
+            m.tool_input("Bash", {"command": "sed -n 1p ../v1.2/構成案.md"}, str(i))  # となりの資料だけを触る
+        assert "- 資料: Customers/acme/v1.2 ×3, Customers/acme/d1 ×1\n" in m.md(root) + "\n", m.md(root)  # 始めたフォルダは 1 回だけ  # 顧客・資料のフォルダで始めた会話の相対パス
         assert "- 資料: Customers/acme/v1.2 ×1, Customers/acme/deck#2 ×1, Customers/acme/d1 ×1, Internal/m1 ×1\n" in f.md(root) + "\n", f.md(root)  # . と # のある名前、.. を畳む、functions.exec、ファイルは外す
 
 
