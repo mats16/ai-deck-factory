@@ -61,7 +61,7 @@ AI Deck Factory（プラグイン）で、スライドとドキュメントを�
 
 - **受けたらすぐ決まりの台帳に書く。** `python3 <スキル deck-practices のフォルダ>/scripts/ledger.py add --deck <資料のフォルダ> --quote "<ユーザーの言葉（できるだけ原文）>" --fix "<直した箇所>" --to <戻し先> --check <lint・レビュー・なし>`。ユーザーがはっきり決めたこと（案から選んだ、言い切った）には `--decided` を付ける。台帳はこのワークスペースの `.factory/ledger.jsonl`（顧客のことが入るので、外に写さない）。会話はコンパクションで要約になり、指示が落ちることがある。
 - **直したら、その場で戻す。** 片付けまで待たない。決まりには ID と短い理由だけを書き、日付と原文は決まりの台帳に残す（`deck-practices/rules.md` の「修正の指示の戻し方」）。報告の最後に、どの指示をどの決まりに戻したかを書く。
-- **エージェントのメモリに書いて済ませない。** 資料づくりの決まりは、ここか `rules/` に書く。メモリはほかのエージェントから見えない。
+- **エージェントのメモリに書いて済ませない。** 資料づくりの決まりは、ここか `rules/` に、顧客ごとの好みは顧客の `memory.md` に書く。エージェントのメモリはほかのエージェントから見えない。
 
 ## 調べもの
 
@@ -90,6 +90,7 @@ AI Deck Factory（プラグイン）で、スライドとドキュメントを�
 
 ```
 Customers/<顧客>/<内容>_<YYYYMM か YYYYMMDD>/   … 顧客向けの資料。1 本につき 1 フォルダ（中の形と名前の付け方は deck-practices/SKILL.md の 1）
+Customers/<顧客>/memory.md                        … その顧客の好みと、資料をまたいで効く相手のこと（deck-practices/rules.md の「顧客の memory」）
 Internal/<内容>_<YYYYMM か YYYYMMDD>/           … 社内向けの資料（中の形は顧客向けと同じ）
 Research/<内容>_<YYYYMMDD>.md                    … 調べもの
 Research/deck_research/                           … deck-research の調べ直しの記録（state.md・log/）

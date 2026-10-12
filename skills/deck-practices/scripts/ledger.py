@@ -9,10 +9,12 @@ usage:
   ledger.py route <c-ID> <戻し先>                 指摘の戻し先を決める・変える
   ledger.py list [--deck <フォルダ>] [--open] [--to <戻し先>]   指摘の一覧（--open は戻し先が「未」のものだけ）
   ledger.py why <決まりの ID>                      その決まりの出典（指摘・日付・原文、再発か）と、資料・顧客の数、ユーザーが決めたか、レビューの結果
-  ledger.py rules                                  決まりごとの数（指摘・再発・資料・顧客・レビューの結果）
+  ledger.py rules                                  決まりごとの数（指摘・再発・資料・顧客・レビューの結果）と、週ごとの取りこぼし
+  ledger.py candidates                             決まりごとの次の一手（下ろす・書き直す・条件を足す・上げる・写しを消す・上書きを見直す）と、その決まりへの前の提案
   ledger.py next <接頭辞>                          次の決まりの ID（ワークスペースの決まりは ws-visual のように ws- を付ける）
-  ledger.py propose --file <ワークスペースのファイル> --new <新しい文> [--old <今の文>] [--rule <ID>] --why <要点> [--src c-1,c-2] [--kind <種類>] [--plugin]
+  ledger.py propose --file <ワークスペースのファイル> --new <新しい文> [--old <今の文>] [--rule <ID>] --why <要点> [--src c-1,c-2] [--kind <種類>] [--plugin] [--replaces ws-x-001,…]
                                                    --plugin は変更先がプラグイン（--file は skills/ からのパス）。当てず、factory-kaizen で PR にする
+                                                   --replaces は、その PR が届いたら要らなくなるワークスペースの決まり（上書きなど。出典の指摘の決まりは書かなくてよい）
   ledger.py pending [--status 却下|適用済み|戻した|取り下げ|PR にした|all]   提案と差分（既定は未適用。却下は理由も）
   ledger.py apply <P-ID ...|all>                   提案を当てる（今の文がそのまま 1 か所にあるときだけ。プラグインへの提案は当てない）
   ledger.py sent <P-ID> --pr <URL> [--rule <ID>]   プラグインへの提案を PR にした（出典の指摘をその決まりにつなぐ。--rule は PR で提案と違う ID にしたとき）
@@ -42,6 +44,9 @@ RULE_ID = re.compile(rf"\[({ID})\]")
 KEY = re.compile(rf"{ID}|lint:.+")  # レビューの表の「決まり」の列に書くもの（lint の規則は名前で lint:<名前>）
 RESULTS = ("直した", "残した（誤り）", "残した", "聞く")
 NO_RULE = ("未", "戻さない")  # 決まりにつないでいない戻し先
+TWICE = 2  # 2 本以上の資料・2 社以上の顧客に出たら、たまたまでないとみなす（dreaming の 4c・4i・5）
+OVERRIDE = re.compile(rf"\[(ws-[\w-]+?-\d{{3}})\][^\n\[]*?[（(]([^（）()\n]*?)\s*より優先")  # [ws-visual-003] …（visual-012 より優先）。括弧の中の ID を全部取る
+PLUGIN_ID = re.compile(r"(?<![\w-])(?!ws-)[a-z][\w-]*?-\d{3}")
 
 
 def workspace():
@@ -86,10 +91,28 @@ def when(c):
     return c.get("at") or c.get("date") or c["ts"]
 
 
+def by(c):
+    """誰が書いたか。作る会話（session）、あとで会話の記録から拾った dreaming（--at）、前の形からの取り込み（import）。
+    by のない前の記録は、日付だけ（本文から移した出典）なら取り込み、--at があれば dreaming。前の --once の取り込みは見分けられず、作る会話に入る。"""
+    if "by" in c:
+        return c["by"]
+    if "at" in c:
+        return "dreaming"
+    return "import" if "date" in c else "session"
+
+
 def introduces(p):
     """提案が決まりの ID を新しく書き入れるか。今ある決まりを書き直す提案は、決まりを作らない。"""
     tag = f"[{p['rule']}]"
     return bool(p["rule"]) and tag in p["new"] and tag not in p["old"]
+
+
+def ws_rules_arg(s):
+    """--replaces はワークスペースの決まりの ID を , でつないだもの。"""
+    ids = [x for x in s.split(",") if x]
+    if not ids or not all(re.fullmatch(ID, x) and x.startswith("ws-") for x in ids):
+        raise argparse.ArgumentTypeError(f"ワークスペースの決まりの ID を , でつなぐ（ws-visual-003,ws-agents-001 など）: {s}")
+    return ids
 
 
 def rule_arg(s):
@@ -123,7 +146,7 @@ def state(ws):
             cs[r["ref"]]["to"] = r["to"]
             link(cs[r["ref"]], r["to"])
         elif k == "proposal":
-            ps[r["id"]] = {**r, "status": "未適用"}
+            ps[r["id"]] = {**r, "status": "未適用", "proposed": r["rule"]}  # proposed は提案の文に書いた ID（PR で替えたら rule が替わる）
         elif k in ("applied", "rejected", "withdrawn", "undone", "sent") and r["ref"] in ps:
             p = ps[r["ref"]]
             intro = introduces(p)  # PR で別の ID にしたときも、もとの提案の文で見る
@@ -170,7 +193,8 @@ def add(ws, a):
         print(same["id"])
         return
     rec = write(ws, {"kind": "correction", "deck": deck, "quote": a.quote, "fix": a.fix or "", "to": a.to, "check": a.check,
-                     "session": a.session or "", "decided": a.decided, **({"at": utc(a.at)} if a.at else {})}, ("correction", "c-", 4))
+                     "session": a.session or "", "decided": a.decided, "by": "import" if a.once else "dreaming" if a.at else "session",
+                     **({"at": utc(a.at)} if a.at else {})}, ("correction", "c-", 4))
     print(rec["id"])
 
 
@@ -203,7 +227,7 @@ def why(ws, rid):
     return cs
 
 
-def summary(ws):
+def tally(ws):
     """決まりごとの数。再発と「直した」が続くなら、文の決まりでは止まっていない。「残した（誤り）」が多いなら、決まりの書き方が外れている。"""
     cs, _, _, rv = state(ws)
     rows = {}
@@ -220,24 +244,92 @@ def summary(ws):
         x = row(r["rule"])
         x[r["result"]].append(r)
         x["decks"].add(r["deck"])
+    signals = ("再発", *RESULTS)
+    return {k: {**x, "顧客": len(customers(x["decks"])), "資料ごと": {f: len({r["deck"] for r in x[f]} - {""}) for f in signals}} for k, x in rows.items()}
+
+
+def summary(ws):
+    rows = tally(ws)
     out = sorted(rows.items(), key=lambda kv: (-len(kv[1]["再発"]) - len(kv[1]["直した"]), -len(kv[1]["残した（誤り）"]), kv[0]))
     print("再発とレビューの結果は「件数（出た資料の数）」。資料・顧客は、指摘かレビューの出た資料の数")
     print("決まり\t指摘\t再発\t資料\t顧客\t" + "\t".join(RESULTS) + "\tユーザーが決めた")
-    counts = {}
     for k, x in out:
-        print("\t".join(map(str, [k, len(x["指摘"]), count(x["再発"]), len(x["decks"] - {""}), len(customers(x["decks"])),
+        print("\t".join(map(str, [k, len(x["指摘"]), count(x["再発"]), len(x["decks"] - {""}), x["顧客"],
                                    *(count(x[r]) for r in RESULTS), "あり" if x["決めた"] else ""])))
-        signals = ("再発", *RESULTS)
-        counts[k] = {**x, "指摘": len(x["指摘"]), **{f: len(x[f]) for f in signals}, "資料ごと": {f: len({r["deck"] for r in x[f]}) for f in signals}}
-    return counts
+    weekly(ws)
+    return {k: {**x, "指摘": len(x["指摘"]), **{f: len(x[f]) for f in ("再発", *RESULTS)}} for k, x in rows.items()}
+
+
+def weekly(ws, weeks=8):
+    """週ごとに、誰が指摘を書いたか。dreaming が拾った分が取りこぼし（作る会話が台帳に書かなかった）。コンパクションの前に拾う hook を入れるかの材料。"""
+    n = {}
+    for c in state(ws)[0].values():
+        y, w, _ = datetime.fromisoformat(when(c)[:10]).isocalendar()
+        n.setdefault(f"{y}-W{w:02d}", Counter())[by(c)] += 1
+    if n:
+        print("\n週\t作る会話\tdreaming（取りこぼし）\t取り込み\t取りこぼしの割合")
+    for k in sorted(n)[-weeks:]:
+        x = n[k]
+        print(f"{k}\t{x['session']}\t{x['dreaming']}\t{x['import']}\t{x['dreaming'] / max(1, x['session'] + x['dreaming']):.0%}")
+    return n
+
+
+def texts(roots, skip=()):
+    files = [f for r in roots if r.exists() for f in ([r] if r.is_file() else r.rglob("*"))
+             if f.suffix in (".md", ".py") and f.is_file() and f.resolve() not in skip]
+    return [f.read_text(encoding="utf-8", errors="ignore") for f in files]
+
+
+def candidates(ws, plugin=PLUGIN):
+    """決まりごとの次の一手。境目はここで決め、dreaming は趣旨（その人の好みか、顧客の事情か）と提案の文だけを考える。"""
+    _, ps, _, _ = state(ws)
+    plug = "\n".join(texts([plugin], {Path(__file__).resolve()}))
+    mine = "\n".join(texts([ws / "AGENTS.md", ws / "rules", *(ws / "Customers").glob("*/memory.md")]))  # ワークスペースの決まりと顧客の memory
+    sent = [p for p in ps.values() if p["status"] == "PR にした"]
+    promoted = {t: p for p in sent for t in [*p.get("prev", {}).values(), *p.get("replaces", [])] if t.startswith("ws-")}  # PR が届いたら要らなくなるワークスペースの決まり（出典の指摘の前の戻し先と --replaces）→ その提案
+    out = []
+    for k, x in tally(ws).items():
+        if not k.startswith("lint:") and f"[{k}]" not in (mine if k.startswith("ws-") else plug):
+            continue  # 消した・移した決まり（写しを消したあとも、レビューの結果はもとの ID に残る）
+        d, layer = x["資料ごと"], "ワークスペース" if k.startswith("ws-") else "lint" if k.startswith("lint:") else "プラグイン"
+        if max(d["再発"], d["直した"]) >= TWICE:
+            out.append(("下ろす", k, f"{layer}。再発 {d['再発']} 本・直した {d['直した']} 本の資料（文の決まりでは止まっていない。点検か作る手順に）"))
+        if d["残した（誤り）"] >= TWICE:
+            out.append(("書き直す", k, f"{layer}。残した（誤り）{d['残した（誤り）']} 本の資料（拾う範囲が外れている。消す・緩めるは判断待ち）"))
+        if d["聞く"] >= TWICE:
+            out.append(("条件を足す", k, f"{layer}。聞く {d['聞く']} 本の資料（決まりからは決めきれない）"))
+        if k.startswith("ws-") and not k.startswith("ws-memory-") and x["顧客"] >= TWICE and k not in promoted:  # PR にしたものは出し直さない
+            out.append(("上げる", k, f"顧客 {x['顧客']} 社・資料 {len(x['decks'] - {''})} 本（その人の好みや顧客の事情でなければ、プラグインに）"))
+    gone = {t: p for t, p in promoted.items() if f"[{t}]" in mine and landed(p, plugin)}  # PR が入っているプラグインに届いたら、ワークスペースの写しは要らない
+    for w, p in sorted(gone.items()):
+        out.append(("写しを消す", w, f"{p['rule']} がプラグインに入った（{p['id']}、{p.get('pr', '')}）"))
+    for w, base in ((w, b) for w, clause in OVERRIDE.findall(mine) for b in PLUGIN_ID.findall(clause) if w not in gone):
+        if f"[{base}]" in plug:
+            out.append(("上書きを見直す", base, f"{w} が上書きしている（プラグインの決まりが合っていない合図。その人の好みなら、そのまま）"))
+        else:
+            out.append(("古い上書き", w, f"上書きしている {base} がプラグインにない（入れ直して消えたか、ID が変わった）"))
+    last = {p["rule"]: p for p in sorted(ps.values(), key=lambda p: p["id"])}  # 決まりごとに、いちばん新しい提案
+    print("次の一手\t決まり\t根拠\t前の提案")
+    for act, k, why in out:
+        p = last.get(k) or promoted.get(k)
+        before = f"{p['id']} {p['status']}{'（' + p['reason'] + '）' if p.get('reason') else ''}" if p else "-"
+        print(f"{act}\t{k}\t{why}\t{before}")
+    return out
+
+
+def landed(p, plugin):
+    """プラグインへの提案の文（PR で ID を替えたなら、替えた ID にした文）が、入っているプラグインの行き先のファイルにあるか。
+    ID だけでは見ない（今ある決まりを書き直す提案は、ID が前からある）。PR で文を変えたら届いたとは分からないので、写しを消す案を出さない（重なりは dreaming の 4e で見る）。"""
+    tag = f"[{p['proposed']}]"
+    want = [x.replace(tag, f"[{p['rule']}]").strip() for x in p["new"].splitlines() if p["proposed"] and tag in x]
+    f = plugin / p["file"]
+    return bool(want) and f.is_file() and all(x in f.read_text(encoding="utf-8") for x in want)
 
 
 def next_id(ws, prefix):
-    roots = [PLUGIN, ws / "rules", ws / "AGENTS.md", ws / "Customers"]
-    files = [f for r in roots if r.exists() for f in ([r] if r.is_file() else r.rglob("*"))
-             if f.suffix in (".md", ".py") and f.is_file() and f.resolve() != Path(__file__).resolve()]  # このファイルの selftest の ID は数えない
+    found = texts([PLUGIN, ws / "rules", ws / "AGENTS.md", ws / "Customers"], {Path(__file__).resolve()})  # このファイルの selftest の ID は数えない
     num = re.compile(rf"{re.escape(prefix)}-(\d{{3}})")
-    ids = [m.group(1) for f in files for m in RULE_ID.finditer(f.read_text(encoding="utf-8", errors="ignore"))]
+    ids = [m.group(1) for t in found for m in RULE_ID.finditer(t)]
     ids += [r.get("rule", "") for r in records(ws) if r["kind"] in ("proposal", "sent")]  # 提案だけで、まだ当てていない ID と、PR で替えた ID も使ったものにする
     used = [int(m.group(1)) for x in ids if (m := num.fullmatch(x))]
     return f"{prefix}-{max(used, default=0) + 1:03d}"
@@ -251,12 +343,14 @@ def target(ws, f):
 
 
 def propose(ws, a):
+    a.replaces and not a.plugin and sys.exit("--replaces はプラグインへの提案（--plugin）だけ")
     if a.plugin:  # 当てないので、skills/ の中を指していることだけ見る
         (PLUGIN / a.file).resolve().is_relative_to(PLUGIN) or sys.exit(f"--plugin の --file は skills/ からのパス（deck-practices/visual.md など）: {a.file}")
     else:
         target(ws, a.file)
     rec = write(ws, {"kind": "proposal", "file": a.file, "old": a.old or "", "new": a.new, "rule": a.rule or "", "why": a.why,
-                     "src": [x for x in (a.src or "").split(",") if x], "type": a.kind or "", **({"plugin": True} if a.plugin else {})}, ("proposal", "P", 4))
+                     "src": [x for x in (a.src or "").split(",") if x], "type": a.kind or "", **({"plugin": True} if a.plugin else {}),
+                     **({"replaces": a.replaces} if a.replaces else {})}, ("proposal", "P", 4))
     print(rec["id"])
 
 
@@ -402,10 +496,11 @@ def main(argv):
     s = sub.add_parser("list"); s.add_argument("--deck"); s.add_argument("--open", action="store_true"); s.add_argument("--to")
     s = sub.add_parser("why"); s.add_argument("id")
     sub.add_parser("rules")
+    sub.add_parser("candidates")
     s = sub.add_parser("next"); s.add_argument("prefix")
     s = sub.add_parser("propose")
     s.add_argument("--file", required=True); s.add_argument("--new", required=True); s.add_argument("--old"); s.add_argument("--rule", type=rule_arg)
-    s.add_argument("--why", required=True); s.add_argument("--src"); s.add_argument("--kind"); s.add_argument("--plugin", action="store_true")
+    s.add_argument("--why", required=True); s.add_argument("--src"); s.add_argument("--kind"); s.add_argument("--plugin", action="store_true"); s.add_argument("--replaces", type=ws_rules_arg)
     s = sub.add_parser("pending"); s.add_argument("--status", default="未適用")
     s = sub.add_parser("apply"); s.add_argument("ids", nargs="+")
     s = sub.add_parser("reject"); s.add_argument("id"); s.add_argument("--reason", required=True)
@@ -433,6 +528,8 @@ def main(argv):
         why(ws, a.id)
     elif a.cmd == "rules":
         summary(ws)
+    elif a.cmd == "candidates":
+        candidates(ws)
     elif a.cmd == "next":
         print(next_id(ws, a.prefix))
     elif a.cmd == "propose":
@@ -668,7 +765,7 @@ def selftest():
             # ファイルにつないだ指摘は再発に数えない（1 つのファイルに別々の決まりが入る）
             with quiet():
                 for q in ("敬称は様", "ロゴは右上"):
-                    main(["add", "--deck", ".", "--quote", q, "--to", "Customers/acme/CLAUDE.md"])
+                    main(["add", "--deck", ".", "--quote", q, "--to", "Customers/acme/memory.md"])
                 main(["add", "--deck", ".", "--quote", "プラグインのファイルへ", "--to", "deck-practices/content.md"])
             cs = state(ws)[0]
             assert not any(cs[cid(q)].get("recur") for q in ("敬称は様", "ロゴは右上", "プラグインのファイルへ"))
@@ -732,7 +829,104 @@ def selftest():
                 pass
         finally:
             os.chdir(cwd)
+    selftest_candidates(quiet)
     print("selftest ok")
+
+
+def selftest_candidates(quiet):
+    import contextlib, io, os
+    with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as plug:
+        ws, plug = Path(d).resolve(), Path(plug)
+        (ws / "factory.toml").write_text("")
+        (ws / "rules" / "deck-practices").mkdir(parents=True)
+        (ws / "rules" / "deck-practices" / "visual.md").write_text(
+            "- [ws-visual-001] 表は分ける。\n- [ws-visual-002] 本文は 18pt（visual-012 より優先。読みやすさ）。\n- [ws-visual-003] 見出しは左（visual-777 より優先）。\n"
+            "- [ws-visual-004] 表は分ける。[ws-visual-005] 線は細く（visual-013 と visual-012より優先）。deck-practices-001 と同じ\n")
+        (plug / "deck-practices").mkdir()
+        (plug / "deck-practices" / "visual.md").write_text("- [visual-012] 本文は 16pt。\n- [visual-013] 線は 1pt。\n")
+        for x in ("a/d1", "a/d3", "b/d2"):
+            (ws / "Customers" / x).mkdir(parents=True)
+        cwd = os.getcwd()
+        os.chdir(ws)
+        try:
+            with quiet():
+                main(["add", "--deck", "Customers/a/d1", "--quote", "表を分けて", "--to", "ws-visual-001"])  # 作る会話
+                main(["add", "--deck", "Customers/b/d2", "--quote", "また表", "--to", "ws-visual-001", "--at", "2999-01-01T00:00"])  # dreaming
+                main(["add", "--deck", "Customers/a/d3", "--quote", "また表", "--to", "ws-visual-001", "--at", "2999-01-02T00:00"])
+                main(["add", "--deck", "Customers/a/d1", "--quote", "古い行", "--once"])  # 取り込み
+                for deck in ("Customers/a/d1", "Customers/b/d2"):
+                    main(["add", "--deck", deck, "--quote", "敬称は様", "--to", "ws-memory-001"])
+                n = weekly(ws)
+            assert sum(x["session"] for x in n.values()) == 3 and sum(x["dreaming"] for x in n.values()) == 2 and sum(x["import"] for x in n.values()) == 1
+            assert [by(c) for c in ({"date": "2026-10-07"}, {"at": "x"}, {"ts": "x"})] == ["import", "dreaming", "session"]  # by のない前の記録
+            with quiet():
+                out = candidates(ws, plug)
+            acts = {(a, k) for a, k, _ in out}
+            assert {("下ろす", "ws-visual-001"), ("上げる", "ws-visual-001"), ("上書きを見直す", "visual-012"), ("古い上書き", "ws-visual-003")} <= acts
+            over = [(k, w) for a, k, w in out if a == "上書きを見直す"]
+            assert sorted(k for k, _ in over) == ["visual-012", "visual-012", "visual-013"] and all("ws-visual-004" not in w for _, w in over)  # 1 行に 2 つの決まり、2 つの ID、空白なし
+            assert not any(k == "ws-memory-001" for _, k in acts)  # 顧客の memory は、ほかの顧客に上げない（趣旨が同じなら dreaming が rules/ に寄せる）
+            # 上げた決まりがプラグインに届くまでは、写しを残す
+            with quiet():
+                main(["propose", "--plugin", "--file", "deck-practices/visual.md", "--new", "- [visual-099] 表は分ける。", "--rule", "visual-099", "--why", "上げる", "--src", "c-0001,c-0002"])
+                main(["sent", "P0001", "--pr", "https://github.com/o/r/pull/1"])
+                assert not any(a == "写しを消す" for a, _, _ in candidates(ws, plug))
+            (plug / "deck-practices" / "visual.md").write_text("- [visual-012] 本文は 16pt。\n- [visual-013] 線は 1pt。\n- [visual-099] 表は分ける。\n")
+            with quiet():
+                assert ("写しを消す", "ws-visual-001") in {(a, k) for a, k, _ in candidates(ws, plug)}
+            (ws / "rules" / "deck-practices" / "visual.md").write_text("- [ws-visual-002] 本文は 18pt（visual-012 より優先）。\n")
+            with quiet():
+                assert not any(a == "写しを消す" for a, _, _ in candidates(ws, plug))  # 消したら出ない
+            # 今ある決まりを書き直す提案は、ID が前からあるので、文が届くまで写しを残す。PR で ID を替えたら、替えた ID の文で見る
+            (ws / "rules" / "deck-practices" / "visual.md").write_text("- [ws-visual-002] 本文は 18pt。\n- [ws-visual-006] 線は 2pt。\n")
+            with quiet():
+                main(["add", "--deck", "Customers/a/d1", "--quote", "18pt に", "--to", "ws-visual-002"])
+                main(["add", "--deck", "Customers/a/d1", "--quote", "線を太く", "--to", "ws-visual-006"])
+                c18, c2 = (next(c["id"] for c in state(ws)[0].values() if c["quote"] == q) for q in ("18pt に", "線を太く"))
+                main(["propose", "--plugin", "--file", "deck-practices/visual.md", "--old", "- [visual-012] 本文は 16pt。", "--new", "- [visual-012] 本文は 18pt。", "--rule", "visual-012", "--why", "書き直す", "--src", c18])
+                main(["propose", "--plugin", "--file", "deck-practices/visual.md", "--new", "- [visual-098] 線は 2pt。", "--rule", "visual-098", "--why", "ID を替える", "--src", c2])
+                pids = [p["id"] for p in state(ws)[1].values() if p["why"] in ("書き直す", "ID を替える")]
+                main(["sent", pids[0], "--pr", "u"])
+                main(["sent", pids[1], "--pr", "u", "--rule", "visual-100"])
+                assert not any(a == "写しを消す" for a, _, _ in candidates(ws, plug))  # まだ 16pt で、visual-100 もない
+            (plug / "deck-practices" / "visual.md").write_text("- [visual-012] 本文は 18pt。\n- [visual-013] 線は 1pt。\n- [visual-099] 表は分ける。\n- [visual-100] 線は 2pt。\n")
+            with quiet():
+                assert {k for a, k, _ in candidates(ws, plug) if a == "写しを消す"} == {"ws-visual-002", "ws-visual-006"}
+            # PR にした出典の決まりは「上げる」を出し直さない。消した決まりは、レビューの結果が残っても出さない
+            (ws / "rules" / "deck-practices" / "visual.md").write_text("- [ws-visual-007] 図は左から。\n- [ws-visual-008] 扉は使わない（visual-012 より優先）。\n")
+            t = ws / "review.md"
+            t.write_text("p1 | 画像 | 5 | 直す | 図 | 直す | 直した | ws-visual-007\n")
+            with quiet():
+                for deck in ("Customers/a/d1", "Customers/b/d2"):
+                    review(ws, deck, t)
+                main(["add", "--deck", "Customers/a/d1", "--quote", "図は左から", "--to", "ws-visual-007"])
+                assert ("上げる", "ws-visual-007") in {(a, k) for a, k, _ in candidates(ws, plug)}
+                cz = next(c["id"] for c in state(ws)[0].values() if c["quote"] == "図は左から")
+                main(["propose", "--plugin", "--file", "deck-practices/visual.md", "--new", "- [visual-101] 図は左から。", "--rule", "visual-101", "--why", "図", "--src", cz])
+                main(["sent", next(p["id"] for p in state(ws)[1].values() if p["why"] == "図"), "--pr", "u"])
+                out = candidates(ws, plug)
+            assert ("上げる", "ws-visual-007") not in {(a, k) for a, k, _ in out} and ("下ろす", "ws-visual-007") in {(a, k) for a, k, _ in out}
+            (ws / "rules" / "deck-practices" / "visual.md").write_text("- [ws-visual-008] 扉は使わない（visual-012 より優先）。\n")
+            with quiet():
+                assert not any(k == "ws-visual-007" for _, k, _ in candidates(ws, plug))  # 写しを消したあとは出さない
+            # 上書きしている先を直す PR が届いたら、上書きの写しを消す
+            with quiet():
+                main(["propose", "--plugin", "--file", "deck-practices/visual.md", "--old", "- [visual-012] 本文は 18pt。", "--new", "- [visual-012] 扉は使わない。", "--rule", "visual-012", "--why", "扉", "--replaces", "ws-visual-008"])
+                main(["sent", next(p["id"] for p in state(ws)[1].values() if p["why"] == "扉"), "--pr", "u"])
+                assert ("上書きを見直す", "visual-012") in {(a, k) for a, k, _ in candidates(ws, plug)}  # まだ届いていない（前に届いた visual-012 の別の PR では消さない）
+            (plug / "deck-practices" / "visual.md").write_text("- [visual-012] 扉は使わない。\n- [visual-013] 線は 1pt。\n")
+            with quiet():
+                acts = {(a, k) for a, k, _ in candidates(ws, plug)}
+            assert ("写しを消す", "ws-visual-008") in acts and ("上書きを見直す", "visual-012") not in acts
+            for argv in (["propose", "--file", "rules/x.md", "--new", "x", "--why", "y", "--replaces", "ws-x-001"], ["propose", "--plugin", "--file", "deck-practices/visual.md", "--new", "x", "--why", "y", "--replaces", "visual-012"]):
+                try:
+                    with quiet(), contextlib.redirect_stderr(io.StringIO()):
+                        main(argv)
+                    raise AssertionError(f"通した: {argv}")
+                except SystemExit:
+                    pass
+        finally:
+            os.chdir(cwd)
 
 
 if __name__ == "__main__":
