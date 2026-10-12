@@ -7,7 +7,7 @@
 プラグインのスキルのファイルと同じパスに置く（例: `rules/deck-practices/visual.md` は `deck-practices/visual.md` への足しと上書き）。プラグインのファイルを開くと、hook がこちらを続けて出す。
 
 - 各ファイルの冒頭に、どのファイルへの足しかを書く。上書きするときは「プラグインの〇〇の節より優先」と書く。
-- 修正の指示を戻したら、日付とユーザーの言葉（原文）を添える。
+- 決まりは 1 項目ごとに ID を付ける（`- [ws-visual-<番号>] 〜のときは〜する（<短い理由>）。`。ID は `ledger.py next ws-visual`）。日付とユーザーの言葉（原文）は本文に書かず、決まりの台帳（`.factory/ledger.jsonl`）に ID でつなぐ（`deck-practices/rules.md` の「修正の指示の戻し方」）。
 
 ## 点検: `rules/deck-build/checks.py`
 

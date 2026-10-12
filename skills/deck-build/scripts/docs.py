@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Google Docs を Docs API で直接組み、確かめる（2026-10-09 に docx から切り替えた。組み方と落とし穴は ../../doc-build/SKILL.md）。
 資料ごとの build/doc.md（markdown）が中身の正本。頭の front matter に名前・テーマ・テンプレートを書き、本文は markdown で書く（書き方は from_md）。
-2026-10-10、ユーザーが「markdown で内容を詰め、テンプレートとともに API で組み、直しを繰り返す」を選んだ（doc.py の make(d) から移した）。
+markdown で内容を詰め、テンプレートとともに API で組み、直しを繰り返す（doc.py の make(d) から移した）。
 usage（資料の build/ で。doc.md は今いるフォルダのもの）:
   docs.py themes   テーマ（既定と factory.toml の [docs.themes]）の名前と説明。資料ごとに選ぶ（doc-build の SKILL.md の 1.2）
   docs.py init <テンプレートの名前>   テンプレート（ワークスペースの rules/doc-build/templates/<名前>/doc.md）を写して doc.md を作る
@@ -171,7 +171,7 @@ class Doc:
 
     def table(self, rows, caption=None, widths=None):
         """表。rows の 1 行目は見出しの行（濃紺の地に白の太字。ページをまたぐと次のページにも出す）。caption は表の上に「表 N　…」で置く。
-        widths は列の幅の比（mm で書いてよい）。表は本文の左端から右端まで広げる（2026-10-10、ユーザー「表は、左端から右端まであるべきです。なお、余白は必要です」）ので、
+        [docs_py-002] widths は列の幅の比（mm で書いてよい）。表は本文の左端から右端まで広げるので、
         合計を本文の幅 TEXT_MM に合わせて伸び縮みさせる。省くと均等。セルの中も **太字**・[リンク](URL) が書ける。"""
         n = max(map(len, rows))
         self.keep_lead()
