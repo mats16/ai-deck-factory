@@ -47,7 +47,7 @@ description: このフォルダの指示（AGENTS.md）とスキルを、会話�
 1. **材料を集める。**
    - `python3 $D/scripts/sessions.py --since <前回の時刻> > /tmp/dreaming_sessions.md`
    - 決まりの台帳: `L=$D/../deck-practices/scripts/ledger.py`。戻し先が未の指摘 `python3 $L list --open`、前回から後の指摘 `python3 $L list`（日付で見る）、未適用の提案 `python3 $L pending`、却下 `python3 $L pending --status 却下`、手で直された決まり `python3 $L drift`
-   - 前からあるワークスペースの、構成案・社内メモに書いた修正の指示: `grep -rn "戻し先: 未" --include='構成案*.md' --include='社内メモ_*.md' $R/Customers $R/Internal`。見つけたら `python3 $L add --deck <資料のフォルダ> --quote <行の原文>` で決まりの台帳に移す（構成案の行は消さない。同じ資料・同じ言葉の指摘がもう台帳にあれば、`add` は足し直さずに前の c-ID を返すので、次の回で同じ行を見つけても数は増えない）
+   - 前からあるワークスペースの、構成案・社内メモに書いた修正の指示: `grep -rn "戻し先: 未" --include='構成案*.md' --include='社内メモ_*.md' $R/Customers $R/Internal`。見つけたら `python3 $L add --deck <資料のフォルダ> --quote <行の原文> --once` で決まりの台帳に移す（構成案の行は消さない。`--once` は、同じ資料・同じ言葉の取り込みがもう台帳にあれば足し直さずに前の c-ID を返すので、次の回で同じ行を見つけても数は増えない。会話から拾った指摘には `--once` を付けない。くり返しの数になる）
    - 前回から後に変わった台帳: `find $R/Customers $R/Internal -name references.md -newer $S/last_run`（初回は全部）
    - Claude Code のメモリの `MEMORY.md` と、各ファイル（`~/.claude/projects/<$R の / . _ を - にしたもの>/memory/`。`scripts/run.sh` の `MEM` と同じ）
    新しい会話も戻し先が未の指摘もなく、`references.md` も変わっていなければ、6 の確かめだけして `last_run` を書き、「変化なし」と返して終わる。

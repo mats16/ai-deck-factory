@@ -3,7 +3,8 @@
 決まりの本文には ID（visual-<番号>・ws-visual-<番号> を角括弧で囲む）と短い理由だけを書き、日付・原文・どの資料か・ユーザーが決めたかは、ここに ID でつなぐ。
 決まりの層と戻し方は ../rules.md。ワークスペース（今いるフォルダから上へ、最初の factory.toml のフォルダ）で回す。標準ライブラリだけ。
 usage:
-  ledger.py add --deck <資料のフォルダ> --quote <ユーザーの言葉> [--fix <直した箇所>] [--to <決まりの ID・ファイル・未・戻さない>] [--check lint|レビュー|なし] [--session <会話 ID>] [--decided]
+  ledger.py add --deck <資料のフォルダ> --quote <ユーザーの言葉> [--fix <直した箇所>] [--to <決まりの ID・ファイル・未・戻さない>] [--check lint|レビュー|なし] [--session <会話 ID>] [--decided] [--once]
+                                                   --once は前の形の構成案から取り込むときだけ（同じ資料・言葉・会話がもうあれば足さない）
   ledger.py route <c-ID> <戻し先>                 指摘の戻し先を決める・変える
   ledger.py list [--deck <フォルダ>] [--open] [--to <戻し先>]   指摘の一覧（--open は戻し先が「未」のものだけ）
   ledger.py why <決まりの ID>                      その決まりの出典（指摘・日付・原文）と、資料・顧客の数、ユーザーが決めたか
@@ -82,8 +83,8 @@ def rel(ws, p):
 
 def add(ws, a):
     deck = rel(ws, a.deck)
-    same = next((c for c in state(ws)[0].values() if c["deck"] == deck and c["quote"] == a.quote), None)
-    if same:  # 前の形の構成案から取り込み直したときなど。足し直さず、前の ID を返す
+    same = a.once and next((c for c in state(ws)[0].values() if (c["deck"], c["quote"], c["session"]) == (deck, a.quote, a.session or "")), None)
+    if same:  # 前の形の構成案の同じ行を、次の回でまた取り込んだとき。足し直さず、前の ID を返す（会話をまたぐくり返しは --once なしで足す）
         print(same["id"])
         return
     rec = write(ws, {"kind": "correction", "deck": deck, "quote": a.quote, "fix": a.fix or "",
@@ -184,12 +185,21 @@ def undo(ws, i):
     print(f"{i}: 戻した")
 
 
+def effective(p, done):
+    """p の文に、あとで同じファイルに当てた置き換えを順に当てた、いまあるはずの文。あとの提案がまるごと含んだなら None（そちらで見る）。"""
+    text = p["new"]
+    for q in sorted((q for q in done if q["file"] == p["file"] and q["seq"] > p["seq"] and q["old"]), key=lambda q: q["seq"]):
+        if text in q["old"]:
+            return None
+        text = text.replace(q["old"], q["new"])
+    return text
+
+
 def drift(ws):
     out, done = [], [p for p in state(ws)[1].values() if p["status"] == "適用済み"]
     for p in done:
-        f = ws / p["file"]
-        later = any(q["file"] == p["file"] and q["seq"] > p["seq"] and q["old"] and (q["old"] in p["new"] or p["new"] in q["old"]) for q in done)
-        if p["new"] and not later and (not f.exists() or p["new"] not in f.read_text(encoding="utf-8")):
+        f, want = ws / p["file"], effective(p, done)
+        if want and (not f.exists() or want not in f.read_text(encoding="utf-8")):
             out.append(p["id"])
             print(f"{p['id']} {p['file']}{' ' + p['rule'] if p['rule'] else ''}: 当てた文がない（手で直されたか消えた。ユーザーが直したものとして扱い、覆さない）")
     return out
@@ -200,7 +210,7 @@ def main(argv):
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("add")
     s.add_argument("--deck", required=True); s.add_argument("--quote", required=True); s.add_argument("--fix")
-    s.add_argument("--to", default="未"); s.add_argument("--check", default="なし"); s.add_argument("--session"); s.add_argument("--decided", action="store_true")
+    s.add_argument("--to", default="未"); s.add_argument("--check", default="なし"); s.add_argument("--session"); s.add_argument("--decided", action="store_true"); s.add_argument("--once", action="store_true")
     s = sub.add_parser("route"); s.add_argument("id"); s.add_argument("to")
     s = sub.add_parser("list"); s.add_argument("--deck"); s.add_argument("--open", action="store_true"); s.add_argument("--to")
     s = sub.add_parser("why"); s.add_argument("id")
@@ -313,21 +323,34 @@ def selftest():
             x = ws / "rules" / "x.md"
             x.write_text("C です\n")
             with quiet():
-                assert drift(ws) == ["P0001", "P0006"]
+                assert drift(ws) == ["P0001", "P0006"]  # A をまるごと置き換えた P0006 で見る
             x.write_text("B です\n")
+            # 一部だけを置き換えたあと、残りの部分を手で直しても出る
+            with quiet():
+                main(["propose", "--file", "rules/z.md", "--new", "16pt にする。出典はリンクする。", "--why", "足す"])
+                main(["apply", "P0007"])
+                main(["propose", "--file", "rules/z.md", "--old", "16pt", "--new", "18pt", "--why", "大きく"])
+                main(["apply", "P0008"])
+                assert "P0007" not in drift(ws)
+            (ws / "rules" / "z.md").write_text("18pt にする。出典はリンクしない。\n")
+            with quiet():
+                assert "P0007" in drift(ws) and "P0008" not in drift(ws)
             # 戻すと、出典の指摘の戻し先も前に戻る
             with quiet():
                 main(["add", "--deck", ".", "--quote", "見出しは短く"])
                 main(["propose", "--file", "rules/y.md", "--new", "- [ws-y-001] 見出しは短く。", "--rule", "ws-y-001", "--why", "短く", "--src", "c-0003"])
-                main(["apply", "P0007"])
+                main(["apply", "P0009"])
             assert state(ws)[0]["c-0003"]["to"] == "ws-y-001"
             with quiet():
-                main(["undo", "P0007"])
+                main(["undo", "P0009"])
             assert state(ws)[0]["c-0003"]["to"] == "未" and (ws / "rules" / "y.md").read_text() == ""
-            # 同じ資料・同じ言葉の指摘は足し直さない
+            # 前の形の取り込み（--once）は足し直さない。ほかの会話のくり返しは別の 1 件にする
             with quiet():
-                main(["add", "--deck", ".", "--quote", "見出しは短く"])
-            assert sum(c["quote"] == "見出しは短く" for c in state(ws)[0].values()) == 1
+                main(["add", "--deck", ".", "--quote", "古い行", "--once"])
+                main(["add", "--deck", ".", "--quote", "古い行", "--once"])
+                main(["add", "--deck", ".", "--quote", "見出しは短く", "--session", "s2", "--decided"])
+            cs = state(ws)[0].values()
+            assert sum(c["quote"] == "古い行" for c in cs) == 1 and sum(c["quote"] == "見出しは短く" for c in cs) == 2
             # プラグインのファイルは変更先にしない
             try:
                 target(ws, str(PLUGIN / "skills" / "deck-practices" / "visual.md"))
