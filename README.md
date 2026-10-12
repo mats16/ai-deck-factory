@@ -39,10 +39,10 @@ Python 3.11 以上と `uv` が要る。Google の認証は下の「Google の認
 ```sh
 claude plugin marketplace add https://github.com/mats16/ai-deck-factory.git   # 手元の checkout なら ~/Projects/ai-deck-factory
 claude plugin install ai-deck-factory@ai-deck-factory
-claude plugin update ai-deck-factory@ai-deck-factory               # プラグインを直して commit・push したあと
+claude plugin update ai-deck-factory@ai-deck-factory               # GitHub から入れたとき、直して commit・push したあと
 ```
 
-`plugin.json` に版を書いていないので、commit の SHA が版になり、commit ごとに `update` で届く（マーケットプレイスが GitHub を指していれば push してから。手元のパスで足したなら commit だけでよい）。手元で直しながら試すときは `claude --plugin-dir ~/Projects/ai-deck-factory`（worktree と検証用のワークスペースで試す手順は [docs/development.md](docs/development.md)）。スキルは `/ai-deck-factory:factory-init` のように呼ぶ。資料のフォルダだけで効かせる（`--scope project`）入れ方と、効いている範囲の確かめ方は [docs/claude-code-plugin.md](docs/claude-code-plugin.md)。
+マーケットプレイスが GitHub を指していれば、会話は `~/.claude/plugins/cache/` に写した版を読む。`plugin.json` に版を書いていないので commit の SHA が版になり、push してから `update` で届く。手元のパスで足したなら、会話は checkout をそのまま読むので、保存すれば次の会話から効く（commit も `update` も要らない）。手元で直しながら試すときは `claude --plugin-dir ~/Projects/ai-deck-factory`（worktree と検証用のワークスペースで試す手順は [docs/development.md](docs/development.md)）。スキルは `/ai-deck-factory:factory-init` のように呼ぶ。資料のフォルダだけで効かせる（`--scope project`）入れ方と、効いている範囲の確かめ方は [docs/claude-code-plugin.md](docs/claude-code-plugin.md)。
 
 **pi**
 

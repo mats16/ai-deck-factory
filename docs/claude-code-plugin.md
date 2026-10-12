@@ -35,7 +35,7 @@ claude plugin install ai-deck-factory@ai-deck-factory --scope project
 
 - `~/.claude/settings.json` は変わらない。
 - `~/.claude/plugins/` の `known_marketplaces.json`（マーケットプレイスの一覧）と `installed_plugins.json`（`scope: project` と `projectPath` が付く）には行が足される。どちらも記録だけで、ほかのフォルダでプラグインが有効になるわけではない。
-- マーケットプレイスを手元のパスで足すと、会話はその checkout からプラグインを読む（起動したときの `plugins` の `path` が checkout を指す）。
+- マーケットプレイスを手元のパスで足すと、会話はその checkout からプラグインを読む（起動したときの `plugins` の `path` が checkout を指す）。`install`・`update` は `~/.claude/plugins/cache/` に commit ごとの写しを作り、`installed_plugins.json` の `installPath` もそこを指すが、会話は読まない。commit していない変更も次の会話から効き、checkout を動かすとプラグインは読まれなくなる（写しには戻らない）。GitHub を指していれば、会話は写しを読む（2026-10-12 に Claude Code 2.1.295 で確かめた）。
 
 ## そのフォルダだけで効いているかを確かめる
 
@@ -75,7 +75,7 @@ doctor の要修正が 0 になれば使える。ワークスペースの `rules
 ## 注意
 
 - **同じ名前のスキルを二重に入れない。** ワークスペースの `.agents/skills/` や `.claude/skills/` に deck-build などがあると、プラグインのスキルと両方が読み込まれる（`deck-build` と `ai-deck-factory:deck-build`）。doctor が「スキルの重なり」として要確認に出すので、どちらかを外す。
-- **直したプラグインを届ける。** `plugin.json` に版を書いていないので、commit の SHA が版になる。直したら `claude plugin update ai-deck-factory@ai-deck-factory --scope project` で届け、会話を開き直す。
+- **直したプラグインを届ける。** 手元のパスで足したなら、保存して会話を開き直すだけでよい。GitHub から入れたなら、`plugin.json` に版を書いていないので commit の SHA が版になる。push してから `claude plugin update ai-deck-factory@ai-deck-factory --scope project` で届け、会話を開き直す。
 - **手元で直しながら試す。** 入れずに `claude --plugin-dir ~/Projects/ai-deck-factory` で開いてもよい。その会話だけで効き、入れてあるものより優先される。worktree で直して検証用のワークスペースで試す手順は [development.md](development.md)。
 
 ## 外す
