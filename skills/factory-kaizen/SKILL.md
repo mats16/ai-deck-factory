@@ -20,7 +20,7 @@ $P clean <名前>                                   # マージか却下のあ�
 
 ## 手順
 
-1. **出すものを決める。** 何を変えるか、なぜか（決まりの台帳の `ledger.py why <決まりの ID>` に出る指摘と資料・顧客の数、`.factory/lint_runs.jsonl` や dreaming の記録の数字）を 1 つにまとめる。原文と資料の名前は PR に書かず（2 の `start` のあとは `verify/detail.md` にだけ書く）、PR には数を書く。ワークスペースの `rules/` に写しがあるなら、それを大元に移す形にする。移した決まりには、プラグインの接頭辞の新しい ID を付ける（worktree の中で同じ接頭辞のいちばん大きい番号の次。`ws-` は付けない）。本文には ID と短い理由だけを書き、日付と原文は書かない（`../deck-practices/rules.md` の「修正の指示の戻し方」）。
+1. **出すものを決める。** 何を変えるか、なぜか（決まりの台帳の `ledger.py why <決まりの ID>` に出る指摘と資料・顧客の数、再発とレビューの結果、`.factory/lint_runs.jsonl` や dreaming の記録の数字）を 1 つにまとめる。原文と資料の名前は PR に書かず（2 の `start` のあとは `verify/detail.md` にだけ書く）、PR には数を書く。ワークスペースの `rules/` に写しがあるなら、それを大元に移す形にする。移した決まりには、プラグインの接頭辞の新しい ID を付ける（worktree の中で同じ接頭辞のいちばん大きい番号の次。`ws-` は付けない）。本文には ID と短い理由だけを書き、日付と原文は書かない（`../deck-practices/rules.md` の「修正の指示の戻し方」）。
 2. **`start` して、`.factory/kaizen/<名前>/repo` の中を直し、commit する。** プラグインの入った場所や、元のリポジトリの checkout そのものは直さない。commit の書き方はそのリポジトリの決まりに合わせる。
 3. **過去の資料で確かめる。** 変えたものに合わせて選ぶ。
    - 決まり・点検（`lint.py`、`checks.py` から移したもの）: `lint` を、その規則が効くはずの資料と、効いてはいけない資料の両方にかける。候補は `.factory/lint_runs.jsonl` の資料（その規則の指摘が出た資料）と `references_index.md` の「作った」。
@@ -32,7 +32,7 @@ $P clean <名前>                                   # マージか却下のあ�
    - 本文
    - 載せる画像（`verify/img/`）。顧客向けの資料（`Customers/`）の画像は、顧客の名前・数字・社外秘が写るので、原則として載せない。社内向けか、公開の内容だけの資料で確かめ直す。
    `open` は、節がそろっているか、検証があるか、見た目の変更に画像があるかを確かめてから、画像を `pr-assets` ブランチに置き、検証の記録（資料は「資料 1」の番号だけ。名前・URL・本文は出さない）を本文に足して PR を作る。
-6. **返す。** PR の URL を返す。マージされたら `claude plugin update ai-deck-factory@ai-deck-factory`（pi は入れ方による）で届くこと、ワークスペースの `rules/` の写しを消し、その決まりの指摘を新しい ID につなぎ直す（`ledger.py why <ws-ID>` に出た指摘ごとに `ledger.py route <c-ID> <プラグインの ID>`）ことを伝え、`clean` する。
+6. **返す。** PR の URL を返す。dreaming のプラグインへの提案（P-ID）から出したなら、`ledger.py sent <P-ID> --pr <URL>` で決まりの台帳に残す（PR で提案と違う ID にしたら `--rule <その ID>` も付ける）（dreaming が同じ提案を出し直さない）。マージされずに閉じられたら `ledger.py reject <P-ID> --reason <理由>`。マージされたら `claude plugin update ai-deck-factory@ai-deck-factory`（pi は入れ方による）で届くこと、ワークスペースの `rules/` の写しを消し、その決まりの指摘を新しい ID につなぎ直す（`ledger.py why <ws-ID>` に出た指摘ごとに `ledger.py route <c-ID> <プラグインの ID>`）ことを伝え、`clean` する。
 
 ## 本文の型
 

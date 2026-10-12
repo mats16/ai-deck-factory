@@ -203,7 +203,7 @@ class Session:
         unknown = [k for k in self.mentioned if k not in self.opened]
         if unknown:
             out.append("- 読んだか未確認: " + ", ".join(unknown))
-        out += [f"- ユーザー {ts[:16]}{'（確認のあと）' if self.built_at and ts > self.built_at else ''}: 「{t}」" for ts, t in self.said]
+        out += [f"- ユーザー {ts}{'（確認のあと）' if self.built_at and ts > self.built_at else ''}: 「{t}」" for ts, t in self.said]
         out += [f"- エラー: {e}" for e in self.errors[:5]]
         return "\n".join(out)
 
@@ -449,6 +449,7 @@ def selftest():
         assert a.built and a.opened['deck-practices/visual.md'] == 1 and a.title == '見本'
         assert [t for _, t in a.said] == ['文字をもっと大きく', '矢印がずれている']
         assert a.md(root).count("（確認のあと）") == 1 and "（確認のあと）: 「矢印がずれている」" in a.md(root)  # 確認が通ったあとの発言だけに印
+        assert "- ユーザー 2026-10-06T02:00:00Z（確認のあと）" in a.md(root)  # 時刻は秒まで出す（--at に渡す）
         assert not is_dreaming(a.said) and is_dreaming([(ts, '…/skills/dreaming/SKILL.md を読み')])
         assert not is_dreaming([(ts, '資料を作って'), (ts, 'dreaming でこの指示を拾って')])
         assert not is_dreaming([(ts, '決まりの台帳と dreaming の流れを紹介する資料を作って')])
