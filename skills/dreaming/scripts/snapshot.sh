@@ -4,7 +4,7 @@
 # diff はその写しから後の変更を出し、restore はその写しに戻す（写しのあとに足したファイルは消さない）。
 # 写しはワークスペースの .factory/dreaming/backup/。lint の記録（.factory/lint_runs.jsonl）は、戻すと消えるので入れない。
 set -eu
-ROOT=$(pwd)
+ROOT=$(pwd -P)  # /tmp のようなリンクでも、Claude Code がメモリに使う実際のパスにする
 [ -f "$ROOT/factory.toml" ] || { echo "factory.toml のあるフォルダ（ワークスペース）で回す: $ROOT" >&2; exit 2; }
 MEM=$HOME/.claude/projects/$(printf %s "$ROOT" | tr '/._' '---')/memory
 SRC=$(sed -n 's/^source *= *"\([^"]*\)".*/\1/p' "$ROOT/factory.toml" | head -1 | sed "s|^~|$HOME|")

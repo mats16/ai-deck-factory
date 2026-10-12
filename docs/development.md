@@ -31,6 +31,7 @@ claude --plugin-dir ..
 - 起動したときの `plugins` の `path` が worktree を指し、`ai-deck-factory:` のスキルが 10 個読まれる。
 - `claude plugin marketplace add .. --scope project` で入れてはいけない。マーケットプレイスの名前（`ai-deck-factory`）は `~/.claude/plugins/known_marketplaces.json` に 1 つしか持てず、本番のワークスペースで足したものとぶつかる。外すと、ほかで足したものの記録も消える。
 - そこから起こす `claude -p` の子（dreaming の `run.sh claude` など）には、プラグインが入っていない。子まで確かめるときは pi で試す。
+- worktree が点で始まるフォルダの下（T3 Code の `~/.t3/worktrees` など）にあると、`claude -p` で回した会話は、sandbox の中のファイルを「sensitive file」として書けない（`--permission-mode acceptEdits` でも止まる）。`claude -p` で資料まで作って確かめるときは、sandbox を `/tmp/<名前>/` に写し、そこで `claude --plugin-dir <worktree>` を回す。終わったら消す。
 
 ## pi
 
