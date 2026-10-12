@@ -20,6 +20,7 @@
 | `dreaming` | 会話の記録から、決まりを定期的に整理する |
 
 ```
+INSTALL.md                        会話で入れるときに、エージェントが読む手順（README の「会話で入れる」）
 .claude-plugin/plugin.json        Claude Code のプラグイン
 .claude-plugin/marketplace.json   このリポジトリをそのままマーケットプレイスにする
 package.json                      pi のパッケージ（pi.skills: ./skills）
@@ -30,9 +31,20 @@ extensions/rules.ts               pi の拡張（同じことを pi の read・b
 docs/                             設定のガイド（claude-code-plugin.md: Claude Code に入れる範囲と確かめ方。pi.md: pi に入れる範囲と確かめ方。development.md: 開発しながら動作を見る）
 ```
 
+## 会話で入れる
+
+Claude Code か pi を開き、次を貼る（どのフォルダで開いた会話でもよい）。
+
+```text
+AI Deck Factory を入れて、ワークスペースを作ってください。
+手順は https://raw.githubusercontent.com/mats16/ai-deck-factory/main/INSTALL.md にあります。WebFetch ではなく curl で読み、そのとおりに進めてください。
+```
+
+エージェントが [INSTALL.md](INSTALL.md) に従い、ワークスペースにするフォルダとプラグインに直しを出すかを聞き、Python・uv を見て、そのフォルダだけにプラグインを入れる。続けて、入れた `factory-init` と `factory-doctor` の手順で `factory.toml`（Google の認証、テーマ、Drive の置き場所、材料を集める道具）を一緒に埋め、要修正が 0 になるまで進める。自分で回すのは、ブラウザが開く Google のログインだけ。終わったら、ワークスペースの直下で会話を開き直す。
+
 ## 入れ方
 
-Python 3.11 以上と `uv` が要る。Google の認証は下の「Google の認証」。
+手で入れるときの手順。Python 3.11 以上と `uv` が要る。Google の認証は下の「Google の認証」。
 
 **Claude Code**
 
@@ -103,6 +115,8 @@ gcloud の既定の OAuth クライアントで作った認証情報は、`googl
 - 2026-10-11: `rules/` の開き忘れは、hook で防ぐ（ユーザー「開き忘れても止まらない …こちらも対応してください」）。ワークスペースは 1 つのプロダクトとして育て、大元は PR で直す。PR には理由・背景、見た目なら画像、過去の資料での検証の結果を入れる（ユーザー「基本的にセットアップ対象のフォルダ配下を1プロダクトのように育てていく方針で、やり取りの蓄積からルール・チェックすべき項目を改善、大元を改善すべき場合は PR 作成のようなコンセプトでおねがします」「PR には理由・背景情報の他、デザインに関するものであればスクリーンショットを含めるようにしてください。また、ローカルで変更して過去資料で検証した結果も提出する流れが望ましいです」）。
 
 - 2026-10-12: PR を作るスキルの名前を `factory-pr` から `factory-kaizen` にした（ユーザー「factory-pr ではなく、工場を改修・発展のようなニュアンスの方がいいかな」。候補から factory-kaizen を選んだ）。
+
+- 2026-10-12: Claude Code・pi に貼るだけで初期設定が終わるプロンプトを README に置く。フォルダ・ツールの指定もその会話でする。エージェントが読む手順は `INSTALL.md`（oh-my-openagent の貼り付けのプロンプトと、Cline の `llms-install.md` を参考にした）（ユーザー「Claude や Pi にコピペするだけで初期設定が完了するプロンプトを README に追加してください。フォルダやツール指定もそのチャット内で行い、完了できるように、コピペした後に読み込むスキル等も整備してください。」）。
 
 ## 入れていないもの
 
