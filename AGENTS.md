@@ -82,4 +82,10 @@ worktree の直下に検証用のワークスペース `sandbox/` を置き、wo
 
 6. **直したところを、資料を作って確かめる。** `sandbox/` の会話で、直したスキルを使う場面（`/ai-deck-factory:deck-build`、pi なら `/skill:deck-build` など）を通し、lint と Google が描いたページの画像で見る。`factory-kaizen` だけは、この worktree ではなく `[factory] source` の `origin/main` から別の worktree を作るので、ここでは試せない。
 
-7. **消す。** `rm -rf sandbox`（worktree ごと消すなら要らない）。Google Drive に組んだものは、検証用のフォルダごと消す。
+7. **消す。** 手順 1 から `sandbox/` の中にいるので、worktree の直下に戻ってから消す（worktree ごと消すなら要らない）。
+
+   ```sh
+   cd .. && rm -rf sandbox
+   ```
+
+   Google Drive に組んだものは、検証用のフォルダごと消す。
