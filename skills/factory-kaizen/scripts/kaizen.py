@@ -135,7 +135,8 @@ def rebuild(w, folders, pages=None, keep=False):
             page = int(re.sub(r"\D", "", n))
             if want and page not in want or shots["base"][n].read_bytes() == shots["head"][n].read_bytes():
                 continue  # 選んでいないページと、前後で同じ画像のページ
-            out = img / f"deck{re.sub(r'\D', '', label)}_p{page}.png"  # エージェントが読み書きするファイルは英数字の名前
+            num = re.sub(r"\D", "", label)  # f-string の中の \ は Python 3.12 から
+            out = img / f"deck{num}_p{page}.png"  # エージェントが読み書きするファイルは英数字の名前
             sh("uv", "run", "-q", w.scripts("head") / "sheet.py", out, shots["base"][n], shots["head"][n], "--cols", "2", "--width", "800")
             changed.append((page, out))
         detail, public = report(label, "スライド" if slides else "ドキュメント", *compare(*outs), title=str(folder))
