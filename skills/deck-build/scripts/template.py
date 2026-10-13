@@ -17,7 +17,7 @@ from gapi import DRIVE, SLIDES, batch, factory, factory_path, file_id, find_fact
 from lint import JA, cells, contrast, flatten, lum, paras
 from slides import (BG, BLANK, CARD, COPYRIGHT_PT, DECOR, EMU, FONT, GA, HEAD, INSET, NAVY, NAVY_BLOCK, ON_RED, OSS, PAD, PANEL, PREVIEW, RED, RED_ON_NAVY,
                     RED_SOFT, RED_TEXT, RULE, SLOTS, STAGE_TEXT, SUB, SUB_ON_NAVY, TEXT, THEMES, WHITE, W, X, Y_BODY, Y_FOOT, build, cols, make_deck, number_style, rgb)
-from slides import FIXED as FIXED_DEFAULT, JP_FONTS, NAMED, THEME_MARK, is_blank, need_brand, placeholders, theme_fixed, theme_font, use_theme
+from slides import FIXED as FIXED_DEFAULT, JP_FONTS, LAYOUT_MARK, NAMED, THEME_MARK, VARIANTS, is_blank, need_brand, placeholders, theme_fixed, theme_font, use_layouts, use_theme
 
 THEMES_DIR = "Themes"  # テンプレートを作る Drive のフォルダ。[drive] factory の下（なければ作る）。使うテンプレートは [slides.themes.<名前>] の url で 1 つずつ指す
 FOLDER = "application/vnd.google-apps.folder"
@@ -58,15 +58,15 @@ def themes():
 def colors(theme):
     """テーマの 12 の枠の色。factory.toml のテーマは役割の名前で書き、書かない役割は visual の値にする。"""
     if theme in THEMES:
-        if bad := set(themes().get(theme, {})) - {"url", "description", "base", "copyright", "mono", *FIXED_DEFAULT, *NAMED}:  # 役割の色は組み込みのまま、font だけが効いてしまう
-            sys.exit(f"[slides.themes.{theme}] は組み込みのテーマ（slides.py の THEMES）。url・description・base・copyright・mono と固定の色（{', '.join([*FIXED_DEFAULT, *NAMED])}）のほか"
+        if bad := set(themes().get(theme, {})) - {"url", "description", "base", "copyright", "mono", "cover", "section", *FIXED_DEFAULT, *NAMED}:  # 役割の色は組み込みのまま、font だけが効いてしまう
+            sys.exit(f"[slides.themes.{theme}] は組み込みのテーマ（slides.py の THEMES）。url・description・base・copyright・mono・cover・section と固定の色（{', '.join([*FIXED_DEFAULT, *NAMED])}）のほか"
                      f"（{', '.join(sorted(bad))}）は書けない。会社の色なら別の名前のテーマにする")
         return THEMES[theme]
     if (t := themes().get(theme)) is None:
         sys.exit(f"テーマ {theme} がない（slides.py の THEMES にも、factory.toml の [slides.themes] にもない）")
     if not re.fullmatch(r"[A-Za-z0-9_-]+", theme):  # [slides.themes.<名前>] の表の名前に、引用符なしで書き込む（set_url）
         sys.exit(f"テーマの名前 {theme!r} は英数字と - _ だけにする")
-    if bad := set(t) - set(ROLE) - set(FIXED_DEFAULT) - set(NAMED) - {"base", "font", "mono", "url", "description", "copyright"}:
+    if bad := set(t) - set(ROLE) - set(FIXED_DEFAULT) - set(NAMED) - {"base", "font", "mono", "url", "description", "copyright", "cover", "section"}:
         sys.exit(f"[slides.themes.{theme}] に知らない名前: {', '.join(sorted(bad))}（色は役割の名前 {', '.join(ROLE)} と固定の色の名前 {', '.join([*FIXED_DEFAULT, *NAMED])} で書く）")
     if bad := [k for k, v in t.items() if k in {*ROLE, *FIXED_DEFAULT, *NAMED} and not re.fullmatch(r"#?[0-9A-Fa-f]{6}", str(v))]:
         sys.exit(f"[slides.themes.{theme}] の {', '.join(bad)} が 6 桁の 16 進の色でない（例: NAVY = \"002B5C\"）")
@@ -284,7 +284,17 @@ def specimen(theme):
         d.note(s, "項目のカード、箇条書き、塗りのない角丸の囲み、強調の点線の囲みの見本です。塗りのない角丸の囲みは辺と弧を線でつないで描くので、"
                   "部品を直したら、継ぎ目に段が出ていないかと、点線の囲みの角が中のカードと同じ丸みになっているかを、ここで見ます。")
 
-    return make_deck(make, f"AI Deck Factory｜テーマ「{theme}」の見本")
+    def make_all(d):
+        make(d)
+        for kind, vs in VARIANTS.items():  # 表紙・扉のパターン（会社のテンプレートから残したもの）を 1 枚ずつ。pages.py の variant の番号はここで選ぶ
+            for i, (_, t) in enumerate(vs[1:], 2):
+                if kind == "cover":
+                    s = d.cover(f"表紙のパターン {i}", f"d.cover(…, variant={i})", f"地: {t}", variant=i)
+                else:
+                    s = d.divider(f"{i:02d}", f"扉のパターン {i}", f"d.divider(…, variant={i})。地: {t}", variant=i)
+                d.note(s, f"{'表紙' if kind == 'cover' else '章の扉'}のパターン {i} です（地の明るさ {t}）。会社のテンプレートの図形と写真を残し、文字の色は地に合わせます。")
+
+    return make_deck(make_all, f"AI Deck Factory｜テーマ「{theme}」の見本")
 
 
 def base(theme):
@@ -292,21 +302,71 @@ def base(theme):
     return themes().get(theme, {}).get("base") or factory().get("slides", {}).get("base_template", "")
 
 
-def pick(p):
+def pick(p, names=None):
     """残すマスター（いちばん多くのページが使うもの。同じなら先のもの）と、slides.py が使うレイアウトを選ぶ。レイアウトは、そのマスターの、
-    プレースホルダーがページ番号の枠だけのもの（slides.py の is_blank）。名前が BLANK のもの、型が BLANK のものの順に先にする。"""
+    プレースホルダーがページ番号の枠だけのもの（slides.py の is_blank）。名前が BLANK のもの、型が BLANK のものの順に先にする。
+    names（{"cover"・"section": レイアウトの名前の並び}。テーマの cover・section）があれば、その表紙・扉のパターンも選ぶ（{種類: [レイアウト, …]}。
+    並びの順がパターンの番号。同じ名前のレイアウトが 2 つあれば両方）。"""
     used = Counter(s.get("slideProperties", {}).get("masterObjectId") for s in p.get("slides", []))
     master = max(p["masters"], key=lambda m: used[m["objectId"]])
     ls = [l for l in p["layouts"] if l["layoutProperties"].get("masterObjectId") == master["objectId"]]
-    cands = sorted(filter(is_blank, ls), key=lambda l: (l["layoutProperties"]["displayName"] != BLANK, l["layoutProperties"].get("name") != "BLANK"))
+    names = {k: [v] if isinstance(v, str) else list(v) for k, v in (names or {}).items()}
+    if bad := [n for v in names.values() for n in v if not any(l["layoutProperties"]["displayName"] == n for l in ls)]:
+        sys.exit(f"マスター「{master['masterProperties']['displayName']}」に、テーマの cover・section のレイアウト「{'」「'.join(bad)}」がない"
+                 "（名前は template.py audit の表のとおりに書く。合わせ直しなら --from-base で作り直す）")
+    extras = {k: [l for n in dict.fromkeys(v) for l in ls if l["layoutProperties"]["displayName"] == n] for k, v in names.items()}
+    kept = [l for v in extras.values() for l in v]
+    cands = sorted((l for l in ls if is_blank(l) and l not in kept),
+                   key=lambda l: (l["layoutProperties"]["displayName"] != BLANK, l["layoutProperties"].get("name") != "BLANK"))
     if not cands:
         sys.exit(f"マスター「{master['masterProperties']['displayName']}」に、プレースホルダーがページ番号の枠だけのレイアウトがない。元のテンプレートを複製し、"
                  "画面のテーマビルダーで Blank のレイアウトを作るか、Blank のレイアウトにスライド番号のプレースホルダーを足して、その URL を base にする")
-    return master, cands[0]
+    return master, cands[0], extras
 
 
-def strip(pid, p, master, blank):
-    """元のテンプレートの複製から、残すマスターとレイアウト（pick）のほかを消す。"""
+def decor(layout):
+    """表紙・扉のレイアウトに残す置き物（図形・画像・ロゴ・線）。プレースホルダーと、文字の入った枠（著作権の行など。slides.py が書く）は残さない。"""
+    def text(e):
+        return "".join(t.get("textRun", {}).get("content", "") for t in e.get("shape", {}).get("text", {}).get("textElements", [])).strip()
+    return [e for e in layout.get("pageElements", []) if "placeholder" not in e.get("shape", {}) and not text(e)]
+
+
+def align_decor(layout):
+    """表紙・扉の置き物のうち、元のタイトルの枠と左端がそろっていたもの（ロゴ、短い線など）を、slides.py の文字の左端 X に寄せる要求。
+    元の余白（例: 0.83 in）のままだと、0.6 in の余白で組む文字と左端がずれる（2026-10-13）。"""
+    lefts = [e["transform"]["translateX"] / EMU for e in layout.get("pageElements", [])
+             if e.get("shape", {}).get("placeholder", {}).get("type") in ("TITLE", "CENTERED_TITLE")]
+    return [{"updatePageElementTransform": {"objectId": e["objectId"], "applyMode": "RELATIVE", "transform": {
+                "scaleX": 1, "scaleY": 1, "translateX": round((X - lefts[0]) * EMU), "translateY": 0, "unit": "EMU"}}}
+            for e in decor(layout) if lefts and abs(e.get("transform", {}).get("translateX", 0) / EMU - lefts[0]) < 0.05 and abs(lefts[0] - X) >= 0.05]
+
+
+def text_w(layout):
+    """表紙・扉の文字の幅（in）。元のタイトルの枠の右端まで（会社のテンプレートが図形・写真に重ねないように決めた幅）。枠がなければ
+    （合わせ直しで、strip が消したあと）、前に書いた目印の幅。どちらもなければ None（本文の幅のまま）。"""
+    for e in layout.get("pageElements", []):
+        if e.get("shape", {}).get("placeholder", {}).get("type") in ("TITLE", "CENTERED_TITLE"):
+            t = e["transform"]
+            return round((t.get("translateX", 0) + e["size"]["width"]["magnitude"] * t.get("scaleX", 0)) / EMU - (X - INSET), 2)
+    return next((float(m.group(3)) for e in layout.get("pageElements", []) if (m := LAYOUT_MARK.search(e.get("description", ""))) and m.group(3)), None)
+
+
+def bg_tone(theme, master, layout):
+    """表紙・扉のパターンの地の明るさ（slides.py の TONES）。地はレイアウトの塗り、なければマスターの塗り（テーマの色はこのテーマの値で引く）。
+    白の文字が 4.5:1 に届けば dark、3:1 なら accent（大きな文字だけ白）、届かなければ light。ponytail: 全面の写真や絵の明るさは見ない（地の塗りだけ）。"""
+    def fill(pg):
+        c = pg.get("pageProperties", {}).get("pageBackgroundFill", {}).get("solidFill", {}).get("color")
+        if c and "themeColor" in c:
+            return colors(theme).get(c["themeColor"])
+        if c and "rgbColor" in c:
+            return "".join(f"{round(c['rgbColor'].get(k, 0) * 255):02X}" for k in ("red", "green", "blue"))
+    r = contrast(WHITE, fill(layout) or fill(master) or "FFFFFF")
+    return "dark" if r >= 4.5 else "accent" if r >= 3 else "light"
+
+
+def strip(pid, p, master, blank, extras=None):
+    """元のテンプレートの複製から、残すマスターとレイアウト（pick）のほかを消す。表紙・扉のレイアウト（extras）は、置き物（decor）だけを残す。"""
+    extras = extras or {}
     # 見本のページを消す前に 1 枚作っておく。ページが 0 枚になると、使われていないマスターごと消える。
     # 足す位置の前のページのマスターのレイアウトしか使えないので、残すマスターのページの直後に足す（末尾が別のマスターだと 400。2026-10-13）
     at = next((i + 1 for i, s in enumerate(p["slides"]) if s.get("slideProperties", {}).get("masterObjectId") == master["objectId"]), None)
@@ -320,28 +380,38 @@ def strip(pid, p, master, blank):
         # 元のファイルの「スライド番号」の設定がオフだと、API で足したページにページ番号の枠ができない。API では変えられない（2026-10-13）
         sys.exit("元のテンプレートは、足したページにページ番号の枠ができない（ファイルの「スライド番号」の設定がオフ）。元を複製し、複製の画面の"
                  "「挿入 → スライド番号」で「オン」にして「すべてに適用」を押し、その URL を base にする")
-    dels = ([l["objectId"] for l in now["layouts"] if l["objectId"] != blank["objectId"]]
+    kept = [l for v in extras.values() for l in v]
+    keep = {blank["objectId"], *(l["objectId"] for l in kept)}
+    dels = ([l["objectId"] for l in now["layouts"] if l["objectId"] not in keep]
             + [m["objectId"] for m in now["masters"] if m["objectId"] != master["objectId"]])
     # マスターの著作権の行とロゴ、Blank の全面の四角（ページの地を覆う）など、プレースホルダーでないもの。フッターは slides.py が書く
     dels += [e["objectId"] for pg in (master, blank) for e in pg.get("pageElements", []) if "placeholder" not in e.get("shape", {})]
+    for l in kept:  # 置き物とページ番号の枠（2 つあれば先の 1 つ。slides.py の placeholderIdMappings が 1 つに決まるように）のほかを消す
+        nums = [e for e in l.get("pageElements", []) if placeholders({"pageElements": [e]}) == ["SLIDE_NUMBER"]]
+        dels += [e["objectId"] for e in l.get("pageElements", []) if e not in decor(l) and e not in nums[:1]]
     batch(pid, [{"deleteObject": {"objectId": o}} for o in dels])
 
 
-def styles(theme, master, blank):
+def styles(theme, master, blank, extras=None):
     """配色、プレースホルダーの書体、ページ番号の枠（文字は slides.py の number_style。右端を本文の右端に、上端を著作権表示の文字にそろえる。
     この枠は内側の余白が 0）。ページ番号の枠の代替テキストにテーマの名前を書く（slides.py build がデッキのテーマを知り、固定の色・著作権表示・等幅を
     factory.toml から引く。THEME_MARK）。"""
     reqs = [{"updatePageProperties": {"objectId": master["objectId"], "pageProperties": {"colorScheme": {"colors": [
         {"type": k, "color": rgb(colors(theme)[k])} for k in SLOTS]}}, "fields": "colorScheme.colors"}}]
     font = themes().get(theme, {}).get("font", FONT)
-    for e in (e for pg in (master, blank) for e in pg.get("pageElements", [])):
+    kept = [l for v in (extras or {}).values() for l in v]
+    first = lambda l: next(e for e in l["pageElements"] if placeholders({"pageElements": [e]}) == ["SLIDE_NUMBER"])  # 2 つ目は strip が消した
+    mark = {first(l)["objectId"]: f"ai-deck-factory layout={k}:{i}" + (f" w={w}" if (w := text_w(l)) else "") + f" tone={bg_tone(theme, master, l)}"
+            for k, v in (extras or {}).items() for i, l in enumerate(v, 1)}  # slides.py の LAYOUT_MARK
+    reqs += [r for l in kept for r in align_decor(l)]
+    for pg, e in ((pg, e) for pg in (master, blank, *kept) for e in pg.get("pageElements", [])):
         ph = e.get("shape", {}).get("placeholder", {}).get("type")
-        if not ph:
+        if not ph or (pg not in (master, blank) and e["objectId"] not in mark):  # 表紙・扉のほかの枠は strip が消した
             continue
         reqs.append({"updateTextStyle": {"objectId": e["objectId"], "textRange": {"type": "ALL"}, "style": {"fontFamily": font}, "fields": "fontFamily"}})
         if ph == "SLIDE_NUMBER":
             size = e["size"]
-            reqs += [{"updatePageElementAltText": {"objectId": e["objectId"], "description": f"ai-deck-factory theme={theme}"}},
+            reqs += [{"updatePageElementAltText": {"objectId": e["objectId"], "description": mark.get(e["objectId"], f"ai-deck-factory theme={theme}")}},
                      {"updatePageElementTransform": {"objectId": e["objectId"], "applyMode": "ABSOLUTE", "transform": {
                          "scaleX": 1.0 * EMU / size["width"]["magnitude"], "scaleY": 0.28 * EMU / size["height"]["magnitude"],
                          "translateX": round((X + W - 1.0) * EMU), "translateY": round((Y_FOOT + INSET) * EMU), "unit": "EMU"}}},
@@ -385,10 +455,12 @@ def template(theme, from_base=False):
         sys.exit(f"factory.toml の [slides.themes.{theme}] に url がない。template.py {theme} --from-base で作る")
     try:
         p = request("GET", f"{SLIDES}/{pid}")
-        master, blank = pick(p)
+        t = themes().get(theme, {})
+        master, blank, extras = pick(p, {k: t[k] for k in ("cover", "section") if t.get(k)})
         if from_base:
-            strip(pid, p, master, blank)
-        batch(pid, styles(theme, master, blank))
+            strip(pid, p, master, blank, extras)
+        batch(pid, styles(theme, master, blank, extras))
+        use_layouts(request("GET", f"{SLIDES}/{pid}?fields=layouts(objectId,pageElements(description))"))  # 見本の表紙・扉を、置き物に重ならない幅で組む
         build(pid, specimen(theme), force=True)  # 直前に配色を変えているので、版の確かめはしない
         if from_base:
             record(theme, pid)  # 書けずに止まったときも、下で複製を片付ける
@@ -460,7 +532,24 @@ def main():
         lay = lambda i, m, *els, name="": {"objectId": i, "layoutProperties": {"masterObjectId": m, "displayName": i, "name": name}, "pageElements": list(els)}
         p = {"masters": [{"objectId": "a"}, {"objectId": "b"}], "slides": [{"slideProperties": {"masterObjectId": "b"}}],
              "layouts": [lay("a1", "a", sn), lay(BLANK, "b", sn, {"shape": {"placeholder": {"type": "TITLE"}}}), lay("b1", "b", sn), lay("b2", "b", sn, name="BLANK")]}
-        assert [x["objectId"] for x in pick(p)] == ["b", "b2"]  # ページが使うマスターの、ページ番号の枠だけのレイアウト（名前が BLANK でも枠が多ければ使わない。型が BLANK を先に）
+        assert [x["objectId"] for x in pick(p)[:2]] == ["b", "b2"]  # ページが使うマスターの、ページ番号の枠だけのレイアウト（名前が BLANK でも枠が多ければ使わない。型が BLANK を先に）
+        assert pick(p, {"cover": "b2"})[1:] == (p["layouts"][2], {"cover": [p["layouts"][3]]})  # 表紙に残すレイアウトは Blank に選ばない
+        box = lambda x, y, w, h, **k: {"objectId": f"e{x}{y}", "transform": {"translateX": x * EMU, "translateY": y * EMU, "scaleX": 1, "scaleY": 1},
+                                       "size": {"width": {"magnitude": w * EMU}, "height": {"magnitude": h * EMU}}, **k}
+        copy = box(0.8, 7.0, 4, 0.2, shape={"text": {"textElements": [{"textRun": {"content": "© 2026"}}]}})
+        head = {**box(0.83, 1.3, 6.75, 2.6), "objectId": "t", "shape": {"placeholder": {"type": "CENTERED_TITLE"}}}
+        bg = lambda c: {"pageProperties": {"pageBackgroundFill": {"solidFill": {"color": c}}}}
+        cov = {**lay("c", "b", {**sn, **box(12, 7, 1, 0.3)}, head, box(0, 0, 13.33, 7.5), box(10.6, 3.15, 1.9, 1.7), copy), **bg({"themeColor": "DARK2"})}
+        assert copy not in decor(cov) and head not in decor(cov) and len(decor(cov)) == 2 and text_w(cov) == 7.08  # 元のタイトルの枠の右端まで
+        assert text_w(lay("c3", "b", {"description": "ai-deck-factory layout=cover:1 w=7.08 tone=dark"})) == 7.08  # 合わせ直し（枠はもうない）は前の目印の幅
+        white = {"objectId": "m", **bg({"rgbColor": {"red": 1, "green": 1, "blue": 1}})}
+        assert [bg_tone("company", white, x) for x in (cov, lay("w", "b"), {**lay("n", "b"), **bg({"themeColor": "DARK1"})})] == ["accent", "light", "dark"]
+        alt = [r["updatePageElementAltText"]["description"] for r in styles("company", {**master, **white}, {"pageElements": []}, {"cover": [lay("w", "b", {**sn, **box(12.1, 7, 1, 0.3)}), cov]})
+               if "updatePageElementAltText" in r]
+        assert alt == ["ai-deck-factory theme=company", "ai-deck-factory layout=cover:1 tone=light", "ai-deck-factory layout=cover:2 w=7.08 tone=accent"]
+        logo, shapes = box(0.83, 0.67, 2.8, 0.44), box(10.6, 3.15, 1.9, 1.7)
+        moved = align_decor(lay("c2", "b", head, logo, shapes))  # 元のタイトルと左端がそろうロゴだけを、文字の左端に寄せる
+        assert [r["updatePageElementTransform"]["objectId"] for r in moved] == [logo["objectId"]] and moved[0]["updatePageElementTransform"]["transform"]["translateX"] == round((X - 0.83) * EMU)
         num = {**sn, "objectId": "n", "size": {"width": {"magnitude": EMU}, "height": {"magnitude": EMU}}}
         st = [r["updateTextStyle"]["style"] for r in styles("visual", {"objectId": "b"}, {"pageElements": [num]}) if "fontSize" in r.get("updateTextStyle", {}).get("style", {})]
         assert [s["fontSize"]["magnitude"] for s in st] == [COPYRIGHT_PT]  # ページ番号は著作権表示と同じ大きさ（高さをそろえる）
