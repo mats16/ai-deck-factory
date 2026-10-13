@@ -3,13 +3,15 @@
 決まりの本文には ID（visual-<番号>・ws-visual-<番号> を角括弧で囲む）と短い理由だけを書き、日付・原文・どの資料か・ユーザーが決めたかは、ここに ID でつなぐ。
 決まりの層と戻し方は ../rules.md。ワークスペース（今いるフォルダから上へ、最初の factory.toml のフォルダ）で回す。標準ライブラリだけ。
 usage:
-  ledger.py add --deck <資料のフォルダ> --quote <ユーザーの言葉> [--fix <直した箇所>] [--to <決まりの ID・ファイル・未・戻さない>] [--check lint|レビュー|なし] [--session <会話 ID>] [--at <言われた時刻（UTC）>] [--decided] [--once]
+  ledger.py add --deck <資料のフォルダ> --quote <ユーザーの言葉> [--fix <直した箇所>] [--to <決まりの ID・ファイル・未・戻さない>] [--check lint|レビュー|なし] [--session <会話 ID>] [--at <言われた時刻（UTC）>] [--decided] [--plan AI|人] [--once]
+                                                   --plan は構成の見逃し（方針のレビューのあとに、聞き手・問い・主張・順序を変えた指摘。値はその資料の方針のレビュー）
                                                    --at は会話の記録からあとで拾ったときの発言の時刻（再発の数に使う。既定は書いた時刻）
                                                    --once は前の形の構成案から取り込むときだけ（同じ資料・言葉・会話がもうあれば足さない）
   ledger.py route <c-ID> <戻し先>                 指摘の戻し先を決める・変える
+  ledger.py plan <c-ID> AI|人|なし                 台帳にある指摘に、構成の見逃しの印をあとから付ける（なしは付け間違いを外す）
   ledger.py list [--deck <フォルダ>] [--open] [--to <戻し先>]   指摘の一覧（--open は戻し先が「未」のものだけ）
   ledger.py why <決まりの ID>                      その決まりの出典（指摘・日付・原文、再発か）と、資料・顧客の数、ユーザーが決めたか、レビューの結果
-  ledger.py rules                                  決まりごとの数（指摘・再発・資料・顧客・レビューの結果）と、週ごとの取りこぼし
+  ledger.py rules                                  決まりごとの数（指摘・再発・資料・顧客・レビューの結果）と、週ごとの取りこぼしと構成の見逃し
   ledger.py candidates                             決まりごとの次の一手（下ろす・書き直す・条件を足す・上げる・写しを消す・上書きを見直す）と、その決まりへの前の提案
   ledger.py next <接頭辞>                          次の決まりの ID（ワークスペースの決まりは ws-visual のように ws- を付ける）
   ledger.py propose --file <ワークスペースのファイル> --new <新しい文> [--old <今の文>] [--rule <ID>] --why <要点> [--src c-1,c-2] [--kind <種類>] [--plugin] [--replaces ws-x-001,…]
@@ -45,6 +47,7 @@ KEY = re.compile(rf"{ID}|lint:.+")  # レビューの表の「決まり」の列
 RESULTS = ("直した", "残した（誤り）", "残した", "聞く")
 NO_RULE = ("未", "戻さない")  # 決まりにつないでいない戻し先
 TWICE = 2  # 2 本以上の資料・2 社以上の顧客に出たら、たまたまでないとみなす（dreaming の 4c・4i・5）
+PLAN_RULE = "deck-practices-004"  # 構成案の AI レビューの頼み方。これを見直すかの判断待ちに答えたら、構成の見逃しをその答えのあとから数え直す
 OVERRIDE = re.compile(rf"\[(ws-[\w-]+?-\d{{3}})\][^\n\[]*?[（(]([^（）()\n]*?)\s*より優先")  # [ws-visual-003] …（visual-012 より優先）。括弧の中の ID を全部取る
 PLUGIN_ID = re.compile(r"(?<![\w-])(?!ws-)[a-z][\w-]*?-\d{3}")
 
@@ -145,6 +148,11 @@ def state(ws):
         elif k == "route" and r["ref"] in cs:
             cs[r["ref"]]["to"] = r["to"]
             link(cs[r["ref"]], r["to"])
+        elif k == "plan" and r["ref"] in cs:
+            if r["plan"] == "なし":
+                cs[r["ref"]].pop("plan", None)
+            else:
+                cs[r["ref"]]["plan"] = r["plan"]
         elif k == "proposal":
             ps[r["id"]] = {**r, "status": "未適用", "proposed": r["rule"]}  # proposed は提案の文に書いた ID（PR で替えたら rule が替わる）
         elif k in ("applied", "rejected", "withdrawn", "undone", "sent") and r["ref"] in ps:
@@ -161,7 +169,8 @@ def state(ws):
         elif k == "question":
             qs[r["id"]] = {**r, "status": "未回答"}
         elif k in ("answered", "withdrawn") and r["ref"] in qs:
-            qs[r["ref"]].update(status="回答済み" if k == "answered" else "取り下げ", **{x: r[x] for x in ("a", "reason") if x in r})
+            qs[r["ref"]].update(status="回答済み" if k == "answered" else "取り下げ", **{x: r[x] for x in ("a", "reason") if x in r},
+                                **({"answered": r["ts"]} if k == "answered" else {}))
         elif k == "review":
             rv[r["key"]] = r  # 同じ行は、あとで取り込んだ結果にする
     first_said = {}
@@ -194,13 +203,14 @@ def add(ws, a):
         return
     rec = write(ws, {"kind": "correction", "deck": deck, "quote": a.quote, "fix": a.fix or "", "to": a.to, "check": a.check,
                      "session": a.session or "", "decided": a.decided, "by": "import" if a.once else "dreaming" if a.at else "session",
-                     **({"at": utc(a.at)} if a.at else {})}, ("correction", "c-", 4))
+                     **({"at": utc(a.at)} if a.at else {}), **({"plan": a.plan} if a.plan else {})}, ("correction", "c-", 4))
     print(rec["id"])
 
 
 def show(c):
     d = " ユーザーが決めた" if c.get("decided") else ""
     d += "（再発）" if c.get("recur") else ""
+    d += f"（構成の見逃し: {c['plan']}）" if c.get("plan") else ""
     return f"{c['id']} {when(c)[:10]} {c['deck'] or c.get('where') or '-'}「{c['quote'] or c.get('note', '')}」→ {c.get('fix') or '-'} [戻し先: {c['to']}][確かめ: {c.get('check', 'なし')}]{d}"
 
 
@@ -257,20 +267,32 @@ def summary(ws):
         print("\t".join(map(str, [k, len(x["指摘"]), count(x["再発"]), len(x["decks"] - {""}), x["顧客"],
                                    *(count(x[r]) for r in RESULTS), "あり" if x["決めた"] else ""])))
     weekly(ws)
+    cs, _, qs, _ = state(ws)
+    misses = [c for c in cs.values() if c.get("plan")]
+    by_mode = lambda xs: "・".join(f"{m} {count([c for c in xs if c['plan'] == m])}" for m in ("AI", "人"))
+    print("\n構成の見逃し: " + by_mode(misses))
+    done = [q for q in qs.values() if q["rule"] == PLAN_RULE and q.get("answered")]
+    if done:  # 頼み方を見直すかに答えたあとは、そのあとに言われた見逃しで決める
+        q = max(done, key=lambda q: q["answered"])
+        print(f"  {q['id']} の答え（{q['answered']}）のあと: " + by_mode([c for c in misses if when(c) > q["answered"]]))
     return {k: {**x, "指摘": len(x["指摘"]), **{f: len(x[f]) for f in ("再発", *RESULTS)}} for k, x in rows.items()}
 
 
 def weekly(ws, weeks=8):
-    """週ごとに、誰が指摘を書いたか。dreaming が拾った分が取りこぼし（作る会話が台帳に書かなかった）。コンパクションの前に拾う hook を入れるかの材料。"""
+    """週ごとに、誰が指摘を書いたか。dreaming が拾った分が取りこぼし（作る会話が台帳に書かなかった）。コンパクションの前に拾う hook を入れるかの材料。
+    構成の見逃しは、方針のレビュー（AI・人）ごとの件数。構成案のレビューの頼み方を変えたあとに減ったかを見る。"""
     n = {}
     for c in state(ws)[0].values():
         y, w, _ = datetime.fromisoformat(when(c)[:10]).isocalendar()
-        n.setdefault(f"{y}-W{w:02d}", Counter())[by(c)] += 1
+        x = n.setdefault(f"{y}-W{w:02d}", Counter())
+        x[by(c)] += 1
+        if c.get("plan"):
+            x["plan:" + c["plan"]] += 1
     if n:
-        print("\n週\t作る会話\tdreaming（取りこぼし）\t取り込み\t取りこぼしの割合")
+        print("\n週\t作る会話\tdreaming（取りこぼし）\t取り込み\t取りこぼしの割合\t構成の見逃し（AI・人）")
     for k in sorted(n)[-weeks:]:
         x = n[k]
-        print(f"{k}\t{x['session']}\t{x['dreaming']}\t{x['import']}\t{x['dreaming'] / max(1, x['session'] + x['dreaming']):.0%}")
+        print(f"{k}\t{x['session']}\t{x['dreaming']}\t{x['import']}\t{x['dreaming'] / max(1, x['session'] + x['dreaming']):.0%}\t{x['plan:AI']}・{x['plan:人']}")
     return n
 
 
@@ -448,7 +470,7 @@ def questions(ws, everything=False):
     for q in out:
         tail = ""
         if q.get("a"):
-            tail = f" → 「{q['a']}」"
+            tail = f" → 「{q['a']}」（{q['answered']}）"
         elif q.get("reason"):
             tail = f"（{q['reason']}）"
         print(f"{q['id']} [{q['status']}] {q['q']}（{q['rule'] or '-'}、出典 {','.join(q['src']) or '-'}）{tail}")
@@ -491,8 +513,9 @@ def main(argv):
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("add")
     s.add_argument("--deck", required=True); s.add_argument("--quote", required=True); s.add_argument("--fix")
-    s.add_argument("--to", default="未"); s.add_argument("--check", default="なし"); s.add_argument("--session"); s.add_argument("--at"); s.add_argument("--decided", action="store_true"); s.add_argument("--once", action="store_true")
+    s.add_argument("--to", default="未"); s.add_argument("--check", default="なし"); s.add_argument("--session"); s.add_argument("--at"); s.add_argument("--decided", action="store_true"); s.add_argument("--plan", choices=("AI", "人")); s.add_argument("--once", action="store_true")
     s = sub.add_parser("route"); s.add_argument("id"); s.add_argument("to")
+    s = sub.add_parser("plan"); s.add_argument("id"); s.add_argument("mode", choices=("AI", "人", "なし"))
     s = sub.add_parser("list"); s.add_argument("--deck"); s.add_argument("--open", action="store_true"); s.add_argument("--to")
     s = sub.add_parser("why"); s.add_argument("id")
     sub.add_parser("rules")
@@ -519,6 +542,9 @@ def main(argv):
     elif a.cmd == "route":
         state(ws)[0].get(a.id) or sys.exit(f"指摘がない: {a.id}")
         write(ws, {"kind": "route", "ref": a.id, "to": a.to})
+    elif a.cmd == "plan":
+        state(ws)[0].get(a.id) or sys.exit(f"指摘がない: {a.id}")
+        write(ws, {"kind": "plan", "ref": a.id, "plan": a.mode})
     elif a.cmd == "list":
         deck = rel(ws, a.deck) if a.deck else None
         for c in state(ws)[0].values():
@@ -853,11 +879,37 @@ def selftest_candidates(quiet):
                 main(["add", "--deck", "Customers/a/d1", "--quote", "表を分けて", "--to", "ws-visual-001"])  # 作る会話
                 main(["add", "--deck", "Customers/b/d2", "--quote", "また表", "--to", "ws-visual-001", "--at", "2999-01-01T00:00"])  # dreaming
                 main(["add", "--deck", "Customers/a/d3", "--quote", "また表", "--to", "ws-visual-001", "--at", "2999-01-02T00:00"])
+                main(["add", "--deck", "Customers/a/d3", "--quote", "結論を先に", "--to", "戻さない", "--plan", "AI"])  # 構成の見逃し
+                main(["add", "--deck", "Customers/b/d2", "--quote", "順序を逆に", "--to", "戻さない"])
+                main(["plan", next(c["id"] for c in state(ws)[0].values() if c["quote"] == "順序を逆に"), "AI"])  # 作る会話が付け忘れた印を、あとから付ける
                 main(["add", "--deck", "Customers/a/d1", "--quote", "古い行", "--once"])  # 取り込み
                 for deck in ("Customers/a/d1", "Customers/b/d2"):
                     main(["add", "--deck", deck, "--quote", "敬称は様", "--to", "ws-memory-001"])
                 n = weekly(ws)
-            assert sum(x["session"] for x in n.values()) == 3 and sum(x["dreaming"] for x in n.values()) == 2 and sum(x["import"] for x in n.values()) == 1
+            assert sum(x["plan:AI"] for x in n.values()) == 2 and sum(x["plan:人"] for x in n.values()) == 0
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                summary(ws)
+            assert "構成の見逃し: AI 2（資料 2）・人 0（資料 0）" in out.getvalue()
+            with quiet():
+                main(["plan", next(c["id"] for c in state(ws)[0].values() if c["quote"] == "順序を逆に"), "なし"])  # 付け間違いを外す
+            assert sum(bool(c.get("plan")) for c in state(ws)[0].values()) == 1
+            assert "構成の見逃し: AI" in show(next(c for c in state(ws)[0].values() if c.get("plan")))
+            # 頼み方を見直すかに答えたら、答えのあとの見逃しだけを数える（同じ日の前とあとも分ける）
+            with quiet():
+                main(["ask", "--q", "構成案のレビューの頼み方を見直すか", "--rule", PLAN_RULE])
+            qid = next(q["id"] for q in state(ws)[2].values() if q["rule"] == PLAN_RULE)
+            write(ws, {"ts": "2030-01-01T12:00:00Z", "kind": "answered", "ref": qid, "a": "見直す"})
+            with quiet():
+                main(["add", "--deck", "Customers/b/d2", "--quote", "答えの前", "--to", "戻さない", "--plan", "AI", "--at", "2030-01-01T09:00"])
+                main(["add", "--deck", "Customers/a/d1", "--quote", "答えのあと", "--to", "戻さない", "--plan", "AI", "--at", "2030-01-01T15:00"])
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                summary(ws)
+                questions(ws, True)
+            assert "構成の見逃し: AI 3（資料 3）" in out.getvalue() and f"{qid} の答え（2030-01-01T12:00:00Z）のあと: AI 1（資料 1）・人 0（資料 0）" in out.getvalue()
+            assert "→ 「見直す」（2030-01-01T12:00:00Z）" in out.getvalue()
+            assert sum(x["session"] for x in n.values()) == 5 and sum(x["dreaming"] for x in n.values()) == 2 and sum(x["import"] for x in n.values()) == 1
             assert [by(c) for c in ({"date": "2026-10-07"}, {"at": "x"}, {"ts": "x"})] == ["import", "dreaming", "session"]  # by のない前の記録
             with quiet():
                 out = candidates(ws, plug)
