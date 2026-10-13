@@ -64,17 +64,22 @@ NUM = {"S": (0.3, 11), "M": (0.36, 14), "L": (0.48, 18)}  # 図の中の印／�
 EMPH_PT = 2
 
 # ---- 色の役割（visual.md の 1）。テーマの色の枠の名前 ----
-NAVY, BG, RED_ON_NAVY, PANEL = "DARK1", "LIGHT1", "DARK2", "LIGHT2"  # 扉の地・見出し・結論バンド／本文の地／濃紺の上の赤／パネル
+NAVY, BG, RED_ON_NAVY, PANEL = "DARK1", "LIGHT1", "DARK2", "LIGHT2"  # 表紙・扉の地、結論バンド、表の見出しの行、コードの箱／本文の地／濃紺の上の赤／パネル
 NAVY_BLOCK, GA, RED_TEXT, PREVIEW = "ACCENT1", "ACCENT2", "ACCENT3", "ACCENT4"  # 扉の中のブロック／GA の札／18pt 未満の赤の文字／Beta・Preview の札
 SUB, OSS, RED = "ACCENT5", "ACCENT6", "HYPERLINK"  # 補助の文字とフッター／OSS の札／赤のアクセント（塗りと 18pt 以上の文字）
-# テーマに入れない色。WHITE・CARD はどのテーマでも同じ
-WHITE = CARD = "FFFFFF"
+# テーマに入れない色。WHITE はどのテーマでも同じ
+WHITE = "FFFFFF"
 TEXT, RULE, RED_SOFT, STAGE_TEXT, DECOR = "303F47", "DCE0E2", "FFECE8", "0B2026", "3E5159"  # 本文／罫線と濃紺の上の補足／淡い赤／札の文字／章番号（飾り）
 # 上の 5 色は既定の値。factory.toml の [slides.themes.<名前>] に同じ名前で書くと、そのテーマのデッキでは paint とアイコンが置き換える（use_theme）。
 # pages.py には名前（か既定の 6 桁）で書く。マスターの配色に枠が残っていない（12 の枠をすべて使う）ので、組むときに置き換える
 FIXED = {"TEXT": TEXT, "RULE": RULE, "RED_SOFT": RED_SOFT, "STAGE_TEXT": STAGE_TEXT, "DECOR": DECOR}
+# 名前で引く役割（名前 → 書かないときの色）。既定は今の色（役割の枠か、上の色）と同じで、暗い本文のテーマ（../../deck-template/SKILL.md）が分けて書く。
+# 既定の値を WHITE や NAVY と共有するので、FIXED のように値では置き換えない。pages.py には名前で書く
+NAMED = {"HEAD": NAVY, "CARD": WHITE, "SUB_ON_NAVY": RULE, "ON_RED": WHITE}
+HEAD, CARD, SUB_ON_NAVY, ON_RED = NAMED  # 本文のページの見出しの文字／カードと表のセルの地／濃紺の上の補足の文字とフッター／RED の塗りの上の文字
 THEME_MARK = re.compile(r"ai-deck-factory theme=([A-Za-z0-9_-]+)")  # template.py がマスターのページ番号の枠の代替テキストに書く。Drive の複製でも残る（2026-10-13）
 _SWAP = {}  # 組んでいるデッキの、FIXED の既定の値 → テーマの値（use_theme が決める）
+_NAMED = {}  # 組んでいるデッキの、テーマが書いた NAMED の値（use_theme が決める）
 # 提供ステージの札の塗り（visual.md の 1）。本番で使える Public Preview は、Beta・Private Preview（本番向けではない）の黄と分け、GA の緑を 4 割にした色（2026-10-09）
 PUBLIC_PREVIEW = "99DDC7"
 STAGE_FILL = {"GA": GA, "Public Preview": PUBLIC_PREVIEW, "Beta": PREVIEW, "Private Preview": PREVIEW, "OSS": OSS}  # 札の文字は OSS だけ WHITE、ほかは STAGE_TEXT
@@ -217,8 +222,9 @@ def fixed(c):
     return _SWAP.get(c.upper(), c) if isinstance(c, str) else c
 
 
-def paint(c):  # 役割の名前ならテーマの色、6 桁ならその色（固定の色はテーマの値）
-    return {"themeColor": c} if c in SLOTS else {"rgbColor": rgb(fixed(c))}
+def paint(c):  # 役割の名前ならテーマの色、6 桁ならその色（固定の色はテーマの値）。NAMED はテーマが書いた値、書いていなければ既定の色
+    c = _NAMED[c] if c in _NAMED else fixed(NAMED.get(c, c))
+    return {"themeColor": c} if c in SLOTS else {"rgbColor": rgb(c)}
 
 
 def u16(s):  # Slides API の文字位置は UTF-16 の単位
@@ -273,7 +279,7 @@ class Deck:
 
     def __init__(self, name):
         self.name, self.reqs, self.notes, self.slides, self.images, self.n = name, [], {}, [], [], 0
-        self.dark = set()   # 濃紺の地のページ（フッターとページ番号を淡い色にする）
+        self.dark = set()   # 濃紺の地のページ（表紙・扉。フッターとページ番号を SUB_ON_NAVY にする）。本文の地が暗いテーマでも、本文のページは入らない
         self.links = []     # ページへのリンク（要求, ページ番号）。すべてのページを作ってから付ける
         self.nofoot = set()  # フッターとページ番号を置かないページ（全面に画像を貼るページなど）
         self.round_groups = []  # 角丸・正円の背景と文字の枠を、文字を書き終わってから 1 つにまとめる
@@ -478,12 +484,13 @@ class Deck:
         return e
 
     def num(self, sid, n, cx, cy, size="M", fill=RED):
-        """正円の番号。(cx, cy) は円の中心（大きさを替えても位置が動かず、横に並べる見出しと中心をそろえやすい）。size は NUM の S・M・L。"""
+        """正円の番号。(cx, cy) は円の中心（大きさを替えても位置が動かず、横に並べる見出しと中心をそろえやすい）。size は NUM の S・M・L。
+        数字は、RED の塗りなら ON_RED、ほかの塗りなら WHITE。"""
         dia, pt_ = NUM[size]
-        return self.text(sid, cx - dia / 2, cy - dia / 2, dia, dia, str(n), size=pt_, color=WHITE, bold=True, align="CENTER", valign="MIDDLE",
+        return self.text(sid, cx - dia / 2, cy - dia / 2, dia, dia, str(n), size=pt_, color=ON_RED if fill == RED else WHITE, bold=True, align="CENTER", valign="MIDDLE",
                          fill=fill, kind="ELLIPSE")
 
-    def label(self, sid, v, x, y, w, h, fill=PANEL, color=NAVY, size=11, bold=True, align="CENTER", radius=CORNER_RADIUS, pad=None, mono=False):
+    def label(self, sid, v, x, y, w, h, fill=PANEL, color=HEAD, size=11, bold=True, align="CENTER", radius=CORNER_RADIUS, pad=None, mono=False):
         """塗りの箱と、その中の短い言葉（札・日付・工程の名前）。図形と文字を 1 つにする（slides.md の 4）。
         左寄せ（align="START"）なら、箱の端と文字の間を 1 字分空ける（text の pad）。"""
         return self.text(sid, x, y, w, h, v, size=size, color=color, bold=bold, align=align, valign="MIDDLE", fill=fill, radius=radius, pad=pad, mono=mono)
@@ -509,7 +516,7 @@ class Deck:
             h = card_h(w, head, body, items, step, bullets)
         self.box(sid, x, y, w, h, fill, line)
         if head:
-            self.text(sid, x + PAD, y + 0.1, w - 2 * PAD, 0.34, head, size=12, color=NAVY, bold=True)
+            self.text(sid, x + PAD, y + 0.1, w - 2 * PAD, 0.34, head, size=12, color=HEAD, bold=True)
         top = y + (0.5 if head else 0.1)
         if items and step is None:
             parts = []
@@ -524,7 +531,7 @@ class Deck:
 
     def table(self, sid, x, y, widths, rows, size=11, row_h=0.36, header=True, first_col=True, zebra=True, align=None, mono_cols=()):
         """rows は文字列の 2 次元の並び（1 行目が見出し）。セルの中の改行は \\n。縦の罫線なし、横の罫線は RULE（visual.md の 5）。
-        見出しの行は濃紺に白の太字、1 列目は濃紺の太字（first_col）、行は 1 行おきに PANEL（zebra）。align は列ごとの "l"・"c"・"r"（金額は右）。
+        見出しの行は濃紺に白の太字、1 列目は HEAD の太字（first_col）、行は 1 行おきに PANEL（zebra）、ほかは CARD。align は列ごとの "l"・"c"・"r"（金額は右）。
         行は文字に合わせて伸びる（row_h は最小）。戻りは表の下端の見込み（in。下に置く要素の位置に使う）。
         mono_cols の列は、見出しの行を除いて英数字を等幅の MONO にする（コマンドの一覧など。visual.md の 2）。"""
         t, nr, nc = self.oid(), len(rows), len(widths)
@@ -568,7 +575,7 @@ class Deck:
                 self.reqs += [{"insertText": {"objectId": t, "cellLocation": loc, "insertionIndex": 0, "text": s}},
                               {"updateTextStyle": {"objectId": t, "cellLocation": loc, "textRange": {"type": "ALL"},
                                                    "style": {"fontFamily": FONT, "fontSize": pt(size), "bold": head or first,
-                                                             "foregroundColor": {"opaqueColor": paint(WHITE if head else NAVY if first else TEXT)}},
+                                                             "foregroundColor": {"opaqueColor": paint(WHITE if head else HEAD if first else TEXT)}},
                                                    "fields": "fontFamily,fontSize,bold,foregroundColor"}},
                               {"updateParagraphStyle": {"objectId": t, "cellLocation": loc, "textRange": {"type": "ALL"},
                                                         "style": {"lineSpacing": 120 if est_lines(s, avail, size) > 1 else 100, "spaceAbove": pt(0), "spaceBelow": pt(0),
@@ -623,7 +630,7 @@ class Deck:
             sz -= 0.5
         if sz < 24:
             self.warn(f"見出しを {sz:g}pt に縮めた「{title}」")
-        self.text(sid, X - INSET, Y_TITLE, W + 2 * INSET, 0.5, title, size=sz, color=NAVY, bold=True)
+        self.text(sid, X - INSET, Y_TITLE, W + 2 * INSET, 0.5, title, size=sz, color=HEAD, bold=True)
         if lead:
             if est_lines(lead, W, 12) > 1:
                 self.warn(f"リードが 2 行の見込み「{lead}」")
@@ -639,7 +646,7 @@ class Deck:
         if sub:
             self.text(s, X - INSET, 2.7 + 0.62 * lines + 0.23, W + 2 * INSET, 0.4, sub, size=13, color=RED_ON_NAVY, bold=True)
         if COMPANY:
-            self.text(s, X - INSET, 6.7, W + 2 * INSET, 0.3, COMPANY, size=11, color=RULE)
+            self.text(s, X - INSET, 6.7, W + 2 * INSET, 0.3, COMPANY, size=11, color=SUB_ON_NAVY)
         return s
 
     def divider(self, num, title, sub=None):
@@ -657,7 +664,7 @@ class Deck:
         avail = W - 2 * BAND_PAD_X
         if h is None:
             h = 2 * BAND_PAD_Y + est_lines(head, avail, 13) * 0.25 + (est_lines(sub, avail, 11) * 0.21 if sub else 0)
-        parts = [(head, {"bold": True, "size": 13})] + ([("\n" + sub, {"size": 11, "color": RULE})] if sub else [])
+        parts = [(head, {"bold": True, "size": 13})] + ([("\n" + sub, {"size": 11, "color": SUB_ON_NAVY})] if sub else [])
         self.box(sid, X, BAND_BOTTOM - h, W, h, NAVY)
         self.text(sid, X + BAND_PAD_X - INSET, BAND_BOTTOM - h, W - 2 * (BAND_PAD_X - INSET), h, parts, color=WHITE, valign="MIDDLE", spacing=115, fit=False)
         return BAND_BOTTOM - h
@@ -672,7 +679,7 @@ class Deck:
 
     def finish(self):
         """表紙・扉を含む全ページの左下に著作権表示。資料名は出さず、NAME の秘密区分だけを残す。表紙のページ番号の枠は消す。
-        ページ番号は著作権表示と同じ大きさにする。濃紺の地では、著作権表示とページ番号を罫線の色にする（SUB は届かない）。foot=False の流用ページは元の表示を維持する。
+        ページ番号は著作権表示と同じ大きさにする。濃紺の地（表紙・扉）では、著作権表示とページ番号を SUB_ON_NAVY にする（SUB は届かない）。foot=False の流用ページは元の表示を維持する。
         ページへのリンクを、ページの ID で付ける（番号で持つと、画面でページを足したり並べ替えたりしたときにずれる）。"""
         classification = re.search(r"(?:^|[｜|])\s*(Internal Only|Confidential)\s*$", self.name, re.I)
         footer = COPYRIGHT + (f"｜{classification.group(1)}" if classification else "")
@@ -681,7 +688,7 @@ class Deck:
                 if sid != self.slides[0]:
                     self.reqs.append({"deleteObject": {"objectId": sid + "_n"}})
                 continue
-            c = RULE if sid in self.dark else SUB
+            c = SUB_ON_NAVY if sid in self.dark else SUB
             self.text(sid, X - INSET, Y_FOOT, W - 1.2, 0.28, footer, size=COPYRIGHT_PT, color=c)
             if sid != self.slides[0]:  # 前のテンプレート（ページ番号が 11pt）から作ったデッキも、組み直せばそろう
                 self.reqs += number_style(sid + "_n", c)
@@ -754,10 +761,11 @@ def theme_table(name):
 
 
 def theme_fixed(t):
-    """テーマの表 t の固定の色（名前 → 6 桁）。書いていない色は FIXED の既定。"""
-    if bad := [k for k in FIXED if k in t and not re.fullmatch(r"#?[0-9A-Fa-f]{6}", str(t[k]))]:
+    """テーマの表 t の固定の色（名前 → 6 桁）。FIXED は書いていなければ既定の値、NAMED は書いたものだけ。"""
+    if bad := [k for k in (*FIXED, *NAMED) if k in t and not re.fullmatch(r"#?[0-9A-Fa-f]{6}", str(t[k]))]:
         sys.exit(f"[slides.themes] の {', '.join(bad)} が 6 桁の 16 進の色でない（例: TEXT = \"37352F\"）")
-    return {k: str(t.get(k, v)).lstrip("#").upper() for k, v in FIXED.items()}
+    return {k: str(t.get(k, v)).lstrip("#").upper() for k, v in FIXED.items()} | {k: str(t[k]).lstrip("#").upper() for k in NAMED if k in t}
+
 
 
 def theme_values(t):
@@ -773,7 +781,9 @@ def use_theme(t):
     global COPYRIGHT, MONO
     colors, COPYRIGHT, MONO = theme_values(t)
     _SWAP.clear()
-    _SWAP.update({FIXED[k]: v for k, v in colors.items() if v != FIXED[k]})
+    _SWAP.update({FIXED[k]: colors[k] for k in FIXED if colors[k] != FIXED[k]})
+    _NAMED.clear()
+    _NAMED.update({k: colors[k] for k in NAMED if k in colors})
 
 
 def theme_font(t):
@@ -796,6 +806,11 @@ def theme_mono(t):
 def deck_mono(p):
     """デッキの等幅の書体（デッキのテーマの mono。lint が比べる）。マスターにコードの枠がないので、deck_font と違いテーマの名前から引く。"""
     return theme_mono(theme_table(deck_theme(p)))
+
+
+def deck_card(p):
+    """デッキのカードの地の 6 桁（デッキのテーマの CARD。書かなければ白）。lint と box_pad がカードを見分ける。"""
+    return theme_fixed(theme_table(deck_theme(p))).get(CARD, WHITE)
 
 
 def need_mark(want, mark):
@@ -1135,6 +1150,24 @@ def selftest():
     for empty in ({}, theme_table("ない")):  # 値がないテーマと、factory.toml にないテーマは、今の値に戻す
         use_theme(empty)
         assert not _SWAP and COPYRIGHT == BRAND_COPYRIGHT and theme_fixed(empty) == FIXED and paint(TEXT) == {"rgbColor": rgb("303F47")} and MONO == MONO_DEFAULT
+    # NAMED の役割: 書かなければ今の色（HEAD は NAVY の枠、CARD・ON_RED は白、SUB_ON_NAVY は RULE。RULE を替えたらそれに付いていく）
+    use_theme({})
+    assert paint(HEAD) == paint(NAVY) == {"themeColor": "DARK1"} and paint(CARD) == paint(ON_RED) == paint(WHITE) == {"rgbColor": rgb("FFFFFF")} and paint(SUB_ON_NAVY) == paint(RULE)
+    use_theme({"RULE": "C9CDD0"})
+    assert paint(SUB_ON_NAVY) == paint(RULE) == {"rgbColor": rgb("C9CDD0")}
+    dark = {"HEAD": "F0F0FA", "CARD": "#0a0a0a", "SUB_ON_NAVY": "C0C0C8", "ON_RED": "000000", "RULE": "2E3033", "TEXT": "D8D8E1"}
+    use_theme(dark)  # 暗い本文: 書いた役割だけが替わり、同じ値を共有していた WHITE・NAVY・RULE は替わらない
+    assert paint(HEAD) == {"rgbColor": rgb("F0F0FA")} and paint(NAVY) == {"themeColor": "DARK1"} and paint(CARD) == {"rgbColor": rgb("0A0A0A")}
+    assert paint(WHITE) == {"rgbColor": rgb("FFFFFF")} and paint(SUB_ON_NAVY) == {"rgbColor": rgb("C0C0C8")} and paint(RULE) == {"rgbColor": rgb("2E3033")}
+    t = make_deck(lambda d: (d.cover("t", "k"), d.divider("1", "扉"), d.num(d.page("本文"), 1, 2, 2), d.num(d.slides[-1], 2, 3, 3, fill=NAVY)), "foot")
+    assert t.dark == set(t.slides[:2])  # 本文の地が暗くても、本文のページは扉に入れない（フッターは SUB）
+    fg = [r["updateTextStyle"]["style"]["foregroundColor"]["opaqueColor"] for r in t.reqs if r.get("updateTextStyle", {}).get("style", {}).get("fontSize") == pt(NUM["M"][1])]
+    assert fg == [paint(ON_RED), paint(WHITE)]  # RED の塗りの数字は ON_RED、ほかの塗りは WHITE
+    assert theme_fixed(dark)["CARD"] == "0A0A0A" and theme_fixed({}) == FIXED  # NAMED は書いたものだけ
+    globals()["theme_table"], table = (lambda n: dark if n == "d" else {}), theme_table
+    assert deck_card(mark("ai-deck-factory theme=d")) == "0A0A0A" and deck_card(mark("")) == WHITE  # lint と box_pad がカードを見分ける色
+    globals()["theme_table"] = table
+    use_theme({})
     for bad in ("Fira Code", "jetbrains  mono", " "):  # リガチャの出る書体（書き方の揺れも）と、名前でないもの
         try:
             theme_mono({"mono": bad})

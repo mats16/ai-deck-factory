@@ -24,7 +24,7 @@
 
   | 用途 | 役割の名前（テーマの枠） | visual | company |
   |---|---|---|---|
-  | 扉の地・見出し・結論バンド | `NAVY`（DARK1） | `1B3139`（Navy 800） | 同じ |
+  | 表紙・扉の地、結論バンド・表の見出しの行・コードの箱の地 | `NAVY`（DARK1） | `1B3139`（Navy 800） | 同じ |
   | 扉の中のブロック | `NAVY_BLOCK`（ACCENT1） | `303F47`（Gray ナビ） | `1B5162` |
   | 本文スライドの地 | `BG`（LIGHT1） | `F9F7F4`（Oat Light） | 同じ |
   | パネル・表の 1 行おきの地（表の見出しの行は `NAVY`。5） | `PANEL`（LIGHT2） | `EEEDE9`（Oat Medium） | 同じ |
@@ -33,10 +33,12 @@
   | 赤の文字（キッカー・強調など 18pt 未満） | `RED_TEXT`（ACCENT3） | `CC2B17` | `98102A`（Maroon 600） |
   | 扉の小見出し・副題 | `RED_ON_NAVY`（DARK2） | `FF5F46`（Lava 500） | 同じ |
   | 提供ステージのラベルの塗り | `GA`（ACCENT2）・`PREVIEW`（ACCENT4。Beta・Private Preview）・`OSS`（ACCENT6）。Public Preview はテーマに入れない `PUBLIC_PREVIEW` | `00A972`（Green 600）・`FFAB00`（Yellow 600）・`2272B4`（Blue 600）・`99DDC7`（Green 600 を 4 割にした色） | `00A972`・`FFAB00`・`4359FF`・`99DDC7` |
-  | テーマに入れない色（`TEXT`・`RULE`・`RED_SOFT`・`STAGE_TEXT`・`DECOR` は、ほかの会社のテーマで替えられる。`../deck-template/SKILL.md`） | `TEXT`・`CARD`・`RULE`・`RED_SOFT`・`STAGE_TEXT`・`WHITE` | 本文 `303F47`、カード `FFFFFF`、罫線 `DCE0E2`（Gray 罫線）、淡い赤 `FFECE8`、札の文字 `0B2026`（Navy 900）、白 | 同じ |
+  | テーマに入れない色（`TEXT`・`RULE`・`RED_SOFT`・`STAGE_TEXT`・`DECOR` は、ほかの会社のテーマで替えられる。`../deck-template/SKILL.md`） | `TEXT`・`RULE`・`RED_SOFT`・`STAGE_TEXT`・`WHITE` | 本文 `303F47`、罫線とカードの枠線 `DCE0E2`（Gray 罫線）、淡い赤 `FFECE8`、札の文字 `0B2026`（Navy 900）、白 | 同じ |
+  | 名前で書く役割（テーマで替えられる。書かなければ右の色。本文の地が暗いテーマで分ける。`../deck-template/SKILL.md` の「暗い本文のテーマ」） | `HEAD`（本文のページの見出し・カードの見出し・`d.label` の文字・表の 1 列目）・`CARD`（カードと表のセルの地）・`SUB_ON_NAVY`（濃紺の上の補足・表紙と扉のフッター）・`ON_RED`（`RED` の塗りの上の文字。番号の丸） | `NAVY` と同じ・`FFFFFF`・`RULE` と同じ・`FFFFFF` | 同じ |
 
-  - [visual-004] 本文ページの濃紺の箱の中に群（コンピュートとストレージの段など）を置くときは、淡色（`PANEL`・`CARD`）の箱に濃紺の文字にする。`NAVY_BLOCK` は扉（濃紺の地）の中のブロック用で、濃紺の箱の上では地との差が小さく、群の境が見えない。lint が要確認に出す。
-  - 濃紺の上の文字は `WHITE`、補足は `RULE`。提供ステージのラベルの文字は、GA・Public Preview・Beta・Private Preview が `STAGE_TEXT`、OSS が `WHITE`。
+  - [visual-004] 本文ページの濃紺の箱の中に群（コンピュートとストレージの段など）を置くときは、淡色（`PANEL`・`CARD`）の箱に `HEAD` の文字にする。`NAVY_BLOCK` は扉（濃紺の地）の中のブロック用で、濃紺の箱の上では地との差が小さく、群の境が見えない。lint が要確認に出す。
+  - 本文のページの見出しの文字は `HEAD`、カードの地は `CARD`、カードの枠線と罫線は `RULE`（pages.py でも `NAVY`・`WHITE` と書かない。暗い本文のテーマで読めなくなる）。
+  - 濃紺の上の文字は `WHITE`、補足は `SUB_ON_NAVY`。`RED` の塗りの上の文字は `ON_RED`。提供ステージのラベルの文字は、GA・Public Preview・Beta・Private Preview が `STAGE_TEXT`、OSS が `WHITE`。
 
   - 赤の文字 `CC2B17` だけは公式のパレットにない。公式の Lava 600 は小さな文字では 3.4:1 で届かず、Maroon 600 `98102A` では赤のアクセントに見えないので、Lava 600 を暗くした色にした（visual）。company は会社のテーマの色を優先して `98102A`（8.0:1）。
   - company の `SUB` は、会社のテーマの ACCENT5 `618794`（フッターの色）が Oat Light の上で 3.64:1、Oat Medium の上で 3.32:1 で届かないので、色相を保って暗くした（Oat Medium の上で 4.54:1）。ほかの枠は、表の組み合わせで基準を満たす（2026-10-07 に測った）。
