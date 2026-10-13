@@ -424,8 +424,8 @@ def main():
             d = specimen(theme)
             assert len(d.slides) == 6 and not d.images and all(s in d.notes for s in d.slides)
         assert all(not fix(T)[1] for T in THEMES.values())  # 組み込みのテーマは、役割の組がすべて届く
-        F, out = fix({**THEMES["company"], SUB: "618794"})  # 2026 年版の Databricks Theme の ACCENT5。Oat Medium の上で 3.32:1
-        assert {o[1] for o in out} == {SUB} and F[SUB] == "51707C"  # 同じ青緑のまま暗くする（手で選んだ company の 50707B とほぼ同じ）
+        F, out = fix({**THEMES["company"], SUB: "618794"})  # 公式のテンプレートの ACCENT5。Oat Medium の上で 3.32:1
+        assert {o[1] for o in out} == {SUB} and F[SUB] == "506F7A"  # 同じ青緑のまま暗くする（company の SUB はこの案）
         assert contrast(shift("FFFFFF", "FFFFFF", 4.5), "FFFFFF") >= 4.5  # 同じ色からでも離す
         assert contrast(shift("4A5A70", "5A6E8C", 4.5), "5A6E8C") >= 4.5  # 暗くしても届かない色は明るくする
         F, out = fix({**THEMES["visual"], NAVY: "1F6FB2", RED_ON_NAVY: "B22222"})  # 中くらいの青の NAVY に、RED をそのまま写した RED_ON_NAVY

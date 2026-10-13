@@ -89,12 +89,13 @@ _COMMON = dict(DARK1="1B3139", LIGHT1="F9F7F4", DARK2="FF5F46", LIGHT2="EEEDE9",
 THEMES = {  # 色を変えたら template.py <テーマ> でテンプレートに入れる
     # このフォルダの色（visual.md の 1。2025 年版の公式パレットから、コントラストを確かめて選んだもの）
     "visual": {**_COMMON, "ACCENT1": "303F47", "ACCENT3": "CC2B17", "ACCENT5": "5A6F77", "ACCENT6": "2272B4"},
-    # 2026 年版の「Databricks Theme」の色。役割のコントラストに届かない ACCENT5（618794、Oat Medium の上で 3.32:1）だけを暗くした
-    "company": {**_COMMON, "ACCENT1": "1B5162", "ACCENT3": "98102A", "ACCENT5": "50707B", "ACCENT6": "4359FF"},
+    # 2026 年の公式テンプレートの色。本文の地は白。小さな赤の文字（Lava 600、白の上で 3.62:1）と
+    # ACCENT5（618794、白の上で 3.89:1）は、色相を保って暗くした（2026-10-13）
+    "company": {**_COMMON, "LIGHT1": "FFFFFF", "ACCENT1": "1B5162", "ACCENT3": "D61400", "ACCENT5": "506F7A", "ACCENT6": "4359FF"},
 }
 THEME_NOTES = {  # 組み込みのテーマの使い分け（slides.py themes が出す）。factory.toml の [slides.themes.<名前>] の description で書き換えられる
     "visual": "既定の配色。濃紺の扉、淡い Oat の本文面、赤のアクセント。会社の色の指定がない資料（勉強会、技術の説明、提案）",
-    "company": "Databricks の 2026 年版の会社の色（Databricks Theme）。Databricks の正式な色にそろえたいとき",
+    "company": "Databricks の 2026 年の公式テンプレートの色。白地の本文、濃紺の表紙と扉、Lava の赤。Databricks の正式な見た目にそろえたいとき",
 }
 
 
