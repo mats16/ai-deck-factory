@@ -19,7 +19,7 @@ AI Deck Factory のテンプレートは、`slides.py new` が複製する Googl
 |---|---|---|
 | 色の役割（11 の枠と固定の 6 色）と、組ごとのコントラスト（18pt 未満は 4.5:1、18pt 以上か 14pt 以上の太字は 3:1） | `../deck-practices/visual.md` の 1（表と注）・3 | `template.py check`（役割の組 `PAIRS`）、`gslides.py check` の「コントラストが基準に届かない色の組」 |
 | 書体（Noto Sans JP、コードだけ Cascadia Mono。Google Fonts にない書体は描けない） | `visual.md` の 2、`../deck-build/SKILL.md` の「納品物」、下の「書体」 | lint の「書体が … でない」（テンプレートの書体と比べる） |
-| 文字の大きさ（11pt 以上。著作権表示だけ 9pt）と版面（13.33 × 7.5 in、左右の余白 0.6 in、要素の上端） | `visual.md` の 1 | lint、`slides.py` の定数 |
+| 文字の大きさ（11pt 以上。著作権表示とページ番号だけ 9pt）と版面（13.33 × 7.5 in、左右の余白 0.6 in、要素の上端） | `visual.md` の 1 | lint、`slides.py` の定数 |
 | visual・company のテーマの値 | `../deck-build/scripts/slides.py` の `THEMES` | `template.py check visual` |
 | テンプレートの作り方と、テンプレートが決めるもの | `../deck-build/slides.md` の 3 と、このファイル | `template.py` |
 | 調べた経緯（文字の大きさの下限、コントラスト、色の数） | ワークスペースの `Research/deck_research/log/20261006_jp_visual.md` の 1-1・1-5・1-6、`Research/deck_research/state.md` の「採用したもの」 | |
