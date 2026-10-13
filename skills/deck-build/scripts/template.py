@@ -15,28 +15,31 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gapi import DRIVE, SLIDES, batch, factory, factory_path, file_id, find_factory, folder_id, request, run, trash
 from lint import JA, cells, contrast, flatten, lum, paras
-from slides import (BG, BLANK, CARD, COPYRIGHT_PT, DECOR, EMU, FONT, GA, INSET, NAVY, NAVY_BLOCK, OSS, PAD, PANEL, PREVIEW, RED, RED_ON_NAVY,
-                    RED_SOFT, RED_TEXT, RULE, SLOTS, STAGE_TEXT, SUB, TEXT, THEMES, WHITE, W, X, Y_BODY, Y_FOOT, build, cols, make_deck, number_style, rgb)
-from slides import FIXED as FIXED_DEFAULT, JP_FONTS, THEME_MARK, is_blank, need_brand, placeholders, theme_fixed, theme_font, use_theme
+from slides import (BG, BLANK, CARD, COPYRIGHT_PT, DECOR, EMU, FONT, GA, HEAD, INSET, NAVY, NAVY_BLOCK, ON_RED, OSS, PAD, PANEL, PREVIEW, RED, RED_ON_NAVY,
+                    RED_SOFT, RED_TEXT, RULE, SLOTS, STAGE_TEXT, SUB, SUB_ON_NAVY, TEXT, THEMES, WHITE, W, X, Y_BODY, Y_FOOT, build, cols, make_deck, number_style, rgb)
+from slides import FIXED as FIXED_DEFAULT, JP_FONTS, NAMED, THEME_MARK, is_blank, need_brand, placeholders, theme_fixed, theme_font, use_theme
 
 THEMES_DIR = "Themes"  # テンプレートを作る Drive のフォルダ。[drive] factory の下（なければ作る）。使うテンプレートは [slides.themes.<名前>] の url で 1 つずつ指す
 FOLDER = "application/vnd.google-apps.folder"
 NAMES = {"visual": "テンプレート（visual: このフォルダの色）", "company": "テンプレート（company: 会社の色をコントラストだけ調整）"}
-ROLES = [(NAVY, "NAVY", "扉の地・見出し・結論バンド"), (BG, "BG", "本文スライドの地"), (RED_ON_NAVY, "RED_ON_NAVY", "濃紺の上の赤（扉の小見出し）"),
+ROLES = [(NAVY, "NAVY", "表紙・扉の地・結論バンド・表の見出しの行"), (BG, "BG", "本文スライドの地"), (RED_ON_NAVY, "RED_ON_NAVY", "濃紺の上の赤（扉の小見出し）"),
          (PANEL, "PANEL", "パネル・表の 1 行おきの地"), (NAVY_BLOCK, "NAVY_BLOCK", "扉の中のブロック"), (GA, "GA", "GA の札の塗り"),
          (RED_TEXT, "RED_TEXT", "18pt 未満の赤の文字"), (PREVIEW, "PREVIEW", "Beta・Preview の札の塗り"), (SUB, "SUB", "補助の文字・フッター"),
          (OSS, "OSS", "OSS の札の塗り"), (RED, "RED", "赤のアクセント（塗り、18pt 以上）")]
-FIXED = [(TEXT, "TEXT", "本文の文字", WHITE, None), (CARD, "CARD・WHITE", "カードと扉の文字", TEXT, RULE), (RULE, "RULE", "罫線と扉の補足", TEXT, None),
-         (RED_SOFT, "RED_SOFT", "小さな赤の札の地", RED_TEXT, None), (STAGE_TEXT, "STAGE_TEXT", "札の文字", WHITE, None), (DECOR, "DECOR", "章番号。部品が使う", WHITE, None)]  # テーマに入れない色（既定の値, 名前, 用途, 載せる文字, 罫線）
-ON = {NAVY: WHITE, NAVY_BLOCK: WHITE, RED_TEXT: WHITE, SUB: WHITE, OSS: WHITE, BG: TEXT, PANEL: TEXT}  # 枠に載せる文字の色。ほかは札の文字の色
+FIXED = [(TEXT, "TEXT", "本文の文字", WHITE, None), (HEAD, "HEAD", "本文のページの見出し", WHITE, None), (CARD, "CARD", "カードと表のセルの地", TEXT, RULE),
+         (WHITE, "WHITE", "濃紺の上の文字", TEXT, RULE), (RULE, "RULE", "罫線・カードの枠線", TEXT, None), (SUB_ON_NAVY, "SUB_ON_NAVY", "濃紺の上の補足・フッター", TEXT, None),
+         (ON_RED, "ON_RED", "RED の塗りの上の文字", TEXT, RULE), (RED_SOFT, "RED_SOFT", "小さな赤の札の地", RED_TEXT, None), (STAGE_TEXT, "STAGE_TEXT", "札の文字", WHITE, None),
+         (DECOR, "DECOR", "章番号。部品が使う", WHITE, None)]  # テーマに入れない色（既定の値か NAMED の名前, 名前, 用途, 載せる文字, 枠線）
+ON = {NAVY: WHITE, NAVY_BLOCK: WHITE, RED_TEXT: WHITE, SUB: WHITE, OSS: WHITE, BG: TEXT, PANEL: TEXT}  # 枠に載せる文字の色（届かなければ、札の文字か白の届くほう）。ほかは札の文字の色
 ROLE = {name: slot for slot, name, _ in ROLES}  # factory.toml の [slides.themes.<名前>] に書く役割の名前 → テーマの枠
-# 役割の組（文字, 地, 基準, どこで使うか）。visual.md の 1・3 の組み合わせ。18pt 未満は 4.5:1、18pt 以上か 14pt 以上の太字は 3:1。visual・company はすべて届く
-PAIRS = [(WHITE, NAVY, 4.5, "結論バンドの白"), (RULE, NAVY, 4.5, "濃紺の上の補足・フッター"), (RED_ON_NAVY, NAVY, 4.5, "表紙の小見出し"),
-         (NAVY, BG, 4.5, "見出し・カードの見出し"), (NAVY, PANEL, 4.5, "パネルの見出し"), (NAVY, CARD, 4.5, "白いカードの見出し"),
-         (TEXT, BG, 4.5, "本文"), (TEXT, PANEL, 4.5, "パネルの本文"), (SUB, BG, 4.5, "出典・フッター"), (SUB, PANEL, 4.5, "パネルの補足"),
+# 役割の組（文字, 地, 基準, どこで使うか）。visual.md の 1・3 の組み合わせ。18pt 未満は 4.5:1、18pt 以上か 14pt 以上の太字は 3:1。visual・company はすべて届く。
+# NAMED の役割（HEAD・CARD・SUB_ON_NAVY・ON_RED）は、テーマが書いていなければ既定の色で測る（alias）。本文の地が暗いテーマも同じ組で測る
+PAIRS = [(WHITE, NAVY, 4.5, "結論バンドの白"), (SUB_ON_NAVY, NAVY, 4.5, "濃紺の上の補足・フッター"), (RED_ON_NAVY, NAVY, 4.5, "表紙の小見出し"),
+         (HEAD, BG, 4.5, "見出し"), (HEAD, PANEL, 4.5, "パネルの見出し"), (HEAD, CARD, 4.5, "カードの見出し・表の 1 列目"),
+         (TEXT, BG, 4.5, "本文"), (TEXT, PANEL, 4.5, "パネルの本文"), (TEXT, CARD, 4.5, "カードの本文"), (SUB, BG, 4.5, "出典・フッター"), (SUB, PANEL, 4.5, "パネルの補足"),
          (SUB, CARD, 4.5, "カードの補足"), (RED_TEXT, BG, 4.5, "キッカー"), (RED_TEXT, PANEL, 4.5, "パネルの赤の文字"), (RED_TEXT, CARD, 4.5, "カードの赤の文字"),
-         (RED_TEXT, RED_SOFT, 4.5, "淡い赤の札"), (RED, BG, 3.0, "18pt 以上の赤の文字"), (WHITE, RED, 3.0, "赤の塗りの 14pt 以上の太字"),
-         (WHITE, NAVY_BLOCK, 4.5, "扉の中のブロックの白"), (RULE, NAVY_BLOCK, 4.5, "扉の中のブロックの補足"), (STAGE_TEXT, GA, 4.5, "GA の札"),
+         (RED_TEXT, RED_SOFT, 4.5, "淡い赤の札"), (RED, BG, 3.0, "18pt 以上の赤の文字"), (ON_RED, RED, 3.0, "赤の塗りの 14pt 以上の太字（番号の丸）"),
+         (WHITE, NAVY_BLOCK, 4.5, "扉の中のブロックの白"), (SUB_ON_NAVY, NAVY_BLOCK, 4.5, "扉の中のブロックの補足"), (STAGE_TEXT, GA, 4.5, "GA の札"),
          (STAGE_TEXT, PREVIEW, 4.5, "Beta・Preview の札"), (WHITE, OSS, 4.5, "OSS の札")]
 NO_RENDER = {"Noto Sans CJK JP", "Hiragino Sans", "Yu Gothic"}  # API は受け付けるが、描くと明朝と欧文のセリフ体になる（Google Fonts にない）
 PAGE = (13.333, 7.5)  # slides.py の版面（in）。違う大きさのテンプレートには組めない
@@ -55,25 +58,36 @@ def themes():
 def colors(theme):
     """テーマの 12 の枠の色。factory.toml のテーマは役割の名前で書き、書かない役割は visual の値にする。"""
     if theme in THEMES:
-        if bad := set(themes().get(theme, {})) - {"url", "description", "base", "copyright", "mono", *FIXED_DEFAULT}:  # 役割の色は組み込みのまま、font だけが効いてしまう
-            sys.exit(f"[slides.themes.{theme}] は組み込みのテーマ（slides.py の THEMES）。url・description・base・copyright・mono と固定の色（{', '.join(FIXED_DEFAULT)}）のほか"
+        if bad := set(themes().get(theme, {})) - {"url", "description", "base", "copyright", "mono", *FIXED_DEFAULT, *NAMED}:  # 役割の色は組み込みのまま、font だけが効いてしまう
+            sys.exit(f"[slides.themes.{theme}] は組み込みのテーマ（slides.py の THEMES）。url・description・base・copyright・mono と固定の色（{', '.join([*FIXED_DEFAULT, *NAMED])}）のほか"
                      f"（{', '.join(sorted(bad))}）は書けない。会社の色なら別の名前のテーマにする")
         return THEMES[theme]
     if (t := themes().get(theme)) is None:
         sys.exit(f"テーマ {theme} がない（slides.py の THEMES にも、factory.toml の [slides.themes] にもない）")
     if not re.fullmatch(r"[A-Za-z0-9_-]+", theme):  # [slides.themes.<名前>] の表の名前に、引用符なしで書き込む（set_url）
         sys.exit(f"テーマの名前 {theme!r} は英数字と - _ だけにする")
-    if bad := set(t) - set(ROLE) - set(FIXED_DEFAULT) - {"base", "font", "mono", "url", "description", "copyright"}:
-        sys.exit(f"[slides.themes.{theme}] に知らない名前: {', '.join(sorted(bad))}（色は役割の名前 {', '.join(ROLE)} と固定の色の名前 {', '.join(FIXED_DEFAULT)} で書く）")
-    if bad := [k for k, v in t.items() if k in {*ROLE, *FIXED_DEFAULT} and not re.fullmatch(r"#?[0-9A-Fa-f]{6}", str(v))]:
+    if bad := set(t) - set(ROLE) - set(FIXED_DEFAULT) - set(NAMED) - {"base", "font", "mono", "url", "description", "copyright"}:
+        sys.exit(f"[slides.themes.{theme}] に知らない名前: {', '.join(sorted(bad))}（色は役割の名前 {', '.join(ROLE)} と固定の色の名前 {', '.join([*FIXED_DEFAULT, *NAMED])} で書く）")
+    if bad := [k for k, v in t.items() if k in {*ROLE, *FIXED_DEFAULT, *NAMED} and not re.fullmatch(r"#?[0-9A-Fa-f]{6}", str(v))]:
         sys.exit(f"[slides.themes.{theme}] の {', '.join(bad)} が 6 桁の 16 進の色でない（例: NAVY = \"002B5C\"）")
     theme_font(t)
     return {**THEMES["visual"], **{ROLE[k]: v.lstrip("#").upper() for k, v in t.items() if k in ROLE}}
 
 
 def palette(theme):
-    """colors に、テーマの固定の色（既定の値 → テーマの値）を足したもの。PAIRS と FIXED の色を T.get(c, c) で引く。"""
-    return {**colors(theme), **{FIXED_DEFAULT[k]: v for k, v in theme_fixed(themes().get(theme, {})).items()}}
+    """colors に、テーマの固定の色（既定の値 → テーマの値）と、テーマが書いた NAMED の色（名前 → 値）を足したもの。PAIRS と FIXED の色は tone で引く。"""
+    fx = theme_fixed(themes().get(theme, {}))
+    return {**colors(theme), **{FIXED_DEFAULT[k]: v for k, v in fx.items() if k in FIXED_DEFAULT}, **{k: v for k, v in fx.items() if k in NAMED}}
+
+
+def alias(T, c):
+    """T が書いていない NAMED の役割は、その既定の色（NAVY の枠、白、RULE の値）。ほかはそのまま。"""
+    return c if c in T else NAMED.get(c, c)
+
+
+def tone(T, c):
+    """役割・固定の色 c の 6 桁。"""
+    return T.get(alias(T, c), alias(T, c))
 
 
 def shift(c, other, need):
@@ -96,14 +110,17 @@ def shift(c, other, need):
 
 
 def fix(T):
-    """T（palette）を PAIRS で測り、届かない組の色を shift で直す。直すのは、文字がテーマの枠ならその文字の色、文字が固定の色なら地の色。
-    戻りは（直した T、[(どこ, 枠, 前, 後, 前の比, 後の比)]）。"""
+    """T（palette）を PAIRS で測り、届かない組の色を shift で直す。直すのは、文字がテーマの枠かテーマが書いた NAMED ならその文字の色、
+    文字が固定の色なら地の色。戻りは（直した T、[(どこ, 枠, 前, 後, 前の比, 後の比)]）。"""
     T, out = dict(T), []
     for _ in range(3):  # 1 つの枠を直すと、ほかの組の比が変わることがある
         for fg, gr, need, use in PAIRS:
+            fg, gr = alias(T, fg), alias(T, gr)
             if (r := contrast(T.get(fg, fg), T.get(gr, gr))) >= need:
                 continue
-            slot, other = (fg, T.get(gr, gr)) if fg in SLOTS else (gr, T.get(fg, fg))
+            slot, other = (fg, T.get(gr, gr)) if fg in SLOTS or fg in NAMED else (gr, T.get(fg, fg))
+            if slot not in T:  # 文字も地も固定の色（TEXT / 書いていない CARD など）は動かさない。check が「届かない」に出す
+                continue
             old, T[slot] = T[slot], shift(T[slot], other, need)
             if T[slot] != old:  # 動かせなかった枠は、check が「届かない」に出す
                 out.append((use, slot, old, T[slot], r, contrast(T.get(fg, fg), T.get(gr, gr))))
@@ -117,17 +134,17 @@ def check(theme):
     name = {**{c: n for c, n, *_ in FIXED}, **{slot: n for n, slot in ROLE.items()}}
     print(f"テーマ {theme} の役割の組（文字 / 地、比 / 基準）")
     for fg, gr, need, use in PAIRS:
-        r = contrast(T.get(fg, fg), T.get(gr, gr))
-        print(f"  {'OK' if r >= need else 'NG'}  {use}: {name.get(fg, fg)} {T.get(fg, fg)} / {name.get(gr, gr)} {T.get(gr, gr)}  {r:.2f}:1 / {need:g}:1")
+        r = contrast(tone(T, fg), tone(T, gr))
+        print(f"  {'OK' if r >= need else 'NG'}  {use}: {name.get(fg, fg)} {tone(T, fg)} / {name.get(gr, gr)} {tone(T, gr)}  {r:.2f}:1 / {need:g}:1")
     if out:
         print(f"\n直す案（色相と彩度を保ち、明るさだけを変えた。ユーザーに見せてから factory.toml の [slides.themes.{theme}] に写す）:")
         for slot in dict.fromkeys(o[1] for o in out):
             old, new = next(o[2] for o in out if o[1] == slot), F[slot]
             print(f'  {name[slot]} = "{new}"  # {old} から{"暗く" if lum(new) < lum(old) else "明るく"}した（{"、".join(dict.fromkeys(o[0] for o in out if o[1] == slot))}）')
     for fg, gr, need, use in PAIRS:  # 明るさだけでは届かない組（白か黒まで動かしても届かない、ほかの組と同じ枠を取り合うなど）。当てる色を替える
-        if (r := contrast(F.get(fg, fg), F.get(gr, gr))) < need:
+        if (r := contrast(tone(F, fg), tone(F, gr))) < need:
             print(f"  直す案でも届かない: {use}（{r:.2f}:1 / {need:g}:1）。役割に当てる色を替える")
-    return all(contrast(T.get(fg, fg), T.get(gr, gr)) >= need for fg, gr, need, _ in PAIRS)
+    return all(contrast(tone(T, fg), tone(T, gr)) >= need for fg, gr, need, _ in PAIRS)
 
 
 def runs(page, empty=False):
@@ -190,14 +207,18 @@ def specimen(theme):
     use_theme(themes().get(theme, {}))  # 固定の色と著作権表示はテーマの値（slides.py build がデッキのテーマから読むのと同じ）
     docs = "https://developers.google.com/workspace/slides"  # 出典の行の見本のリンク。どの会社のテンプレートにも入るので、会社に結びつかない公開のページ
 
+    def on(fill, want=None):  # 色の箱に載せる文字の色。want が届かなければ（本文の地が暗いテーマの淡い色の箱など）、札の文字か白の届くほう
+        ratio = lambda c: contrast(tone(T, c), tone(T, fill))
+        return want if want and ratio(want) >= 4.5 else max((STAGE_TEXT, WHITE), key=ratio)
+
     def make(d):
         s = d.cover(f"テーマ「{theme}」の見本", f"社内｜{time.strftime('%Y-%m-%d')}", "AI Deck Factory のテンプレート")
-        d.note(s, "表紙です。小見出しは相手と日付、タイトルは白、副題と小見出しは濃紺の上の赤、社名は罫線の色です。表紙にはページ番号を置きません。")
+        d.note(s, "表紙です。小見出しは相手と日付、タイトルは白、副題と小見出しは濃紺の上の赤、社名は濃紺の上の補足の色（SUB_ON_NAVY）です。表紙にはページ番号を置きません。")
 
         s = d.divider("01", "色と部品", "テーマの色の役割と、本文ページの部品")
-        d.card(s, X, 5.0, 2.4, 0.85, None, body=[("扉の中のブロック\n", {"bold": True, "color": WHITE}), ("白と罫線の色だけを載せる", {"color": RULE})],
+        d.card(s, X, 5.0, 2.4, 0.85, None, body=[("扉の中のブロック\n", {"bold": True, "color": WHITE}), ("白と SUB_ON_NAVY だけを載せる", {"color": SUB_ON_NAVY})],
                fill=NAVY_BLOCK, line=None)
-        d.note(s, "章の扉です。章番号は飾りの色で、コントラストの基準の外です。扉の中のブロックには、白と罫線の色だけを載せます。濃紺の上の赤は、ブロックの上ではコントラストが届きません。")
+        d.note(s, "章の扉です。章番号は飾りの色で、コントラストの基準の外です。扉の中のブロックには、白と濃紺の上の補足の色（SUB_ON_NAVY）だけを載せます。濃紺の上の赤は、ブロックの上ではコントラストが届きません。")
 
         s = d.page("色は役割の名前で選び、値はテーマが決める", "濃い色の枠には白か札の文字、淡い色の枠には本文の色を載せる。", kicker="早見表")
         cw, ch, gap = (W - 3 * 0.2) / 4, 1.0, 0.2
@@ -205,23 +226,29 @@ def specimen(theme):
             x, y = X + (i % 4) * (cw + gap), Y_BODY + (i // 4) * (ch + 0.15)
             d.box(s, x, y, cw, ch, slot, RULE if slot == BG else None)  # BG は地と同じ色なので、見本だけ罫線を付ける
             d.text(s, x + PAD, y + PAD, cw - 2 * PAD, ch - 2 * PAD, [(f"{name}（{slot}）\n", {"bold": True}), f"{T[slot]}\n", use],
-                   color=ON.get(slot) or max((STAGE_TEXT, WHITE), key=lambda c: contrast(T.get(c, c), T[slot])), spacing=115)
+                   color=on(slot, ON.get(slot)), spacing=115)
         d.text(s, X + 3 * (cw + gap) + PAD, Y_BODY + 2 * (ch + 0.15) + PAD, cw - 2 * PAD, ch - 2 * PAD,
-               [("テーマに入れない色（下の段）\n", {"bold": True}), "pages.py に名前で書く\n値は factory.toml で変えられる"], spacing=115)
-        for (x, w), (hexc, name, use, fg, line) in zip(cols(6, 0.2), FIXED):
-            y = Y_BODY + 3 * ch + 2 * 0.15 + 0.2
-            d.box(s, x, y, w, ch, hexc, line)
-            d.text(s, x + PAD, y + PAD, w - 2 * PAD, ch - 2 * PAD, [(f"{name}\n", {"bold": True}), f"{T.get(hexc, hexc)}\n", use], color=fg, spacing=115)
+               [("テーマに入れない色（次のページ）\n", {"bold": True}), "pages.py に名前で書く\n値は factory.toml で変えられる"], spacing=115)
         d.source(s, ["出典: visual.md の 1（色の決まり）。ページの大きさとマスターは ", ("元のテンプレート", {"link": base(theme)})])
-        d.note(s, f"テーマ「{theme}」の 11 の枠と、テーマに入れない 6 つの色です。キッカーは、このページのように役割を示すときだけ置きます。"
-                  "BG は地と同じ色なので、見本だけ罫線を付けています。値は factory.toml に書く形（# を付けない 6 桁）です。DECOR は slides.py の章の扉が使い、pages.py には書きません。")
+        d.note(s, f"テーマ「{theme}」の 11 の枠です。キッカーは、このページのように役割を示すときだけ置きます。"
+                  "BG は地と同じ色なので、見本だけ罫線を付けています。値は factory.toml に書く形（# を付けない 6 桁）です。")
+
+        s = d.page("テーマに入れない色は名前で書き、値は factory.toml で替える", "書かなければ既定の値。本文の地が暗いテーマは、HEAD・CARD・SUB_ON_NAVY・ON_RED も書く。", kicker="早見表")
+        cw, ch = (W - 4 * 0.2) / 5, 1.1  # 3 行の下を、カードの決まり（box_pad の 0.28 in）より空ける
+        for i, (c, name, use, fg, line) in enumerate(FIXED):
+            x, y = X + (i % 5) * (cw + 0.2), Y_BODY + (i // 5) * (ch + 0.15)
+            d.box(s, x, y, cw, ch, c, line)
+            d.text(s, x + PAD, y + PAD, cw - 2 * PAD, ch - 2 * PAD, [(f"{name}\n", {"bold": True}), f"{tone(T, c)}\n", use], color=on(c, fg), spacing=115)
+        d.source(s, ["出典: visual.md の 1（色の決まり）、deck-template の SKILL.md（暗い本文のテーマ）。ページの大きさとマスターは ", ("元のテンプレート", {"link": base(theme)})])
+        d.note(s, f"テーマ「{theme}」の、テーマに入れない {len(FIXED)} の色です。HEAD・CARD・SUB_ON_NAVY・ON_RED は、書かなければ NAVY・白・RULE・白と同じ色です。"
+                  "DECOR は slides.py の章の扉が使い、pages.py には書きません。")
 
         s = d.page("部品は役割の色で塗り、大きさと間隔は既定に従う", "カード、パネル、数字、札、正円の番号、表、矢印、結論バンド、出典の行の見本。")
         hw = (W - 0.3) / 2
         d.card(s, X, Y_BODY, hw, 1.5, "カードの見出し（12pt 太字）", body=["本文は 11pt。", ("強調は太字", {"bold": True}), "。\n",
                                                                   ("赤の文字", {"color": RED_TEXT, "bold": True}), "は 18pt 未満でも読める色。\n",
                                                                   ("リンク", {"link": docs}), "は周りの色のまま下線を付ける。"])
-        d.text(s, X - INSET, 3.4, hw + 2 * INSET, 0.65, [("32", {"size": 32, "bold": True, "color": NAVY}), ("%", {"size": 16, "bold": True, "color": NAVY}),
+        d.text(s, X - INSET, 3.4, hw + 2 * INSET, 0.65, [("32", {"size": 32, "bold": True, "color": HEAD}), ("%", {"size": 16, "bold": True, "color": HEAD}),
                                                         ("  数字 32pt・単位 16pt。赤にするなら RED", {"color": SUB})])
         d.card(s, X, 4.18, hw, 0.8, None, body=[("パネル\n", {"bold": True}), "塗りだけで囲み、枠線は付けない。"], fill=PANEL, line=None)
         for i, (label, fill, fg) in enumerate([("GA", GA, STAGE_TEXT), ("Beta", PREVIEW, STAGE_TEXT), ("OSS", OSS, WHITE)]):
@@ -230,13 +257,13 @@ def specimen(theme):
         for n, (size, cx) in enumerate((("S", 4.35), ("M", 4.85), ("L", 5.45)), 1):  # 正円の番号の 3 つの大きさ（slides.py の NUM）。札と中心をそろえる
             d.num(s, n, X + cx, 5.33, size)
         rx = X + hw + 0.3
-        tb = d.table(s, rx, Y_BODY, [1.6, hw - 1.6], [["役割", "使うところ"], ["NAVY", "見出し、扉、結論バンド、表の見出しの行"], ["SUB", "出典、フッター、補足"],
-                                                 ["RED_TEXT", "キッカー、18pt 未満の強調"], ["RED", "番号の丸、図形の塗り、太い線"]], row_h=0.4)
+        tb = d.table(s, rx, Y_BODY, [1.6, hw - 1.6], [["役割", "使うところ"], ["NAVY", "扉、結論バンド、表の見出しの行"], ["HEAD", "見出し、表の 1 列目"], ["SUB", "出典、フッター、補足"],
+                                                 ["RED_TEXT", "キッカー、18pt 未満の強調"], ["RED", "番号の丸、図形の塗り、太い線"]], row_h=0.36)  # 6 行で、下の箱（4.18 in）の上に収める
         d.box(s, rx, Y_BODY, 1.6, tb - Y_BODY, line=RED, kind="ROUND_RECTANGLE")  # 表の 1 列の強調。赤の線は既定で 2pt（2026-10-08、ユーザー）
         for bx, label in ((rx, "箱 A"), (rx + hw - 2.4, "箱 B")):
             d.text(s, bx, 4.18, 2.4, 0.8, label, align="CENTER", valign="MIDDLE", fill=CARD, line=RULE)
         d.arrow(s, rx + 2.48, 4.58, rx + hw - 2.48, 4.58)
-        d.band(s, "結論バンド: 言いたいことを 1 文（13pt 太字）", "補足は 11pt の罫線の色。下端は 6.60 in に固定。")
+        d.band(s, "結論バンド: 言いたいことを 1 文（13pt 太字）", "補足は 11pt の SUB_ON_NAVY。下端は 6.60 in に固定。")
         d.source(s, ["出典: ", ("Google Slides API のドキュメント", {"link": docs}), "（URL へのリンクの例）、", ("p.3 の早見表", {"link": 3}), "（ページへのリンクの例）"])
         d.note(s, "部品の見本です。カード、パネル、大きな数字、札、正円の番号（小・中・大の 3 つ）、表と 1 列の強調の囲み（赤の 2pt）、矢印、結論バンド、出典の行を置いています。"
                   "結論バンドは、だから何をするかを言うページにだけ置きます。")
@@ -248,7 +275,7 @@ def specimen(theme):
         d.card(s, rx, Y_BODY, hw, 1.5, "箇条書き（bullets）", body="短い項目を並べるときに使う\n1 つの枠の本文は 8 行まで\n字下げは文字の大きさの 1.3 倍", bullets=True)
         y0 = 3.48
         d.box(s, rx, y0, hw, 1.55, line=SUB, kind="ROUND_RECTANGLE")  # 塗りのない角丸は辺と弧を線でつなぐ。継ぎ目の段をここで見る（slides.md の 5）
-        d.text(s, rx + PAD, y0 + 0.1, hw - 2 * PAD, 0.34, "塗りのない角丸の囲み（まとまりを示す）", size=12, color=NAVY, bold=True)
+        d.text(s, rx + PAD, y0 + 0.1, hw - 2 * PAD, 0.34, "塗りのない角丸の囲み（まとまりを示す）", size=12, color=HEAD, bold=True)
         for (x, w), label in zip(cols(2, 0.24, rx + 0.2, hw - 0.4), ("部品 A", "部品 B")):
             d.text(s, x, y0 + 0.55, w, 0.8, label, align="CENTER", valign="MIDDLE", fill=PANEL)
         y1 = 5.2  # 強調の赤い点線の囲み。中のカードと同じ半径（Google 標準の角丸にしない）で、線は赤の既定の 2pt（2026-10-08、ユーザー）
@@ -395,7 +422,7 @@ def main():
     if a == ["--selftest"]:
         for theme in [*THEMES, *themes()]:
             d = specimen(theme)
-            assert len(d.slides) == 5 and not d.images and all(s in d.notes for s in d.slides)
+            assert len(d.slides) == 6 and not d.images and all(s in d.notes for s in d.slides)
         assert all(not fix(T)[1] for T in THEMES.values())  # 組み込みのテーマは、役割の組がすべて届く
         F, out = fix({**THEMES["company"], SUB: "618794"})  # 2026 年版の Databricks Theme の ACCENT5。Oat Medium の上で 3.32:1
         assert {o[1] for o in out} == {SUB} and F[SUB] == "51707C"  # 同じ青緑のまま暗くする（手で選んだ company の 50707B とほぼ同じ）
@@ -406,6 +433,15 @@ def main():
         F, out = fix({**palette("visual"), TEXT: "8A8A8A"})  # テーマの固定の色でも測る。直すのは役割の枠（地）のほう
         assert out and all(o[1] in SLOTS for o in out) and F[TEXT] == "8A8A8A" and contrast("8A8A8A", F[BG]) >= 4.5
         assert palette("visual")[TEXT] == TEXT and set(palette("visual")) == set(SLOTS) | set(FIXED_DEFAULT.values())  # 書いていなければ既定の値
+        T = palette("visual")  # 書いていない NAMED は既定の色で測る（前の PAIRS と同じ組）
+        assert [tone(T, c) for c in (HEAD, CARD, SUB_ON_NAVY, ON_RED)] == [T[NAVY], WHITE, RULE, WHITE] and alias(T, HEAD) == NAVY
+        F, out = fix({**T, NAVY: "6A7F87"})  # 書いていない HEAD が届かなければ、前と同じく NAVY の枠を直す
+        assert {o[1] for o in out} >= {NAVY} and not {o[1] for o in out} & set(NAMED)
+        dark = {**T, BG: "000000", NAVY: "1A1A1A", PANEL: "1A1A1A", NAVY_BLOCK: "2E3033", SUB: "A8A8AF", RED: "FF6308", RED_TEXT: "FF6308", RED_ON_NAVY: "FF6308",
+                TEXT: "D8D8E1", RULE: "2E3033", RED_SOFT: "3A1D0A", STAGE_TEXT: "000000", HEAD: "F0F0FA", CARD: "0A0A0A", SUB_ON_NAVY: "C0C0C8", ON_RED: "000000"}
+        assert not fix(dark)[1]  # 本文の地が暗いテーマ（RULE は暗い枠線、濃紺の上の補足は SUB_ON_NAVY で分ける）は、役割の組がすべて届く
+        F, out = fix({**dark, ON_RED: "FFFFFF"})  # 書いた ON_RED が届かなければ、RED でなく ON_RED を直す（オレンジに白は 2.98:1）
+        assert [o[1] for o in out] == [ON_RED] and contrast(F[ON_RED], "FF6308") >= 3
         sn = {"shape": {"placeholder": {"type": "SLIDE_NUMBER"}}}
         master = {"objectId": "m", "pageElements": [{"objectId": "n", "size": {"width": {"magnitude": EMU}, "height": {"magnitude": EMU}}, **sn}]}
         alt = [r["updatePageElementAltText"] for r in styles("visual", master, {"pageElements": []}) if "updatePageElementAltText" in r]

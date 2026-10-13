@@ -77,7 +77,7 @@ def check(p, folder, pages=None):
     """戻りは [(見出し, 1 件), …]。"""
     out = []
     page_w = p["pageSize"]["width"]["magnitude"]
-    rule = slides.theme_fixed(slides.theme_table(slides.deck_theme(p)))["RULE"]  # 白いカードの枠線の色。デッキのテーマの値
+    rule, card = slides.theme_fixed(slides.theme_table(slides.deck_theme(p)))["RULE"], slides.deck_card(p)  # カードの地と枠線の色。デッキのテーマの値
     for i, s in enumerate(p["slides"], 1):
         path = f"{folder}/p-{i:02d}.png"
         if (pages and i not in pages) or not os.path.exists(path):
@@ -101,7 +101,7 @@ def check(p, folder, pages=None):
             lines = text_lines(sh, b[2]) or 0
             if not inside or lines < 1:
                 continue
-            if any(c in ("FFFFFF", rule) for f, c in inside):  # 白いカード（枠線は RULE の角丸に白を重ねて描く）は、列で高さをそろえるので見ない
+            if any(c in (card, rule) for f, c in inside):  # 白いカード（枠線は RULE の角丸に CARD を重ねて描く）は、列で高さをそろえるので見ない
                 panel = []
             else:
                 panel = [f for f, c in inside if c != scheme.get("DARK1", "1B3139")]  # 濃紺の箱（コード・結論バンド）も見ない
@@ -121,7 +121,7 @@ def check(p, folder, pages=None):
             gap, need = gap / px / EMU, sz / 72
             if lines >= 2 and gap < need - 0.01:
                 out.append(("箱の下端と文字の間が 1 字分より狭い", f"p{i}: {gap:.2f} in（{sz:g}pt の 1 字は {need:.2f} in）「{head}」"))
-            elif lines >= 2 and gap < CARD_MIN and any(c == "FFFFFF" and abs(edge_y - (f[1] + f[3]) * px) <= 0.05 * EMU * px for f, c in inside):
+            elif lines >= 2 and gap < CARD_MIN and any(c == card and abs(edge_y - (f[1] + f[3]) * px) <= 0.05 * EMU * px for f, c in inside):
                 out.append((CARD, f"p{i}: {gap:.2f} in（{CARD_MIN} in まで空ける）「{head}」。カードを高くするか、文を短くする"))
             if panel:
                 above = (first - min(f[1] for f in panel) * px) / px / EMU

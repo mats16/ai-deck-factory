@@ -38,7 +38,7 @@ uv run -q $K/sheet.py /tmp/<名前>.png /tmp/slides_<ID>/p-0{2,3,4}.png   # 何�
 pages.py には `NAME`（資料名。社内向けは `｜Internal Only`、秘密扱いは `｜Confidential` を末尾に書く）と `make(d)` だけを書く。資料名はフッターに表示せず、秘密区分だけを著作権表示の末尾に残す。部品は `slides.py` の `Deck` のメソッドを使う。
 
 ```python
-from slides import NAVY, SUB, RED_TEXT, TEXT, RULE, X, W, INSET   # 色の役割と本文の左端・幅
+from slides import HEAD, NAVY, SUB, RED_TEXT, TEXT, RULE, X, W, INSET   # 色の役割と本文の左端・幅
 NAME = "〇〇様_ご説明資料"
 def make(d):
     s = d.cover("タイトル", "〇〇様｜2026-10-07", "副題")
@@ -59,19 +59,19 @@ def make(d):
 | `d.label(s, v, x, y, w, h, fill, color, size, bold, align, radius, pad)` | 札（日付・工程の名前など、塗りの箱と短い言葉の 1 つの図形）。既定は PANEL の地に濃紺の太字、中央寄せ。左寄せにすると、箱の端と文字の間を 1 字分空ける |
 | `d.box(s, x, y, w, h, fill, line, kind, radius, dash, weight)` | 箱。塗りがあれば半径 0.1 in の角丸、枠線だけなら四角が既定。`kind="RECTANGLE"` で四角を明示。塗りか枠線のどちらか一方（visual.md の 4）。`dash=True` で枠線を点線に、`weight` で枠線の太さ（pt。省くと、赤（`RED`）の線は 2（`EMPH_PT`。強調の囲み）、ほかは 0.75）。強調の囲みは `d.box(…, line=RED, kind="ROUND_RECTANGLE")`、点線なら `dash=True` を足す（5、visual.md の 4） |
 | `d.code(s, x, y, w, h, lines, hot, size)` | 濃紺のコードの箱。`lines` は 1 行ずつの文字列で、英数字は等幅（`MONO`）。`hot` の行（0 始まり）は濃紺の上の赤の太字。2026-10-09、3 つ目の資料で要ったので pages.py の `code_box` から移した |
-| `d.card(s, x, y, w, h, head, body=…, items=…, fill, line, step, bullets)` | 見出しと本文のカード（4）。`h` に `None` を渡すと、中身から高さを決める（`card_h`）。下端（in）を返す。`head` などを省くと、白い地に罫線の箱だけ（中身を自分で組むカード。`h` を渡す）。`items` は既定で 1 つの文字の枠に流す（項目の間が中身の行数によらずそろう）。`step` を渡したときだけ決まった間隔で置く（左右のカードで項目の上端をそろえるときだけ使う） |
-| `d.num(s, n, cx, cy, size, fill)` | 正円の番号。`(cx, cy)` は円の中心。`size` は `"S"`（0.3 in・11pt、図の中の印）・`"M"`（0.36 in・14pt、カードと手順。既定）・`"L"`（0.48 in・18pt、大きな段）。大きさは `slides.py` の `NUM`（4、visual.md の 4） |
-| `d.table(s, x, y, widths, rows, size, row_h, header, first_col, zebra, align)` | 表。見出しの行は濃紺に白の太字、1 列目は濃紺の太字、1 行おきに PANEL、横の罫線は RULE（前の deck.js と同じ）。`align` は列ごとの `"l"`・`"c"`・`"r"`。下端の見込み（in）を返す（行は文字に合わせて伸び、JSON の行の高さは最小の値のままなので、下に置く要素はこの値で位置を決める） |
+| `d.card(s, x, y, w, h, head, body=…, items=…, fill, line, step, bullets)` | 見出しと本文のカード（4）。`h` に `None` を渡すと、中身から高さを決める（`card_h`）。下端（in）を返す。`head` などを省くと、`CARD` の地に罫線の箱だけ（中身を自分で組むカード。`h` を渡す）。`items` は既定で 1 つの文字の枠に流す（項目の間が中身の行数によらずそろう）。`step` を渡したときだけ決まった間隔で置く（左右のカードで項目の上端をそろえるときだけ使う） |
+| `d.num(s, n, cx, cy, size, fill)` | 正円の番号。`(cx, cy)` は円の中心。`size` は `"S"`（0.3 in・11pt、図の中の印）・`"M"`（0.36 in・14pt、カードと手順。既定）・`"L"`（0.48 in・18pt、大きな段）。大きさは `slides.py` の `NUM`（4、visual.md の 4）。数字は `RED` の塗りなら `ON_RED`、ほかの塗りなら `WHITE` |
+| `d.table(s, x, y, widths, rows, size, row_h, header, first_col, zebra, align)` | 表。見出しの行は濃紺に白の太字、1 列目は `HEAD` の太字、1 行おきに PANEL、ほかは `CARD`、横の罫線は RULE（前の deck.js と同じ）。`align` は列ごとの `"l"`・`"c"`・`"r"`。下端の見込み（in）を返す（行は文字に合わせて伸び、JSON の行の高さは最小の値のままなので、下に置く要素はこの値で位置を決める） |
 | `d.arrow(s, x1, y1, x2, y2, color, head, dash, weight)` | 線と矢印。`dash=True` で点線（「できるが手間」など）、`weight` で太さ（pt、既定 1.25） |
 | `d.image(s, src, x, y, w, h, alt)` / `d.icon(s, name, x, y, size, color)` | 画像とアイコン（6）。ロゴには `alt` に名前。SVG の URL は `png(url)`、直下の `assets/` の画像は `asset("gcp/bigquery.png")` で渡す |
 | `d.band(s, head, sub)` | 結論バンド。下端を 6.60 に固め、中身に合わせて上へ伸ばす。上端を返す |
 | `d.source(s, parts)` / `d.note(s, text)` | 出典の行（頭に「出典: 」がなければ足す）／スピーカーノート |
 | `cols(n, gap, x0, w)` | 幅を n 列に分けた (左端, 幅) の並び |
 
-- 色は役割の名前で渡す（`NAVY`・`SUB`・`RED_TEXT` など。一覧は `slides.py` の冒頭と visual.md の 1）。位置も `slides.py` の名前（`X`・`W`・`Y_BODY`・`BAND_BOTTOM` など）を使い、数字を写さない。役割の名前はテーマの色を指すので、テンプレートを替えると色が変わる。テーマに入れない色（`TEXT`・`RULE`・`CARD`・`RED_SOFT`・`STAGE_TEXT`・`PUBLIC_PREVIEW`）も名前で書く。`TEXT`・`RULE`・`RED_SOFT`・`STAGE_TEXT`・`DECOR` はテーマで値が替わり、組むときに `paint` とアイコンが置き換える（既定の 6 桁で書いた同じ値も置き換わる）。提供ステージの札の塗りは `STAGE_FILL[<GA・Public Preview・Beta・Private Preview・OSS>]` で引く。
+- 色は役割の名前で渡す（`NAVY`・`SUB`・`RED_TEXT` など。一覧は `slides.py` の冒頭と visual.md の 1）。位置も `slides.py` の名前（`X`・`W`・`Y_BODY`・`BAND_BOTTOM` など）を使い、数字を写さない。役割の名前はテーマの色を指すので、テンプレートを替えると色が変わる。テーマに入れない色（`TEXT`・`RULE`・`RED_SOFT`・`STAGE_TEXT`・`PUBLIC_PREVIEW`）も名前で書く。`TEXT`・`RULE`・`RED_SOFT`・`STAGE_TEXT`・`DECOR` はテーマで値が替わり、組むときに `paint` とアイコンが置き換える（既定の 6 桁で書いた同じ値も置き換わる）。名前で書く役割（`HEAD`・`CARD`・`SUB_ON_NAVY`・`ON_RED`）は、6 桁で書くと置き換わらない（既定の値を `NAVY`・`WHITE`・`RULE` と共有するので）。見出しの文字を `NAVY`、カードの地や番号の数字を `WHITE`・`"FFFFFF"` と書くと、本文の地が暗いテーマで読めなくなる。提供ステージの札の塗りは `STAGE_FILL[<GA・Public Preview・Beta・Private Preview・OSS>]` で引く。
 - ページへのリンク（`{"link": 12}`）は、組むときにそのページの ID で付く。画面でページを足したり並べ替えたりしても、同じページを指す。
 - `d.text` の行間（`spacing`）を省くと、2 行以上の見込みなら 125、1 行なら 100 になる（visual.md の 2）。表のセルは 2 行以上なら 120。
-- フッター（左下の著作権表示）は表紙・扉を含む全ページに自動で入る。文言は `factory.toml` の `[brand] copyright`（デッキのテーマの `copyright` があればそれ。`slides.py` の `COPYRIGHT`）、文字は 9pt（`COPYRIGHT_PT`）、明るい地は `SUB`、濃紺の地は `RULE`。資料名は表示せず、`NAME` 末尾の `Internal Only`・`Confidential` だけを残す。初公表年は現在年へ自動更新しない。`foot=False` の流用ページには重ねない。ページ番号は表紙以外の右下に著作権表示と同じ 9pt で入り、テンプレートの枠なので、画面でページを並べ替えても合う。
+- フッター（左下の著作権表示）は表紙・扉を含む全ページに自動で入る。文言は `factory.toml` の `[brand] copyright`（デッキのテーマの `copyright` があればそれ。`slides.py` の `COPYRIGHT`）、文字は 9pt（`COPYRIGHT_PT`）、本文のページは `SUB`、表紙・扉（濃紺の地）は `SUB_ON_NAVY`。資料名は表示せず、`NAME` 末尾の `Internal Only`・`Confidential` だけを残す。初公表年は現在年へ自動更新しない。`foot=False` の流用ページには重ねない。ページ番号は表紙以外の右下に著作権表示と同じ 9pt で入り、テンプレートの枠なので、画面でページを並べ替えても合う。
 - [slides-004] **部品は slides.py にあるものを使う。前の資料から写さない**。1 つの資料でだけ要る部品は pages.py に関数で書き、2 つ目の資料で要ったら slides.py に移す。
 - slides.py の部品を足したり直したりしたら、`python3 $K/slides.py --selftest` と `python3 $K/template.py --selftest` を通し、テンプレートの見本を組み直して見る（`python3 $K/template.py visual`。そのあと `gslides.py check <テンプレートの URL>`）。company は使っていないので、組み直さなくてよい（下の 3）。部品を変えると、それを使う資料を組み直したときに見た目も変わる。
 
@@ -93,7 +93,7 @@ def make(d):
 url = "https://docs.google.com/presentation/d/<テンプレート>/edit"   # このテーマのテンプレート。template.py <名前> --from-base が書き込む
 description = "アクメの会社の色のテーマ。顧客に出す提案・説明と社外の登壇に使う。社内の勉強会には使わない（visual）"
 # 会社のテンプレートから作るときだけ: base（元のテンプレート）、font、役割ごとの色（../deck-template/SKILL.md）
-# どのテーマにも書ける: mono（コードの等幅）、テーマに入れない色（TEXT・RULE・RED_SOFT・STAGE_TEXT・DECOR）、copyright（[brand] の代わり）
+# どのテーマにも書ける: mono（コードの等幅）、テーマに入れない色（TEXT・RULE・RED_SOFT・STAGE_TEXT・DECOR）と名前で書く役割（HEAD・CARD・SUB_ON_NAVY・ON_RED）、copyright（[brand] の代わり）
 ```
 - **テンプレートのあるテーマが 2 つ以上あるのに `--theme` なしで `new` すると、一覧を出して止まる**（選び忘れを防ぐため。kaizen の検証の仮の資料は止めない）。
 - **`description` は選ぶ手がかりのすべて。** エージェントは `slides.py themes`（名前・既定か・テンプレートがあるか・`description` の一覧）だけを見て選ぶ。何のテーマか、どの資料・聞き手に使うか、使わない場面（ほかのどれにするか）を 1〜3 文で書く。資料の種類や聞き手の言葉（「顧客向けの提案」「社内の勉強会」）を入れると選びやすい。
@@ -116,7 +116,7 @@ description = "アクメの会社の色のテーマ。顧客に出す提案・�
 
 位置は座標の計算で合わせず、図形と文字の枠の機能（`align`・`valign`）でそろえる。文字が増えても崩れにくく、画面で直しやすい。
 
-- **図形と、その中の文字は 1 つにする。** 番号、札、矢印の中の言葉は `d.text(…, fill=RED, color=WHITE, align="CENTER", valign="MIDDLE")` にする。角丸の背景と文字は `finish` が編集可能な 1 グループにまとめる。正円は `kind="ELLIPSE"`。塗りのない文字は従来どおり透明の四角。
+- **図形と、その中の文字は 1 つにする。** 番号、札、矢印の中の言葉は `d.text(…, fill=RED, color=ON_RED, align="CENTER", valign="MIDDLE")` にする。角丸の背景と文字は `finish` が編集可能な 1 グループにまとめる。正円は `kind="ELLIPSE"`。塗りのない文字は従来どおり透明の四角。
   - [slides-008] **正円の番号は `d.num` で組み、大きさは S・M・L から選ぶ**（円の大きさと文字の大きさには釣り合いがあるので、直径と文字の大きさを資料ごとに決めない。見本はテンプレートの部品のページ）。`d.num` は `d.text(…, kind="ELLIPSE")` を使う。 Google は正円の文字を、内接する四角のさらに 0.1 in 内側に置くので、0.3〜0.36 in の円では文字の場所が 14pt の数字より狭く、数字が右上にずれる（0.3 in で右 3.5 pt・上 2 pt、0.36 in で右 1.5 pt。「10」は 2 行に折り返す）。書体を替えても直らない（7 つの書体で、右に 1.2〜2.7 pt ずれた）。`d.text` は、円を塗りだけにし、円と同じ大きさの透明の枠を重ねて、1 グループにする（ずれは 0.6 pt 以内）。四角の枠なら、文字の場所（枠から内側の余白を除いたところ）が数字より狭くても、はみ出しを上下・左右に均等に振って中央に置く。ただし 2 字以上は幅が足りないと折り返す（「10」は文字の場所 0.20 in で折り返し、0.22 in で 1 行）ので、2 字以上のときだけ横を数字の幅まで広げる。行間は 100% にする。はじめは枠を余白の分（0.1 in）だけ円より大きくしていたが、選んだときの枠が大きすぎた。`d.box` と `_shape` で正円を置き、そこに文字を入れない。
 - **大きな枠に文字のかたまりがいくつも入るときは、枠を別にしてよい。** 見出しと本文のカードは `d.card`（箱の上に一回り小さい文字の枠を重ねる。文字の枠の内側の余白は 0.1 in で変えられないので、枠と文字の間をここで空ける）。本文を 1 つの枠に入れるなら `body`、(見出し, 説明) の項目を間隔をそろえて並べるなら `items`。番号・ラベルなどが入る複雑な枠も、枠を `d.box` で置き、その上に `PAD`（0.08 in）だけ内側に文字の枠を置く。[slides-028] `d.card` の高さは、`h` に `None` を渡して中身から決める（`card_h` が、英数字の語を行をまたがずに送って行数を見込む）。隣の列やページの下端に合わせて伸ばさない（代表の 3 枚の記録で、中身より大きい箱がほぼすべてのデッキに出た）。列の高さをそろえるときは、並ぶカードの `card_h(w, head, body=…)` の最大を渡す。大きさの違う文字（大きな数字）が混ざるカードと `d.box` は、高さを呼ぶ側が決める。中の文字の枠は箱からはみ出しても切れず、そのまま描かれるので、項目や行を足したら箱の高さも直す（`items` の `step` は項目ごとに同じ間隔なので、行の多い項目が最後に来るとはみ出しやすい）。最終行と下端の間は `gslides.py check` の「要確認（画像で測った）」で見る（visual.md の 4。2026-10-09）。
 - [slides-009] **格子のある図（ガント、比べる表、マトリクス）は、格子を表（`d.table`）で作る。** 四角と線を並べて組まない。表で表しにくいもの（月をまたぐバー、今日の線、ラベル）だけを、表の上に図形で置く。表なら、開いた人が行を足したり文言を直したりしやすい（lint が、上端と長さの同じ縦線が 3 本以上あると要確認に出す）。表の行は文字に合わせて伸びる（`row_h` は最小の高さ）。上に図形を置く表は、セルの文字を 1 行にして、画像で位置を確かめる。

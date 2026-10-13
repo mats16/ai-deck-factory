@@ -11,7 +11,7 @@ from collections import Counter, defaultdict
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from slides import BAND_BOTTOM, COPYRIGHT_PT, EMU, FONT, INSET, MONO_DEFAULT, STAGE_FILL, Y_BODY, Y_BODY_NOLEAD, Y_FOOT, Y_LEAD, deck_font, deck_mono, em_width  # 版面・書体・字幅の見積もりは、組む側（slides.py）と同じものを使う
+from slides import BAND_BOTTOM, COPYRIGHT_PT, EMU, FONT, INSET, MONO_DEFAULT, STAGE_FILL, Y_BODY, Y_BODY_NOLEAD, Y_FOOT, Y_LEAD, deck_card, deck_font, deck_mono, em_width  # 版面・書体・字幅の見積もりは、組む側（slides.py）と同じものを使う
 
 DOC_MIN_PT = 9  # ドキュメントの文字の下限。図表の題・出典・表の中・フッターが 9pt（visual_doc.md の 1）
 MIN_PT = 11  # [lint-001] スライドの文字の下限。社内資料の差し替え用（名前に「差し替え用」）は元の大きさのままなので見ない
@@ -125,15 +125,26 @@ def scheme_of(p, mid):
     return {c["type"]: hexof({"rgbColor": c["color"]}, {}) for c in m.get("pageProperties", {}).get("colorScheme", {}).get("colors", [])}
 
 
-def page_bg(p, s, scheme):  # ページの地。継承ならレイアウト、マスターの順に見る
+def page_fill(p, s, scheme):  # ページの地の塗りの色（テーマの色か RGB のまま）。継承ならレイアウト、マスターの順に見る
     sp = s.get("slideProperties", {})
     pages = [s] + [x for x in p.get("layouts", []) if x["objectId"] == sp.get("layoutObjectId")] \
         + [x for x in p.get("masters", []) if x["objectId"] == sp.get("masterObjectId")]
     for pg in pages:
-        c = solid(pg.get("pageProperties", {}).get("pageBackgroundFill"), scheme)
-        if c:
-            return c
-    return "FFFFFF"
+        f = pg.get("pageProperties", {}).get("pageBackgroundFill")
+        if solid(f, scheme):
+            return f["solidFill"]["color"]
+    return None
+
+
+def page_bg(p, s, scheme):  # ページの地
+    return hexof(page_fill(p, s, scheme), scheme) or "FFFFFF"
+
+
+def is_dark(p, s, scheme):
+    """表紙・扉のページか。slides.py は表紙・扉の地を NAVY（DARK1）、本文の地を BG（LIGHT1）のテーマの色で塗るので、地の色の値でなく枠で見る
+    （本文の地が暗いテーマでも、本文のページを扉と取り違えない）。RGB で塗ったページ（手で作ったもの）は、DARK1 と同じ値なら扉とみなす。"""
+    c = page_fill(p, s, scheme) or {}
+    return c.get("themeColor") == "DARK1" if "themeColor" in c else page_bg(p, s, scheme) == scheme.get("DARK1", "1B3139")
 
 
 def mag(d):
@@ -439,10 +450,11 @@ def lint_slides(p, r, reuse=False, talk=False):
     titles, sizes, pairs, chars, dark, foot_secret, bands, claims = [], Counter(), defaultdict(list), [], [], [], [], []
     global MONO
     font, MONO = deck_font(p), deck_mono(p)  # 会社のテンプレートは会社の書体（deck-template）。等幅はデッキのテーマの mono
+    card = deck_card(p)  # カードの地。デッキのテーマの CARD（書かなければ白）
     for i, s in enumerate(p.get("slides", []), 1):
         scheme = scheme_of(p, s.get("slideProperties", {}).get("masterObjectId"))
         bg = page_bg(p, s, scheme)
-        dark.append(bg == scheme.get("DARK1", "1B3139"))
+        dark.append(is_dark(p, s, scheme))
         grid = []
         shapes, lines, boxes, best, top, has_src, nums = [], [], [], (0, None, None), (0, None, None), False, []
         els = list(flatten(s.get("pageElements", [])))
@@ -576,7 +588,7 @@ def lint_slides(p, r, reuse=False, talk=False):
         if not dark[-1] and not reuse:  # 扉・表紙と、社内資料の差し替え用は見ない
             filled = [b for e, b in els if "shape" in e and solid(e["shape"].get("shapeProperties", {}).get("shapeBackgroundFill"), scheme)]
             cards = [b for e, b in els if "shape" in e and b[1] >= BODY_TOP and b[2] >= 1.5 * EMU and b[3] >= 0.5 * EMU
-                     and solid(e["shape"].get("shapeProperties", {}).get("shapeBackgroundFill"), scheme) in ("FFFFFF", scheme.get("DARK1", "1B3139"))]  # 白いカードと濃紺の箱（コード）
+                     and solid(e["shape"].get("shapeProperties", {}).get("shapeBackgroundFill"), scheme) in (card, scheme.get("DARK1", "1B3139"))]  # カード（CARD）と濃紺の箱（コード）
             r.hits[COL_SHIFT].extend(f"p{i}: {m}" for m in column_shift(cards, filled))
             band, below, boxes = empty_space(els, scheme)
             if band:
@@ -989,6 +1001,12 @@ def selftest():
     assert len(dk({1, 3, 5, 9}, 13).hits[SHORT_CH]) == 1 and not dk({1, 3, 6, 9}, 13).hits[SHORT_CH]
     assert len(dk(set(), 3).hits[NO_COVER]) == 1 and not dk({1}, 3).hits[NO_COVER]
     assert len(dk({1, 5, 12}, 13).hits[SHORT_CH]) == 1 and len(dk({1, 5, 6}, 9).hits[SHORT_CH]) == 1  # 最後の章が 1 枚、扉が続く
+    # 本文の地が暗いテーマ（DARK1 と LIGHT1 が同じ黒）でも、扉は地の色の値でなく枠（NAVY = DARK1）で見分ける
+    black = [{"type": k, "color": rgb("000000")} for k in ("DARK1", "LIGHT1")]
+    dark_deck = lambda darks, n: (lambda p: (p["masters"][0]["pageProperties"]["colorScheme"].update(colors=black), run(p)[0])[1])(
+        deck([(NAVY if k in darks else {"themeColor": "LIGHT1"}, [title("問い合わせが、3 割減っている")]) for k in range(1, n + 1)]))
+    assert len(dark_deck({1}, 13).hits[NO_DIVIDER]) == 1 and not dark_deck({1}, 3).hits[NO_COVER] and len(dark_deck(set(), 3).hits[NO_COVER]) == 1
+    assert len(dark_deck({1, 5, 6}, 9).hits[SHORT_CH]) == 1 and dark_deck({1}, 5).hits[HEAD_CLAIMS]  # 本文のページを扉と取り違えない
     # 横の矢印: 2 つの箱（上端 1 in・高さ 0.46 in）の間。ずれが 0.02 in を超えたら出す
     rect = lambda x, w: [x * EMU, EMU, w * EMU, 0.46 * EMU]
     assert not off_center_arrows([[1.58 * EMU, 1.23 * EMU, 1.34 * EMU, 0]], [rect(0, 1.5), rect(3, 2)])
