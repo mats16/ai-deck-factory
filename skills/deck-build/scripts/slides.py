@@ -103,12 +103,13 @@ def wrap_lines(s, avail, size, mono=False):
     """1 段落を幅 avail（in）で折り返したときの (行数, 最終行の幅 em) の見込み。和文は 1 字ずつ、英数字の語はまとめて次の行へ送る。
     ponytail: 行頭の句読点を前の行に戻す禁則は見ない"""
     n, cur, cap = 1, 0.0, max(avail, 0.05) * 72 / size
-    for t in re.findall(r"[!-~]+| +|.", s):
-        tw = em_width(t, mono)
-        if cur + tw > cap + 1e-9 and cur > 0:
-            n, cur = n + 1, (0.0 if t.isspace() else tw)
-        else:
-            cur += tw
+    for word in re.findall(r"[!-~]+| +|.", s):
+        for t in (word if em_width(word, mono) > cap else [word]):  # 1 行より長い語（長い識別子・URL）は、字で折る
+            tw = em_width(t, mono)
+            if cur + tw > cap + 1e-9 and cur > 0:
+                n, cur = n + 1, (0.0 if t.isspace() else tw)
+            else:
+                cur += tw
     return n, cur
 
 
@@ -391,7 +392,7 @@ class Deck:
         if ring:
             fw = max(w, em_width(full) * size / 72 + 2 * INSET) if len(full) > 1 else w
             x, w, spacing = x - (fw - w) / 2, fw, spacing or 100  # 行の見込みで 125 にしない（1 行で中央に置く）
-        avail = w - 2 * INSET - 2 * inner
+        avail = w - 2 * INSET - 2 * inner - (size * 1.3 / 72 if bullets else 0)  # 箇条書きは下の indentStart の分だけ狭い（card_h と同じ）
         if fit:
             over = set()
             for p in parts:
@@ -970,6 +971,11 @@ def selftest():
     one = 10 * 11 / 72  # 11pt の 10 字の幅
     assert wrap_lines("あ" * 9 + " Codex", one, 11) == (2, em_width("Codex"))  # 英数字の語は行をまたがず送る（空白は行頭に残さない）
     assert est_lines("あ" * 9 + " Codex", one, 11) == 2
+    assert wrap_lines("W" * 20, 1, 11)[0] == 3  # 1 行より長い語は字で折る
+    w = make_deck(lambda d: d.text(d.page("t"), 0, 0, 1 + 2 * INSET, 1, "W" * 20 + "\nOK"), "foot")
+    assert len(w.warnings) == 1 and "収まらない" in w.warnings[0]  # 長い識別子だけの行も、収まらない見込みに出す
+    w = make_deck(lambda d: d.text(d.page("t"), 0, 0, one + 2 * INSET, 1, "あ" * 10, bullets=True), "foot")
+    assert len(w.warnings) == 1 and "最終行が 2 字以下" in w.warnings[0]  # 箇条書きの字下げで 10 字が 2 行になる
     w = make_deck(lambda d: [d.text(d.page("t"), 0, 0, one + 2 * INSET, 1, t) for t in ("あ" * 11, "あ" * 14, "×")], "foot")
     assert len(w.warnings) == 1 and "最終行が 2 字以下" in w.warnings[0]  # 11 字は 1 字の最終行。14 字（4 字）と 1 字だけの枠は出さない
     c = Deck("c")
