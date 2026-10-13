@@ -99,9 +99,23 @@ def em_width(s, mono=False):
     return sum(1.0 if ord(c) >= 0x2100 or c in "×÷±…※†‡" else MONO_EM if mono and c in ASCII_EM else ASCII_EM.get(c, 0.57) for c in s)
 
 
+def wrap_lines(s, avail, size, mono=False):
+    """1 段落を幅 avail（in）で折り返したときの (行数, 最終行の幅 em) の見込み。和文は 1 字ずつ、英数字の語はまとめて次の行へ送る。
+    ponytail: 行頭の句読点を前の行に戻す禁則は見ない"""
+    n, cur, cap = 1, 0.0, max(avail, 0.05) * 72 / size
+    for t in re.findall(r"[!-~]+| +|.", s):
+        tw = em_width(t, mono)
+        if cur + tw > cap + 1e-9 and cur > 0:
+            n, cur = n + 1, (0.0 if t.isspace() else tw)
+        else:
+            cur += tw
+    return n, cur
+
+
 def est_lines(s, avail, size, mono=False):
-    """幅 avail（in。文字の枠の内側）に size pt で置いたときの行数の見込み。\n と \v で改行する。"""
-    return sum(max(1, math.ceil(em_width(p, mono) * size / 72 / max(avail, 0.05) - 1e-9)) for p in re.split(r"[\n\v]", s))
+    """幅 avail（in。文字の枠の内側）に size pt で置いたときの行数の見込み。\n と \v で改行する。英数字の語は行をまたがない
+    （1 字ずつ詰めて数えると、英語の多いカードで 1 行少なく見込み、h を省いたカードから文字がはみ出した。2026-10-13）。"""
+    return sum(wrap_lines(p, avail, size, mono)[0] for p in re.split(r"[\n\v]", s))
 
 
 def mono_reqs(oid, s, cell=None):
@@ -114,6 +128,19 @@ def mono_reqs(oid, s, cell=None):
 def est_h(s, avail, size, spacing=100):
     """高さの見込み（in）。行送りは文字の大きさの 1.2 倍 × 行間。"""
     return est_lines(s, avail, size) * size * 1.2 * spacing / 100 / 72
+
+
+def card_h(w, head=None, body=None, items=None, step=None, bullets=False, size=11):
+    """[slides_py-012] d.card の高さの見込み（in）。d.card の h を省くと、これで中身から決める。隣の列やページの下端に合わせて伸ばすと、
+    中身より大きい箱になる（代表の 3 枚の記録で、ほぼすべてのデッキに出た）。列の高さをそろえるなら、並ぶカードの card_h の最大を渡す。
+    ponytail: 本文は size の 1 つの大きさで見積もる。大きさの違う run（大きな数字など）が混ざるなら h を渡す"""
+    top = 0.5 if head else 0.1
+    if step is not None:
+        return top + len(items or []) * step + 0.1
+    avail = w - 2 * PAD - 2 * INSET - (size * 1.3 / 72 if bullets else 0)
+    parts = [body] if isinstance(body, str) else body or []
+    s = "\n\n".join(h2 + "\n" + b for h2, b in items) if items else "".join(p if isinstance(p, str) else p[0] for p in parts)
+    return top + (est_h(s, avail, size, 125) + 2 * INSET if s else 0) + 0.15  # 最終行と下端の間を、白いカードの決まり（box_pad の 0.28 in）より広く
 
 
 def cols(n, gap=0.24, x0=X, w=W):
@@ -366,11 +393,18 @@ class Deck:
             x, w, spacing = x - (fw - w) / 2, fw, spacing or 100  # 行の見込みで 125 にしない（1 行で中央に置く）
         avail = w - 2 * INSET - 2 * inner
         if fit:
+            over = set()
             for p in parts:
                 t, sz = (p, size) if isinstance(p, str) else (p[0], p[1].get("size", size))
                 for ln in (re.split(r"[\n\v]", t) if re.search(r"[\n\v]", t) else []):
                     if ln and est_lines(ln, avail, sz, mono) > 1:
+                        over.add(ln)
                         self.warn(f"手で改行した行が枠に収まらない見込み「{ln}」（{em_width(ln, mono) * sz / 72:.2f} in > {avail:.2f} in）")
+            # [slides_py-013] 自動で折り返す行の、最終行の 1〜2 字（代表の 3 枚の記録で、ほぼすべてのデッキに出た）。ponytail: size の 1 つの大きさで見る
+            for ln in re.split(r"[\n\v]", full):
+                n, last = wrap_lines(ln, avail, size, mono)
+                if n > 1 and last <= 2 and ln not in over:
+                    self.warn(f"折り返した最終行が 2 字以下の見込み「{ln}」（{n} 行。言い換えか \\v で行を決める）")
         if spacing is None:
             spacing = 125 if est_lines(full.strip("\n"), avail, size, mono) > 1 else 100
         if ring:
@@ -439,13 +473,18 @@ class Deck:
         parts = [(ln + ("\n" if i < len(lines) - 1 else ""), {"color": RED_ON_NAVY, "bold": True} if i in hot else {}) for i, ln in enumerate(lines)]
         return self.text(sid, x + 0.22, y + 0.14, w - 0.4, h - 0.24, parts, size=size, color=WHITE, spacing=110, edge=True, mono=True)
 
-    def card(self, sid, x, y, w, h, head=None, body=None, items=None, fill=CARD, line=RULE, step=None, bullets=False):
+    def card(self, sid, x, y, w, h=None, head=None, body=None, items=None, fill=CARD, line=RULE, step=None, bullets=False):
         """見出しと本文の箱。箱の上に一回り小さい文字の枠を重ねる（文字の枠の内側の余白は変えられないので、枠と文字の間をここで空ける）。
-        head・body・items を省くと、白い地に罫線の箱だけを置く（中身を自分で組むカード）。
+        head・body・items を省くと、白い地に罫線の箱だけを置く（中身を自分で組むカード。h を渡す）。
         body は 1 つの文字の枠に入れるもの（text の parts と同じ。bullets で箇条書き）。
         items は (見出し, 説明) の並びで、既定では 1 つの文字の枠に空行を挟んで流す（1 行と 2 行の項目が混ざっても間がそろう）。
         [slides_py-009] step（in）を渡すと、前のように項目ごとに決まった間隔で置く（左右のカードで項目の上端をそろえたいときだけ。
-        決まった間隔だと、行数の違う項目の間がそろわない）。"""
+        決まった間隔だと、行数の違う項目の間がそろわない）。
+        h を省くと中身から決める（card_h）。戻りは箱の下端（in。下に置く要素の位置に使う）。"""
+        if h is None:
+            if not (head or body or items):
+                raise ValueError("中身を自分で組むカードは h を渡す")
+            h = card_h(w, head, body, items, step, bullets)
         self.box(sid, x, y, w, h, fill, line)
         if head:
             self.text(sid, x + PAD, y + 0.1, w - 2 * PAD, 0.34, head, size=12, color=NAVY, bold=True)
@@ -459,6 +498,7 @@ class Deck:
             self.text(sid, x + PAD, top + i * step, w - 2 * PAD, step - 0.08, [(h2 + "\n", {"bold": True}), b], spacing=125)
         if body:
             self.text(sid, x + PAD, top, w - 2 * PAD, h - (top - y) - 0.1, body, spacing=125, bullets=bullets)
+        return y + h
 
     def table(self, sid, x, y, widths, rows, size=11, row_h=0.36, header=True, first_col=True, zebra=True, align=None, mono_cols=()):
         """rows は文字列の 2 次元の並び（1 行目が見出し）。セルの中の改行は \\n。縦の罫線なし、横の罫線は RULE（visual.md の 5）。
@@ -927,6 +967,21 @@ def selftest():
     assert est_lines("あ" * 10, 10 * 11 / 72, 11) == 1 and est_lines("あ" * 11, 10 * 11 / 72, 11) == 2 and est_lines("a\nb", 1, 11) == 2
     w = make_deck(lambda d: (d.text(d.page("t"), 0, 0, 1.2, 1, "短い\nとても長くて枠に収まらない行"), d.text(d.slides[-1], 0, 0, 1.2, 1, "")), "foot")
     assert len(w.warnings) == 1 and "収まらない" in w.warnings[0]  # 手で改行した行の見込み。空の文字は置かない
+    one = 10 * 11 / 72  # 11pt の 10 字の幅
+    assert wrap_lines("あ" * 9 + " Codex", one, 11) == (2, em_width("Codex"))  # 英数字の語は行をまたがず送る（空白は行頭に残さない）
+    assert est_lines("あ" * 9 + " Codex", one, 11) == 2
+    w = make_deck(lambda d: [d.text(d.page("t"), 0, 0, one + 2 * INSET, 1, t) for t in ("あ" * 11, "あ" * 14, "×")], "foot")
+    assert len(w.warnings) == 1 and "最終行が 2 字以下" in w.warnings[0]  # 11 字は 1 字の最終行。14 字（4 字）と 1 字だけの枠は出さない
+    c = Deck("c")
+    sid = c.page("t")
+    assert c.card(sid, 1, 1, 3, None, "見出し", body="あ" * 30) == 1 + card_h(3, "見出し", body="あ" * 30)  # h を省くと中身から決め、下端を返す
+    assert card_h(3, "見出し", body="あ" * 30) > card_h(3, "見出し", body="あ" * 10) > card_h(3, "見出し") > 0.5
+    assert card_h(3, items=[("a", "b"), ("c", "d")]) == card_h(3, body="a\nb\n\nc\nd")  # items は空行を挟んで 1 つの枠に流す
+    try:
+        c.card(sid, 1, 1, 3)
+        raise AssertionError("中身のないカードを h なしで通した")
+    except ValueError:
+        pass
     t = make_deck(lambda d: d.source(d.page("t"), ["Databricks"]), "foot")
     assert any(r.get("insertText", {}).get("text") == "出典: Databricks" for r in t.reqs)  # 出典の行の頭
     t = make_deck(lambda d: d.band(d.page("t"), "あ" * 120, "補足"), "foot")

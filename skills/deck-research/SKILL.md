@@ -14,7 +14,7 @@ description: 資料づくり（スライド・ドキュメントの中身と見�
 | `Research/deck_research/state.md` | 前回の日付、採用した知見とその反映先（資料づくりの中でユーザーが出した修正の指示は、ここではなく決まりの台帳 `.factory/ledger.jsonl`）、見送った知見とその理由、ユーザーの判断待ち、未確認のまま残したこと、次に調べること |
 | [sources.md](sources.md) | 分野ごとの、よかった情報源・効いた検索語・外れ・アクセスのコツ |
 | `Research/deck_research/log/<YYYYMMDD>_<topic>.md` | 各回の報告の全文（サブエージェントが書く）。名前は英数字とハイフン・アンダーバーだけ（例: `20261006_jp_content.md`）。社内の情報が入るファイルには、冒頭にそう書く |
-| `Research/deck_research/log/20261009_rep3_selection.md` | 代表の 3 枚の選び方の記録（資料を作るエージェントが 1 本ごとに足す。2026-11-09 まで） |
+| `Research/deck_research/log/20261009_rep3_selection.md` | 代表の 3 枚の選び方の記録（資料を作るエージェントが 1 本ごとに足す。2026-10-13 からの 10 本まで） |
 
 ## 進め方
 
