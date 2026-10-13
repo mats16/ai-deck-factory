@@ -17,7 +17,7 @@ from gapi import DRIVE, SLIDES, batch, factory, factory_path, file_id, find_fact
 from lint import JA, cells, contrast, flatten, lum, paras
 from slides import (BG, BLANK, CARD, COPYRIGHT_PT, DECOR, EMU, FONT, GA, INSET, NAVY, NAVY_BLOCK, OSS, PAD, PANEL, PREVIEW, RED, RED_ON_NAVY,
                     RED_SOFT, RED_TEXT, RULE, SLOTS, STAGE_TEXT, SUB, TEXT, THEMES, WHITE, W, X, Y_BODY, Y_FOOT, build, cols, make_deck, number_style, rgb)
-from slides import FIXED as FIXED_DEFAULT, JP_FONTS, THEME_MARK, is_blank, need_brand, placeholders, theme_fixed, use_theme
+from slides import FIXED as FIXED_DEFAULT, JP_FONTS, THEME_MARK, is_blank, need_brand, placeholders, theme_fixed, theme_font, use_theme
 
 THEMES_DIR = "Themes"  # テンプレートを作る Drive のフォルダ。[drive] factory の下（なければ作る）。使うテンプレートは [slides.themes.<名前>] の url で 1 つずつ指す
 FOLDER = "application/vnd.google-apps.folder"
@@ -67,8 +67,7 @@ def colors(theme):
         sys.exit(f"[slides.themes.{theme}] に知らない名前: {', '.join(sorted(bad))}（色は役割の名前 {', '.join(ROLE)} と固定の色の名前 {', '.join(FIXED_DEFAULT)} で書く）")
     if bad := [k for k, v in t.items() if k in {*ROLE, *FIXED_DEFAULT} and not re.fullmatch(r"#?[0-9A-Fa-f]{6}", str(v))]:
         sys.exit(f"[slides.themes.{theme}] の {', '.join(bad)} が 6 桁の 16 進の色でない（例: NAVY = \"002B5C\"）")
-    if t.get("font", FONT) not in JP_FONTS:  # ほかの書体は、和文が別の書体になるか、描けない。deck_font も FONT に戻す
-        sys.exit(f"[slides.themes.{theme}] の font {t['font']!r} は、和文を描けると確かめた書体（slides.py の JP_FONTS）にない。deck-template の SKILL.md の「書体」から選ぶ")
+    theme_font(t)
     return {**THEMES["visual"], **{ROLE[k]: v.lstrip("#").upper() for k, v in t.items() if k in ROLE}}
 
 

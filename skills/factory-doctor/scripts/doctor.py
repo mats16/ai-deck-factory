@@ -63,7 +63,14 @@ def check(ws, local=False):
     import slides  # 仮の著作権表示（PLACEHOLDER_COPYRIGHT。need_brand と同じ）と、組み込みのテーマの説明（THEME_NOTES）
     brand = cfg.get("brand", {})
     marks = [("brand.copyright", brand.get("copyright", ""))]  # テーマの copyright は、そのテーマのデッキで [brand] の代わりに書く（slides.py の use_theme）
-    marks += [(f"slides.themes.{n}.copyright", t["copyright"]) for n, t in cfg.get("slides", {}).get("themes", {}).items() if "copyright" in t]
+    marks += [(f"slides.themes.{n}.copyright", t["copyright"]) for n, t in cfg.get("slides", {}).get("themes", {}).items()
+              if isinstance(t.get("copyright"), str)]  # 文字列でない値は、下の theme_values が slides.themes.<名前> に出す（2 回出さない）
+    for kind, validate in (("slides", lambda t: (slides.theme_values(t), slides.theme_font(t))), ("docs", lambda t: (slides.theme_font(t), slides.theme_mono(t)))):
+        for n, t in cfg.get(kind, {}).get("themes", {}).items():  # 組むときに止まる値（色・copyright・書体）を、組む前に出す（slides.py・docs.py と同じ関数で見る）
+            try:
+                validate(t)
+            except SystemExit as e:
+                ng(f"{kind}.themes.{n}", str(e))
     for key, c in marks:
         if not (c := str(c).strip()):
             ng(key, "空。スライドもドキュメントも組めない（全ページの左下に書く著作権表示がない）。自分の会社の著作権表示を書く")
@@ -167,7 +174,13 @@ def selftest():
         assert kinds()["slides.themes.mine.copyright"] == "要修正"  # テーマの copyright にも同じ確かめ
         toml.write_text(toml.read_text().replace('"© Me 2026"', '"© 2026 Me. All rights reserved."'))
         assert "slides.themes.mine.copyright" not in kinds()
-        toml.write_text(toml.read_text().replace('\n[slides.themes.mine]\ncopyright = "© 2026 Me. All rights reserved."\n', ""))
+        toml.write_text(toml.read_text() + 'TEXT = "red"\n\n[docs.themes.us2]\nmono = "Fira Code"\n')
+        assert kinds()["slides.themes.mine"] == "要修正" and kinds()["docs.themes.us2"] == "要修正"  # 6 桁でない色、リガチャの出る等幅
+        toml.write_text(toml.read_text().replace('\n[slides.themes.mine]\ncopyright = "© 2026 Me. All rights reserved."\nTEXT = "red"\n\n[docs.themes.us2]\nmono = "Fira Code"\n', ""))
+        assert "slides.themes.mine" not in kinds() and "docs.themes.us2" not in kinds()
+        toml.write_text(toml.read_text() + '\n[slides.themes.num]\ncopyright = 2026\n')
+        assert kinds()["slides.themes.num"] == "要修正" and "slides.themes.num.copyright" not in kinds()  # 文字列でない copyright は 1 回だけ出す
+        toml.write_text(toml.read_text().replace('\n[slides.themes.num]\ncopyright = 2026\n', ""))
         toml.write_text(toml.read_text() + '\n[slides.templates]\nvisual = "x"\n')
         assert kinds()["slides.templates"] == "要修正"  # 古い書き方だけ
         toml.write_text(toml.read_text().replace('[slides.templates]\nvisual = "x"\n', ""))

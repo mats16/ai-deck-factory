@@ -91,7 +91,7 @@ title: Lakebase の導入の検討について              # 表紙を作らな
   font = "Noto Sans JP"         # 本文の書体。書けるのは slides.py の JP_FONTS（和文を描けると確かめた書体）だけ
   mono = "Cascadia Mono"        # コードの等幅。リガチャのある書体（LIGATURE_MONO）は止める
   ```
-  `font`・`mono` を書かなければ Noto Sans JP と Cascadia Mono。行送りと字の幅の見込みは、この 2 つで測った値のまま（違う書体では 1 行の字数や改ページがずれる）。Google Fonts にない名前は、黙って別の書体で描かれる。書いたら、そのテーマの文書を組み、`docs.py check` の「PDF の書体」と画像で見る。lint の書体の検査は、`docs.py check` がテーマの書体と比べる（`lint.py` に文書の JSON をじかに渡すと、既定の書体と比べる）。
+  `font`・`mono` を書かなければ Noto Sans JP と Cascadia Mono。行送りと字の幅の見込みは、この 2 つで測った値のまま（違う書体では 1 行の字数や改ページがずれる）。Google Fonts にない名前は、黙って別の書体で描かれる。書いたら、そのテーマの文書を組み、`docs.py check` の「PDF の書体」と画像で見る。lint の書体の検査は、`docs.py check` が、`docs.py build` が文書に残した書体（組んだときのテーマの書体）と比べる。残していない文書（前の版で組んだもの）と、`lint.py` に文書の JSON をじかに渡したときは、既定の書体と比べる。
 - 画像の選び方と出どころ（`assets/README.md`、Iconify、各社のアイコン）は、スライドと同じ（`../deck-build/slides.md` の 6）。図を Google Slides で描いて貼るときは、`gslides.py thumb` で画像にしてから `![…](…)` で置く。
 
 ### 1.3 テンプレート

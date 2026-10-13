@@ -760,20 +760,35 @@ def theme_fixed(t):
     return {k: str(t.get(k, v)).lstrip("#").upper() for k, v in FIXED.items()}
 
 
+def theme_values(t):
+    """テーマの表 t の、組むときに factory.toml から引く値（固定の色, 著作権表示, 等幅の書体）。書いていなければ今の値。書けない値なら止める。"""
+    c = t.get("copyright", BRAND_COPYRIGHT)
+    if "copyright" in t and not isinstance(c, str):  # [brand] の値は need_brand と factory-doctor が見る
+        sys.exit(f"テーマの copyright {c!r} は文字列でない（例: copyright = \"© 2026 Acme, Inc. All rights reserved.\"）")
+    return theme_fixed(t), c, theme_mono(t)
+
+
 def use_theme(t):
     """テーマの表 t（theme_table）の固定の色・著作権表示・等幅の書体で組む。make_deck の前に呼ぶ（pages.py が作る要求に効かせる）。"""
     global COPYRIGHT, MONO
+    colors, COPYRIGHT, MONO = theme_values(t)
     _SWAP.clear()
-    _SWAP.update({FIXED[k]: v for k, v in theme_fixed(t).items() if v != FIXED[k]})
-    COPYRIGHT = t.get("copyright", BRAND_COPYRIGHT)
-    MONO = theme_mono(t)
+    _SWAP.update({FIXED[k]: v for k, v in colors.items() if v != FIXED[k]})
+
+
+def theme_font(t):
+    """テーマの表 t（[slides.themes]・[docs.themes]）の本文の書体。書いていなければ FONT。和文を描けると確かめた書体（JP_FONTS）でなければ止める
+    （ほかの書体は、和文が別の書体になるか、描けない。deck_font も FONT に戻す）。"""
+    if not isinstance(f := t.get("font", FONT), str) or f not in JP_FONTS:
+        sys.exit(f"テーマの font {f!r} は、和文を描けると確かめた書体（slides.py の JP_FONTS）にない。deck-template の SKILL.md の「書体」から選ぶ")
+    return f
 
 
 def theme_mono(t):
     """テーマの表 t（[slides.themes]・[docs.themes]）の等幅の書体。書いていなければ MONO_DEFAULT。和文を載せないので JP_FONTS には限らない（Google Fonts にない書体は黙って別の書体になる）。"""
     if not isinstance(m := t.get("mono", MONO_DEFAULT), str) or not m.strip():
         sys.exit(f"テーマの mono {m!r} は書体の名前でない（例: mono = \"Cascadia Mono\"）")
-    if m.strip() in LIGATURE_MONO:
+    if " ".join(m.split()).casefold() in {x.casefold() for x in LIGATURE_MONO}:  # 大文字と小文字、空白の数の違いでも同じ書体とみなす
         sys.exit(f"テーマの mono {m!r} は、Google が描くとリガチャが出る（-> が矢印 1 字になる。visual.md の 2）。リガチャのない書体にする")
     return m.strip()
 
@@ -781,6 +796,17 @@ def theme_mono(t):
 def deck_mono(p):
     """デッキの等幅の書体（デッキのテーマの mono。lint が比べる）。マスターにコードの枠がないので、deck_font と違いテーマの名前から引く。"""
     return theme_mono(theme_table(deck_theme(p)))
+
+
+def need_mark(want, mark):
+    """new で、選んだテーマ want と、テンプレートの目印のテーマ mark とで、組むときに引く値（theme_values）が違えば止める。目印のない前のテンプレートは、
+    want にテーマに入れない色・copyright・mono を書いていなければ通す（今の値で組むのと同じ）。複製したデッキは目印のテーマで組み直されるので、ここでそろえる。"""
+    if theme_values(theme_table(want)) == theme_values(theme_table(mark)):
+        return
+    if mark is None:
+        sys.exit(f"テーマ {want} のテンプレートにテーマの名前がない（template.py で合わせ直す前のもの）。[slides.themes.{want}] のテーマに入れない色・copyright・mono が効かないので、"
+                 f"template.py {want} で合わせ直してから組む")
+    sys.exit(f"テーマ {want} のテンプレートは、テーマ {mark} の名前を持つ（url が同じか、template.py {mark} で合わせ直した）。テーマごとにテンプレートを分け、template.py {want} で合わせ直す")
 
 
 def theme_of(pid):
@@ -1109,17 +1135,29 @@ def selftest():
     for empty in ({}, theme_table("ない")):  # 値がないテーマと、factory.toml にないテーマは、今の値に戻す
         use_theme(empty)
         assert not _SWAP and COPYRIGHT == BRAND_COPYRIGHT and theme_fixed(empty) == FIXED and paint(TEXT) == {"rgbColor": rgb("303F47")} and MONO == MONO_DEFAULT
-    for bad in ("Fira Code", " "):  # リガチャの出る書体と、名前でないもの
+    for bad in ("Fira Code", "jetbrains  mono", " "):  # リガチャの出る書体（書き方の揺れも）と、名前でないもの
         try:
             theme_mono({"mono": bad})
             raise AssertionError(f"mono {bad!r} を通した")
         except SystemExit:
             pass
-    try:
-        theme_fixed({"RULE": "灰色"})
-        raise AssertionError("6 桁でない色を通した")
-    except SystemExit:
-        pass
+    for bad in ({"RULE": "灰色"}, {"copyright": 2026}, {"font": ["BIZ UDPGothic"]}, {"font": "Inter"}):  # 書けない値は traceback でなく止める
+        try:
+            theme_values(bad), theme_font(bad)
+            raise AssertionError(f"{bad} を通した")
+        except SystemExit:
+            pass
+    # new: 選んだテーマとテンプレートの目印のテーマで、引く値が違えば止める。目印のない前のテンプレートは、新しい値を書いていなければ通す
+    table, plain = theme_table, {"p": {"TEXT": "31302E"}, "q": {"TEXT": "31302E"}, "o": {"description": "色は書かない"}}
+    globals()["theme_table"] = lambda n: plain.get(n, {})
+    need_mark("o", None), need_mark("p", "p"), need_mark("p", "q")  # 値が同じなら通す
+    for want, mark in (("p", None), ("o", "p")):
+        try:
+            need_mark(want, mark)
+            raise AssertionError(f"テーマ {want} をテンプレートの目印 {mark} で通した")
+        except SystemExit as e:
+            assert f"template.py {want}" in str(e)
+    globals()["theme_table"] = table
     print("selftest ok")
 
 
@@ -1135,7 +1173,10 @@ def main():
     if a[0] == "new":
         need_theme(theme)
     src = template_id(theme) if a[0] == "new" else file_id(a[1])
-    use_theme(theme_table(theme_of(src)))  # テーマはデッキ（new ならテンプレート）から読む。複製は同じ代替テキストを持つ
+    mark = theme_of(src)  # テーマはデッキ（new ならテンプレート）から読む。複製は同じ代替テキストを持つ
+    if a[0] == "new":
+        need_mark(theme or factory().get("slides", {}).get("default_theme", "visual"), mark)
+    use_theme(theme_table(mark))
     need_brand()  # 複製する前に止める（build でも止まるが、作った複製をゴミ箱に移すことになる）
     deck = make_deck(*load_pages())
     if a[0] == "build":
