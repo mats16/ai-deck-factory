@@ -1,22 +1,24 @@
 #!/usr/bin/env python3
-"""プラグインの改善を、過去の資料で確かめてから PR にする（手順は ../SKILL.md）。ワークスペース（factory.toml のあるフォルダ）で回す。
+"""プラグインの改善を、過去の資料で確かめてから Issue にする（手順は ../SKILL.md）。ワークスペース（factory.toml のあるフォルダ）で回す。
 usage:
-  kaizen.py start   <名前>                          元のリポジトリ（[factory] source）に kaizen/<名前> の worktree を作る。前の版（origin/main）も写す
+  kaizen.py start   <名前>                          元のリポジトリ（[factory] source）に kaizen/<名前> の worktree を作る。前の版（main）も写す
   kaizen.py lint    <名前> <資料の URL ...>          いまの資料の JSON に、前の版と変えた版の lint をかけて比べる
   kaizen.py rebuild <名前> <資料のフォルダ ...> [--pages 2,5] [--keep]   build/ の正本（pages.py・doc.md）を前の版と変えた版で仮に組み、ページの画像を並べて比べる
-  kaizen.py open    <名前> --title <題> --body <本文.md> [--draft]   本文と検証の記録をまとめて PR を作る（commit は先に済ませる。PR があれば本文を書き換える）
-  kaizen.py clean   <名前>                          worktree と検証の記録を消す（PR がマージか却下されたあと）
+  kaizen.py open    <名前> --title <題> --body <本文.md>   本文と検証の記録と変更案の差分をまとめて、プラグインのリポジトリに Issue を作る（commit は先に済ませる。Issue があれば本文を書き換える）
+  kaizen.py clean   <名前>                          worktree と検証の記録を消す（Issue が閉じられたあと）
   kaizen.py --selftest
 置き場所は <ワークスペース>/.factory/kaizen/<名前>/（repo/ 変える版、base/ 前の版、verify/ 検証の記録）。資料の名前・URL・本文は verify/detail.md にだけ書き、
-PR には「資料 1」のような番号と、規則ごとの数の変化と、選んだ画像だけを出す。"""
+Issue には「資料 1」のような番号と、規則ごとの数の変化と、選んだ画像と、変更案の差分だけを出す。ブランチは push しない。"""
 import json, os, re, shutil, subprocess, sys, tempfile, time
+from functools import cached_property
 from pathlib import Path
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "deck-build" / "scripts"))
 import gapi
 
-SECTIONS = ("## 変えること", "## 理由", "## 背景", "## 過去資料での検証")
+SECTIONS = ("## 変えること", "## 理由", "## 背景", "## 過去資料での検証", "## 影響", "## 迷ったところ")
+MAX_BODY = 60000  # GitHub の Issue の本文は 65536 字まで
 DESIGN = re.compile(r"skills/(deck-practices/visual(_doc)?\.md|deck-build/(scripts/(slides|template|docs|box_pad|doc_layout)\.py|assets/))")  # 見た目が変わりうるファイル
 URL_ID = re.compile(r"https://docs\.google\.com/(?:presentation|document)/d/([\w-]+)")
 COUNT = re.compile(r"^== (要修正|要確認)[^:]*: (\d+) ==$", re.M)
@@ -39,12 +41,27 @@ class Work:
         src = gapi.factory().get("factory", {}).get("source")
         self.src = Path(src).expanduser() if src else None
 
+    @cached_property
+    def github(self):
+        """(画像を置くリポジトリ, Issue を出すリポジトリ, 差分の起点) を、origin の URL から 1 回で決める。
+        fork なら、画像は自分の fork（origin の pr-assets）、Issue と差分の起点は元のリポジトリ（upstream のリモート）。"""
+        self.src or sys.exit("factory.toml の [factory] source に、プラグインのリポジトリの git の checkout（持ち主でなければ fork）を書く")
+        view = lambda url: json.loads(sh("gh", "repo", "view", url, "--json", "nameWithOwner,parent").stdout)
+        me = view(sh("git", "-C", self.src, "remote", "get-url", "origin").stdout.strip())
+        if not me.get("parent"):
+            return me["nameWithOwner"], me["nameWithOwner"], "origin/main"
+        parent = f"{me['parent']['owner']['login']}/{me['parent']['name']}"
+        up = sh("git", "-C", self.src, "remote", "get-url", "upstream", check=False).stdout.strip()
+        if not up or view(up)["nameWithOwner"] != parent:  # fork の main は古いか、自分の commit があるかもしれない
+            sys.exit(f"origin は {parent} の fork なのに、upstream のリモートが {parent} を指していない。git -C {self.src} remote add upstream https://github.com/{parent}.git（あれば set-url）")
+        return me["nameWithOwner"], parent, "upstream/main"
+
     def need(self):
         if not self.repo.is_dir():
             sys.exit(f"{self.repo} がない。先に kaizen.py start {self.name}")
 
     def label(self, key):
-        """資料の番号（PR には資料の名前を出さない）。"""
+        """資料の番号（Issue には資料の名前を出さない）。"""
         self.verify.mkdir(parents=True, exist_ok=True)
         f = self.verify / "labels.json"
         labels = json.loads(f.read_text()) if f.is_file() else {}
@@ -84,12 +101,13 @@ def start(w):
         sys.exit("factory.toml の [factory] source に、プラグインのリポジトリの git の checkout（持ち主でなければ fork）を書く")
     if w.dir.exists():
         sys.exit(f"{w.dir} がもうある（続けるならそのまま使う。やり直すなら kaizen.py clean {w.name}）")
-    sh("git", "-C", w.src, "fetch", "-q", "origin")
-    sh("git", "-C", w.src, "worktree", "add", "-q", "-b", w.branch, w.repo, "origin/main")
+    main = w.github[2]
+    sh("git", "-C", w.src, "fetch", "-q", main.split("/")[0])
+    sh("git", "-C", w.src, "worktree", "add", "-q", "-b", w.branch, w.repo, main)
     w.base.mkdir(parents=True)
-    arch = subprocess.run(["git", "-C", str(w.src), "archive", "origin/main"], capture_output=True, check=True).stdout
+    arch = subprocess.run(["git", "-C", str(w.src), "archive", main], capture_output=True, check=True).stdout
     subprocess.run(["tar", "-x", "-C", str(w.base)], input=arch, check=True)
-    print(f"変える版: {w.repo}（ブランチ {w.branch}）\n前の版: {w.base}（origin/main）\n変えたら commit し、kaizen.py lint・rebuild で確かめる")
+    print(f"変える版: {w.repo}（ブランチ {w.branch}）\n前の版: {w.base}（{main}）\n変えたら commit し、kaizen.py lint・rebuild で確かめる")
 
 
 def lint_cmd(w, urls):
@@ -146,7 +164,7 @@ def rebuild(w, folders, pages=None, keep=False):
 
 
 def upload_images(w, files):
-    """画像を pr-assets ブランチ（main とは別の、画像だけのブランチ）に置き、PR から見える URL を返す。"""
+    """画像を origin（fork）の pr-assets ブランチ（main とは別の、画像だけのブランチ）に置き、Issue から見える URL を返す。"""
     repo = str(w.repo)
     sh("git", "-C", repo, "fetch", "-q", "origin", "pr-assets", check=False)
     parent = sh("git", "-C", repo, "rev-parse", "-q", "--verify", "origin/pr-assets", check=False).stdout.strip()
@@ -160,14 +178,13 @@ def upload_images(w, files):
     tree = sh("git", "-C", repo, "write-tree", env=env).stdout.strip()
     commit = sh("git", "-C", repo, "commit-tree", tree, *(["-p", parent] if parent else []), "-m", f"{w.branch} の画像").stdout.strip()
     sh("git", "-C", repo, "push", "-q", "origin", f"{commit}:refs/heads/pr-assets")
-    slug = sh("gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner", cwd=repo).stdout.strip()
-    return {f.name: f"https://github.com/{slug}/blob/pr-assets/{w.branch}/{f.name}?raw=true" for f in files}
+    return {f.name: f"https://github.com/{w.github[0]}/blob/pr-assets/{w.branch}/{f.name}?raw=true" for f in files}
 
 
 def private_words(ws, extra=()):
-    """PR に出してはいけない語: Customers/ の顧客の名前、Customers/<顧客>/ と Internal/ の資料のフォルダの名前（年の 4 桁の数字が入ったもの。
+    """Issue に出してはいけない語: Customers/ の顧客の名前、Customers/<顧客>/ と Internal/ の資料のフォルダの名前（年の 4 桁の数字が入ったもの。
     決まりでは <内容>_<日付>。review_2026q3 のような形も入る）、factory.toml の [factory] private（日本語の社名・製品名、日付のないフォルダの名前など）。
-    日付のないフォルダ（assets・drafts など）は、ありふれた語で関係のない PR を止めるので、名前だけでは入れない（要るなら private に書く）。"""
+    日付のないフォルダ（assets・drafts など）は、ありふれた語で関係のない Issue を止めるので、名前だけでは入れない（要るなら private に書く）。"""
     names = {p.name for p in (ws / "Customers").glob("*") if p.is_dir()}
     names |= {p.name for p in [*(ws / "Customers").glob("*/*"), *(ws / "Internal").glob("*")] if p.is_dir() and re.search(r"\d{4}", p.name)}
     extra = [extra] if isinstance(extra, str) else list(extra)  # private = "アクメ" と書いても 1 語（1 字ずつに分けない）
@@ -179,12 +196,16 @@ def leaks(text, words):
     return [x for x in words if re.search(rf"(?<![A-Za-z0-9]){re.escape(x)}(?![A-Za-z0-9])", text, re.I)]
 
 
-def outgoing(title, body, branch, messages, patches, changed):
-    """PR と push で外に出る文字。open が leaks で確かめる。push はブランチのコミットを全部送るので、差し引きの差分ではなく、コミットごとに見る:
-    題、本文、ブランチの名前（push と pr-assets のコミット）、すべてのコミットメッセージ、各コミットの足した行とファイルの名前（+++ b/…・diff --git）、
-    本文の「変えたファイル」に入る名前。消した行は、もとから公開されている版か、前のコミットで足した行（そちらで見る）なので見ない。"""
-    added = [x for x in patches.splitlines() if x.startswith(("+", "diff --git"))]
-    return "\n".join([title, body, branch, messages, *changed, *added])
+def outgoing(title, body, branch, patch, changed):
+    """Issue と pr-assets で外に出る文字。open が leaks で確かめる。ブランチは push しないので、コミットメッセージと途中のコミットは出ない:
+    題、本文、ブランチの名前（pr-assets の置き場所とコミット）、本文の「変えたファイル」に入る名前、Issue に載せる差分のすべて
+    （消した行と前後の行も。fork の main から作ったときは、元のリポジトリで公開されているとは限らない）。"""
+    return "\n".join([title, body, branch, *changed, patch])
+
+
+def binary_files(numstat):
+    """git diff --numstat で、行の数の代わりに「-」が出るファイル（バイナリ）。"""
+    return [x.split("\t", 2)[2] for x in numstat.splitlines() if x.startswith("-\t-\t")]
 
 
 def check_body(body, changed, verify_text, images):
@@ -205,37 +226,61 @@ def place_images(verify_text, urls):
     return text.rstrip() + "\n\n### ほかの画像（verify/img/ に手で置いたもの）\n\n" + "".join(f"![{n}]({urls[n]})\n" for n in rest) if rest else text
 
 
-def open_pr(w, title, body_file, draft=False):
+def issue_body(body, changed, base, verify_text, patch):
+    """Issue の本文。差分が長くて本文が上限を超えるなら、差分を載せずに行数だけ書く。"""
+    head = body.rstrip() + "\n\n## 検証の記録（factory-kaizen）\n\n前の版: `" + base + "`（差分の起点の commit）\n\n変えたファイル: " + ", ".join(f"`{f}`" for f in changed) + "\n\n" + verify_text.rstrip()
+    lines = len(patch.splitlines())
+    fence = "`" * max(4, 1 + max(map(len, re.findall(r"`+", patch)), default=0))  # 差分の中の ``` で囲いが閉じないように、中のどれより長くする
+    diff = f"\n\n## 変更案の差分\n\n<details><summary>git diff（{lines} 行）</summary>\n\n{fence}diff\n{patch.rstrip()}\n{fence}\n\n</details>\n"
+    if len(head) + len(diff) > MAX_BODY:  # ponytail: 長い差分は載せない。要るなら差分を分けた Issue にする
+        diff = f"\n\n## 変更案の差分\n\n差分が長い（{lines} 行）ので載せていない。\n"
+    return head + diff
+
+
+def open_issue(w, title, body_file):
     w.need()
     if sh("git", "-C", w.repo, "status", "--porcelain").stdout.strip():
         sys.exit("変える版に commit していない変更がある。commit してから open する")
     git = lambda *a: sh("git", "-c", "core.quotepath=false", "-C", w.repo, *a).stdout  # 日本語のファイルの名前を \343… に書き換えさせない（確かめで見えなくなる）
-    changed = git("diff", "--name-only", "origin/main...HEAD").splitlines()
+    _, repo, main = w.github
+    changed = git("diff", "--name-only", f"{main}...HEAD").splitlines()
     if not changed:
-        sys.exit("origin/main からの変更がない")
+        sys.exit(f"{main} からの変更がない")
     body = Path(body_file).read_text()
     pr_md = w.verify / "pr.md"
     verify_text = pr_md.read_text() if pr_md.is_file() else ""
     images = sorted((w.verify / "img").glob("*.png")) if (w.verify / "img").is_dir() else []
     if miss := check_body(body, changed, verify_text, images):
-        sys.exit("PR にできない:\n" + "\n".join(f"- {m}" for m in miss))
-    # 外に出す前に（画像を上げる前、push の前に）、外に出るものを全部確かめる。本文は、足す検証の記録（ワークスペースの点検の規則の名前も入る）と画像の名前まで含める
-    messages = git("log", "origin/main..HEAD", "--format=%B")
-    patches = git("log", "-p", "--cc", "--format=", "origin/main..HEAD")  # 途中のコミットで足して消した行も、push で出る。--cc はマージで衝突を解いたときの変更も出す
-    text = outgoing(title, "\n".join([body, verify_text, *(f.name for f in images)]), w.branch, messages, patches, changed)
+        sys.exit("Issue にできない:\n" + "\n".join(f"- {m}" for m in miss))
+    # 差分に中身の出ないバイナリ（assets/ の png）は、画像と同じく pr-assets に上げて載せる。消したものは差分の「Binary files … /dev/null」で分かる
+    binaries = [w.repo / f for f in binary_files(git("diff", "--numstat", "--no-renames", f"{main}...HEAD")) if (w.repo / f).is_file()]
+    if binaries:
+        verify_text += "\n\n### 変えたバイナリのファイル（変えた版）\n\n" + "".join(f"`{f.relative_to(w.repo)}`\n\n<!-- img:{f.name} -->\n\n" for f in binaries)
+    # 外に出す前に（画像を上げる前に）、外に出るものを全部確かめる。本文は、足す検証の記録（ワークスペースの点検の規則の名前も入る）と画像の名前まで含める
+    patch = git("diff", f"{main}...HEAD")
+    text = outgoing(title, "\n".join([body, verify_text, *(f.name for f in images)]), w.branch, patch, changed)
     if hit := leaks(text, private_words(w.ws, gapi.factory().get("factory", {}).get("private", []))):
-        sys.exit("PR にできない: 題・本文（検証の記録を含む）・コミットメッセージ・ファイルの名前・足した行に、顧客や社内の資料の名前がある: " + "、".join(hit)
-                 + "。「顧客向けの資料」「（顧客）」のような一般の形にして commit し直す（コミットメッセージは git commit --amend か rebase で直す）")
-    urls = upload_images(w, images) if images else {}
-    verify_text = place_images(verify_text, urls)
-    final = body.rstrip() + "\n\n## 検証の記録（factory-kaizen）\n\n変えたファイル: " + ", ".join(f"`{f}`" for f in changed) + "\n\n" + verify_text
-    (w.dir / "pr_body.md").write_text(final)
-    sh("git", "-C", w.repo, "push", "-q", "-u", "origin", w.branch)
-    url = sh("gh", "pr", "view", w.branch, "--json", "url", "-q", ".url", cwd=w.repo, check=False).stdout.strip()
-    if url:  # 2 回目からは、同じ PR の題と本文を書き換える（検証をやり直したとき）
-        sh("gh", "pr", "edit", url, "--title", title, "--body-file", w.dir / "pr_body.md", cwd=w.repo)
+        sys.exit("Issue にできない: 題・本文（検証の記録を含む）・ファイルの名前・差分に、顧客や社内の資料の名前がある: " + "、".join(hit)
+                 + "。「顧客向けの資料」「（顧客）」のような一般の形にして commit し直す")
+    base = git("rev-parse", "--short", git("merge-base", main, "HEAD").strip()).strip()  # 差分の起点（main はあとの fetch で進む）
+    files = images + binaries
+    names = [f.name for f in files]  # pr-assets の置き場所と、本文の目印は名前で決まる
+    len(set(names)) == len(names) or sys.exit("Issue にできない: 載せる画像の名前が重なる（verify/img/ と、変えた png）。verify/img/ の画像の名前を変える")
+    guess = {f.name: "x" * (200 + len(w.branch) + len(f.name)) for f in files}  # 画像の URL より長めの仮の値
+    if (n := len(issue_body(body, changed, base, place_images(verify_text, guess), ""))) > MAX_BODY:  # 画像を上げる前に止める
+        sys.exit(f"Issue にできない: 本文と検証の記録が長すぎる（{n} 字。{MAX_BODY} 字まで）。検証の記録（verify/pr.md）を減らすか、分けて出す")
+    saved = w.dir / "issue.txt"  # 2 回目からは、同じ Issue の題と本文を書き換える（検証をやり直したとき）
+    url = saved.read_text().strip() if saved.is_file() else ""
+    if url and (state := sh("gh", "issue", "view", url, "--json", "state", "-q", ".state", cwd=w.repo).stdout.strip()) != "OPEN":
+        sys.exit(f"{url} は閉じている（{state}）。出し直すなら kaizen.py clean {w.name} のあと、別の名前で start する")
+    urls = upload_images(w, files) if files else {}
+    (w.dir / "issue_body.md").write_text(issue_body(body, changed, base, place_images(verify_text, urls), patch))
+    if url:
+        sh("gh", "issue", "edit", url, "--title", title, "--body-file", w.dir / "issue_body.md", cwd=w.repo)
     else:
-        url = sh("gh", "pr", "create", "--base", "main", "--head", w.branch, "--title", title, "--body-file", w.dir / "pr_body.md", *(["--draft"] if draft else []), cwd=w.repo).stdout.strip()
+        url = (sh("gh", "issue", "create", "-R", repo, "--title", title, "--body-file", w.dir / "issue_body.md", cwd=w.repo).stdout.split() or [""])[-1]
+        url.startswith("https://") or sys.exit(f"gh issue create が URL を返さなかった。{repo} に Issue ができていれば、その URL を {saved} に書いてから open し直す")
+        saved.write_text(url)
     print(url)
 
 
@@ -253,29 +298,60 @@ def selftest():
     assert cb == {"要修正": 1, "要確認": 2} and ca == {"要修正": 0, "要確認": 3}
     assert delta == {"気になる語": (0, 1), "絵文字": (1, 0)} and gone == [("絵文字", "p1: 「✅」")] and new == [("気になる語", "p4")]
     detail, public = report("資料 1", "スライド", cb, ca, delta, gone, new, title="Acme様_秘密の資料")
-    assert "Acme" in detail and "Acme" not in public and "✅" not in public  # PR には資料の名前も本文も出さない
+    assert "Acme" in detail and "Acme" not in public and "✅" not in public  # Issue には資料の名前も本文も出さない
     body = "\n".join(SECTIONS)
     assert check_body(body, ["skills/deck-build/scripts/lint.py"], "x", []) == []
     assert len(check_body(body, ["skills/deck-practices/visual.md"], "x", [])) == 1  # 見た目なのに画像がない
-    assert len(check_body("## 理由", ["skills/deck-build/scripts/lint.py"], "", [])) == 4  # 節が 3 つと、検証がない
+    assert len(check_body("## 理由", ["skills/deck-build/scripts/lint.py"], "", [])) == 6  # 節が 5 つと、検証がない
     assert check_body(body + "\n検証しない理由: 文の直しだけ", ["skills/dreaming/SKILL.md"], "", []) == []
     urls = {"deck1_p2.png": "u1", "sample_p1.png": "u2"}
     placed = place_images("### 組み直し\n\n<!-- img:deck1_p2.png -->\n", urls)
     assert placed.index("![deck1_p2.png](u1)") < placed.index("### ほかの画像") < placed.index("![sample_p1.png](u2)") and placed.count("](u1)") == 1  # 目印のない画像も落とさず、末尾に 1 回だけ
     assert place_images("x\n<!-- img:deck1_p2.png -->\n", {"deck1_p2.png": "u1"}) == "x\n![deck1_p2.png](u1)\n"  # みな目印があれば、末尾には足さない
-    with tempfile.TemporaryDirectory() as d:  # 顧客と資料のフォルダの名前、[factory] private の語が PR に入ったら止める
+    full = issue_body(body, ["skills/x.md"], "abc1234", "### lint\n", "+++ b/skills/x.md\n+顧客向けの資料\n")
+    assert full.index("## 検証の記録") < full.index("`abc1234`") < full.index("## 変更案の差分") and "+顧客向けの資料" in full
+    assert binary_files("3\t1\tskills/x.md\n-\t-\tskills/deck-build/assets/gcp/a b.png\n") == ["skills/deck-build/assets/gcp/a b.png"]
+    long = issue_body(body, [], "abc1234", "", "+x\n" * MAX_BODY)
+    assert "載せていない" in long and "+x" not in long  # 長い差分は載せない
+    fenced = issue_body(body, [], "abc1234", "", " ````` 前からある行\n+x\n")
+    assert "\n``````diff\n" in fenced and fenced.rstrip().endswith("``````\n\n</details>")  # 差分の中の ````` より長い囲い
+    def github(remotes):  # remotes: リモートの名前 → (nameWithOwner, 親)。gh と git の代わりに答える
+        global sh
+        repos = {f"u/{k}": v for k, v in remotes.items()}
+        def fake(*cmd, cwd=None, env=None, check=True):
+            if cmd[:2] == ("gh", "repo"):
+                name, parent = repos[cmd[3]]
+                out = json.dumps({"nameWithOwner": name, "parent": parent and {"owner": {"login": parent.split("/")[0]}, "name": parent.split("/")[1]}})
+            else:
+                out = f"u/{cmd[-1]}" if cmd[-1] in remotes else ""
+            return subprocess.CompletedProcess(cmd, 0, out, "")
+        real, sh, w = sh, fake, object.__new__(Work)
+        w.src = Path("src")
+        try:
+            return w.github
+        finally:
+            sh = real
+    assert github({"origin": ("o/r", None)}) == ("o/r", "o/r", "origin/main")  # 持ち主
+    assert github({"origin": ("me/r", "o/r"), "upstream": ("o/r", None)}) == ("me/r", "o/r", "upstream/main")  # 画像は fork、Issue と起点は元
+    for remotes in ({"origin": ("me/r", "o/r")}, {"origin": ("me/r", "o/r"), "upstream": ("x/r", None)}):  # upstream がないか、ほかを指す
+        try:
+            github(remotes)
+            raise AssertionError(remotes)
+        except SystemExit as e:
+            assert "upstream" in str(e)
+    with tempfile.TemporaryDirectory() as d:  # 顧客と資料のフォルダの名前、[factory] private の語が Issue に入ったら止める
         for x in ("Customers/Acme/sample_briefing_202610", "Customers/Acme/review_2026q3", "Customers/Acme/assets", "Internal/grok_study_202610", "Internal/drafts"):
             (Path(d) / x).mkdir(parents=True)
         words = private_words(Path(d), ["アクメ"])
         assert words == ["Acme", "grok_study_202610", "review_2026q3", "sample_briefing_202610", "アクメ"], words  # 年の数字の入ったフォルダは見る。日付のないフォルダ（assets・drafts）は普通の語なので見ない
         assert leaks("+（2026-10-09、`Customers/ACME/sample_briefing_202610` p.2 でアクメの）", words) == ["Acme", "sample_briefing_202610", "アクメ"]
         assert leaks("+顧客向けの資料の p.2（AcmeCorp ではない）", words) == []
-        clean = "diff --git a/skills/x.md b/skills/x.md\n--- a/skills/x.md\n+++ b/skills/x.md\n-Acme の古い行（もとの版）\n+顧客向けの資料\n"
-        out = lambda messages="", patches=clean, changed=("skills/x.md",), branch="kaizen/lint": leaks(outgoing("題", "本文", branch, messages, patches, list(changed)), words)
-        assert out() == []  # 消した行（もとの版）は見ない
-        assert out(messages="- sample_briefing_202610 の指摘を入れる\n") == ["sample_briefing_202610"]  # コミットメッセージ（箇条書きの行も）
-        assert out(patches=clean.replace("skills/x.md", "skills/acme_rules.md")) == ["Acme"]  # 各コミットのファイルの名前
-        assert out(patches="+Customers/Acme/sample_briefing_202610 p.2\n" + clean.replace("+顧客", "-Customers/Acme/sample_briefing_202610 p.2\n+顧客")) == ["Acme", "sample_briefing_202610"]  # 途中のコミットで足して、あとで消した行
+        removed = "diff --git a/skills/x.md b/skills/x.md\n--- a/skills/x.md\n+++ b/skills/x.md\n-Acme の古い行（もとの版）\n+顧客向けの資料\n"
+        plain = removed.replace("Acme", "前")
+        out = lambda patch=plain, changed=("skills/x.md",), branch="kaizen/lint": leaks(outgoing("題", "本文", branch, patch, list(changed)), words)
+        assert out() == [] and out(patch=removed) == ["Acme"]  # 消した行も Issue に載るので見る
+        assert out(patch=plain.replace("skills/x.md", "skills/acme_rules.md")) == ["Acme"]  # ファイルの名前
+        assert out(patch=plain + "+sample_briefing_202610 の p.2\n") == ["sample_briefing_202610"]  # 足した行
         assert out(branch="kaizen/acme-fix") == ["Acme"]  # ブランチの名前
         assert private_words(Path(d), "アクメ")[-1] == "アクメ" and "" not in private_words(Path(d), ["", " "])  # 文字列でも 1 語、空の語は外す
     print("selftest ok")
@@ -296,7 +372,7 @@ def main(a):
     elif a[0] == "rebuild":
         rebuild(w, plain, opt("--pages"), "--keep" in rest)
     elif a[0] == "open":
-        open_pr(w, opt("--title") or sys.exit("--title が要る"), opt("--body") or sys.exit("--body が要る"), "--draft" in rest)
+        open_issue(w, opt("--title") or sys.exit("--title が要る"), opt("--body") or sys.exit("--body が要る"))
     else:
         clean(w)
 

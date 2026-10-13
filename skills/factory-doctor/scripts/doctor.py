@@ -45,7 +45,7 @@ def check(ws, local=False):
         if (p / ".git").exists() and (p / "skills").is_dir():
             ok("factory.source", str(p))
             gh = shutil.which("gh") and subprocess.run(["gh", "auth", "status"], capture_output=True).returncode == 0
-            (ok if gh else warn)("gh（factory-kaizen で PR を出す）", "ログイン済み" if gh else "gh がないか、ログインしていない。gh auth login")
+            (ok if gh else warn)("gh（factory-kaizen で Issue を出す）", "ログイン済み" if gh else "gh がないか、ログインしていない。gh auth login")
         else:
             warn("factory.source", f"{p} がプラグインの git の checkout でない（プラグインに上げる提案を入れられない）")
     names = sorted(p.parent.name for p in SKILLS.glob("*/SKILL.md"))

@@ -10,7 +10,7 @@
 |---|---|
 | `factory-init` | ワークスペースを作る（AGENTS.md・CLAUDE.md・factory.toml・references_index.md・rules/ の雛形と資料のフォルダ。あるファイルは上書きしない） |
 | `factory-doctor` | 前提を確かめる（Python・uv、ワークスペース、スキルの重なり、Google の認証、テンプレートと Drive のフォルダ、gh） |
-| `factory-kaizen` | プラグインの改善を、過去の資料で前後を比べてから PR にする（理由・背景・検証の結果・見た目なら画像） |
+| `factory-kaizen` | プラグインの改善を、過去の資料で前後を比べてから Issue にする（理由・背景・検証の結果・見た目なら画像・変更案の差分）。PR は持ち主が作る |
 | `deck-practices` | 資料を作る・直すときに最初に読む。作業の始め方、構成案と言葉、見た目の決まり、決まりの層と修正の指示の戻し方 |
 | `deck-template` | 会社のテンプレートから、AI Deck Factory のテンプレート（テーマ）を作る。日本語のテンプレートがある・英語しかない・ない、の 3 つ。書体・大きさ・大枠の色を残し、和文の書体とコントラストを合わせる（`template.py audit`・`check`） |
 | `deck-build` | Google Slides を組む（`slides.py`）・確かめる（`gslides.py check`・`lint.py`）。Drive への置き方。スクリプトはドキュメントと共有。使い回す画像は `assets/` |
@@ -76,30 +76,31 @@ pi install git:github.com/mats16/ai-deck-factory        # git から
 - `rules/<スキル>/<ファイル>`: 資料を作る場面だけで要る、このワークスペースの決まり。
 - `Customers/<顧客>/memory.md`: その顧客の好みと、資料をまたいで効く相手のこと（顧客の memory）。その顧客の資料の `構成案*.md` などを開くと、hook が続けて出す。
 - `Customers/`・`Internal/`・`Research/`、`references_index.md`: 資料と台帳。`Research/deck_research/` は `deck-research` の調べ直しの記録（`state.md`・`log/`。代表の 3 枚の選び方の記録も）。
-- `.factory/`: スクリプトが書く記録。`ledger.jsonl`（決まりの台帳。修正の指示、決まりの ID ごとの出典と再発、dreaming の提案・適用・却下とプラグインへの提案の PR、判断待ちと答え、deck-review の指摘の結果。`deck-practices/scripts/ledger.py` が読み書きする）、`lint_runs.jsonl`（`lint.py --stats` が読む）、`dreaming/last_run`・`dreaming/log/`・`dreaming/backup/`。
+- `.factory/`: スクリプトが書く記録。`ledger.jsonl`（決まりの台帳。修正の指示、決まりの ID ごとの出典と再発、dreaming の提案・適用・却下とプラグインへの提案の Issue、判断待ちと答え、deck-review の指摘の結果。`deck-practices/scripts/ledger.py` が読み書きする）、`lint_runs.jsonl`（`lint.py --stats` が読む）、`dreaming/last_run`・`dreaming/log/`・`dreaming/backup/`。
 
 自分だけの画像は `assets/` に置く。`slides.asset()` はここを先に探し、なければ `deck-build/assets/` を使う。
 
 ## 決まりの層と育て方
 
-ワークスペースは、やり取りの積み重ねで決まりと点検を育てていく 1 つのプロダクト。大元（プラグイン）を直すべきものだけを PR にする。
+ワークスペースは、やり取りの積み重ねで決まりと点検を育てていく 1 つのプロダクト。大元（プラグイン）を直すべきものだけを Issue にし、持ち主が Issue から直す。
 
 | 層 | 置き場所 | 中身 | 誰が変えるか |
 |---|---|---|---|
 | 顧客の memory（その顧客の資料で、いちばん優先） | `Customers/<顧客>/memory.md` | その顧客の好みと、資料をまたいで効く相手のこと | 作る会話がその場で書く。dreaming は提案する。2 社以上で同じ趣旨なら `rules/` に寄せる |
 | ワークスペース（優先） | `AGENTS.md`、`rules/<スキル>/<ファイル>`、`rules/deck-build/checks.py` | その人・その組織の決まりと点検、修正の指示で育つもの | 作る会話がその場で戻す。dreaming は提案し、「適用」で当てる。経緯は決まりの台帳（`.factory/ledger.jsonl`）に残す（git は前提にしない） |
-| プラグイン | `skills/`（入った場所は読むだけ） | 誰が使っても同じ決まり、点検、スクリプト、テンプレート | `factory-kaizen` で PR。マージされたら `update` で届く |
+| プラグイン | `skills/`（入った場所は読むだけ） | 誰が使っても同じ決まり、点検、スクリプト、テンプレート | `factory-kaizen` で Issue。持ち主が直してマージしたら `update` で届く |
 
 - **決まりの本文と経緯を分ける。** 決まりは 1 項目ごとに ID（プラグインは `[visual-<番号>]`、ワークスペースは `[ws-visual-<番号>]`）と短い理由だけを書く。日付・ユーザーの言葉・どの資料か・ユーザーが決めたかは、ワークスペースの決まりの台帳に ID でつなぐ（`ledger.py why <ID>`）。資料・顧客の数から、ワークスペースに寄せるか、プラグインに上げるかを決める。
 - **`rules/` と memory は読み忘れない。** プラグインのファイルを開くと（Claude Code は Read・Bash・Skill、pi は read・bash）、hook が同じパスの `rules/` のファイルを続けて出す。顧客の資料の `構成案*.md`・`社内メモ_*.md`・`references.md` を開くと、その顧客の `memory.md` を続けて出す。
 - **次の一手は台帳が出す。** `ledger.py candidates` が、決まりごとの数から、下ろす（点検か作る手順へ）・書き直す・条件を足す・上げる・写しを消す・上書きを見直すを出す。境目（2 本以上の資料、2 社以上の顧客）はスクリプトが持ち、dreaming は趣旨と提案の文を考える。
 - **点検もワークスペースで育てる。** `rules/deck-build/checks.py` の `slides(p, r)`・`doc(doc, r)` を、lint（`gslides.py check`・`docs.py check`）が毎回呼ぶ。`HARD` に入れた名前は要修正。書き方は `factory-init/templates/rules/README.md`。
 - **大元に上げる。** ほかの人にも効くものは、dreaming が「プラグインに上げる」提案にし、`factory-kaizen` で出す。
-  1. 元のリポジトリの worktree で直す。
+  1. 元のリポジトリの worktree で変更案を書く。
   2. 過去の資料で確かめる。lint は前の版と変えた版をかけ比べ、見た目は正本から両方の版で仮に組み直してページの画像を並べる。
-  3. 理由・背景・検証の結果・画像を入れた PR を作る。PR には資料の名前・URL・本文を出さず、「資料 1」の番号と規則ごとの数の変化、ユーザーが選んだ画像だけを載せる。
-  4. マージされたら、`rules/` の写しを消す。
-- `deck-research` の調べ直しの結果も、`factory-kaizen` で PR にする（PR に入れるのはスキルの直しと `sources.md`。調べた記録はワークスペースに残す）。
+  3. 理由・背景・検証の結果・画像・変更案の差分を入れた Issue を作る。Issue には資料の名前・URL・本文を出さず、「資料 1」の番号と規則ごとの数の変化、ユーザーが選んだ画像だけを載せる。ブランチは push しない。
+  4. 持ち主が Issue を読んで入れるかを決め、ほかのコードと合わせて直して PR にする（simplify・レビューも持ち主がする）。
+  5. 直しが届いたら、`rules/` の写しを消す。
+- `deck-research` の調べ直しの結果も、`factory-kaizen` で Issue にする（変更案に入れるのはスキルの直しと `sources.md`。調べた記録はワークスペースに残す）。
 
 ## Google の認証
 
@@ -121,6 +122,7 @@ gcloud の既定の OAuth クライアントで作った認証情報は、`googl
 - 2026-10-12: PR を作るスキルの名前を `factory-pr` から `factory-kaizen` にした（ユーザー「factory-pr ではなく、工場を改修・発展のようなニュアンスの方がいいかな」。候補から factory-kaizen を選んだ）。
 
 - 2026-10-13: `kaizen.py open` は、`rebuild` の目印のない画像（`verify/img/` に手で置いたもの）を落とさず、検証の記録の末尾にまとめて載せる。`open` を止めて目印を足させる案はとらない（ユーザー「目印のない画像を、検証の記録の最後（「## 検証の記録（factory-kaizen）」の末尾）にまとめて載せる（推奨。止めずに済む）」「推奨の案で進め」）。
+- 2026-10-13: `factory-kaizen` は PR ではなく Issue を出す。Issue には理由・背景・数・検証の結果・画像に加えて、変更案の差分と迷ったところを載せ、ブランチは push しない。持ち主が Issue を読んで入れるかを決め、ほかのコードと合わせて直して PR にする（ユーザー「simplify や review-loop の実行や、他のコード含めてのコードのコンパクト化などは私の方で対応したいので、プラグイン利用者からの zaizen feedback は Issue で受けるように変更したいです。」「Issue の内容を元に私の方で回収する想定なので、状況判断に必要な情報が Issue に上がっている必要があります。」）。
 
 - 2026-10-12: 継続改善の仕組みを、Devin の Dreaming（Agent Memory Repo）・Hermes Agent・Letta・Codex の memories・GitHub Copilot Memory・ACE と比べて直す。修正の指示は構成案の節をやめ、ワークスペースの決まりの台帳（`.factory/ledger.jsonl`）に置き換える（ユーザー「1 は問題ありません」）。ワークスペースの git は前提にしない。dreaming の提案と適用・却下・戻すことも台帳で持つ（ユーザー「ワークスペースの git は前提としたくないです。その前提で再考してください。」）。プラグインの本文の日付と原文は台帳へ移し、ID と短い理由だけを残す。コンパクションの前に指摘を拾う hook は後回しのままにし、dreaming が取りこぼしを数えてから決める（推奨を説明したあと、ユーザー「ではその方針で進めてください。」）。
 - 2026-10-12: 決まりが効いたかの手ごたえを、決まりの台帳で数える。プラグインに上げる提案と判断待ちも台帳に入れ（却下と答えを覚え、出し直さない）、決まりがあるのに言われた指摘を「再発」として数え、deck-review の指摘の表に「決まり」の列を足して結果（直した・残した（誤り）・聞く）を取り込む。`.factory/review_runs.jsonl` は作らず、台帳 1 つにまとめる。指摘の出ない決まりは、守られているのかもしれないので、それだけで外さない（案を説明したあと、ユーザー「1, 2, 5 を対応しようと思いますがどうですか？」「ではその方針で 5 まで含めて実装して」）。
@@ -144,11 +146,12 @@ gcloud の既定の OAuth クライアントで作った認証情報は、`googl
 
 - **hooks の残り（後回し）:** 前の検討の corrections・guard・review_gate。corrections（コンパクションの前に指摘を拾う）は、dreaming の報告の「取りこぼし」の数が続けて多ければ入れる（Claude Code と pi の両方に要る。pi にきっかけがあるかは確かめていない）。入れたのは `rules/` と顧客の memory を続けて出すものだけ。pi の `/skill:<名前>`（読むツールを通らない）では出ない。
 - **継続改善の残り:** コンパクションの前に拾う hook は、`ledger.py rules` の週ごとの取りこぼしの割合を見てから決める。顧客の memory の古さ（担当が変わった）は、食い違う発言が出たときに直すだけで、日付から外すことはしていない。ワークスペースの決まりの上書きは、ワークスペースの中でしか数えていない（ほかの人のワークスペースの上書きは、プラグインに上げる提案で届いたものだけ見える）。構成案のレビューは、見逃しの数だけを見ている。分母（その間に作った資料の数）は台帳になく、dreaming が報告で資料を仕上げた会話の数と並べるだけで、割合にはしていない。代表の 3 枚と `/deck-review` の見逃しには印を付けていない。
-- **スキルの中の経緯:** 2026-10-12 に、スキルの本文の持ち主の決めたこと（「ユーザーが決めた」と日付、ユーザーの言葉）を、決まりの ID に置き換えた。移した経緯は、持ち主のワークスペースの決まりの台帳に入れる（`git show <この直しの前>:skills/...` からも見られる）。測った日・調べた日・その日より前のファイルを指す日付は、意味が変わるので残した。PR に顧客の名前が入らないかは、`kaizen.py open` が見て止める（`Customers/` の顧客と資料のフォルダの名前、`[factory] private` の語）。
+- **スキルの中の経緯:** 2026-10-12 に、スキルの本文の持ち主の決めたこと（「ユーザーが決めた」と日付、ユーザーの言葉）を、決まりの ID に置き換えた。移した経緯は、持ち主のワークスペースの決まりの台帳に入れる（`git show <この直しの前>:skills/...` からも見られる）。測った日・調べた日・その日より前のファイルを指す日付は、意味が変わるので残した。Issue に顧客の名前が入らないかは、`kaizen.py open` が見て止める（`Customers/` の顧客と資料のフォルダの名前、`[factory] private` の語）。
 - **外部に出すとき:** 2026-10-12 に会社ごとの値をワークスペースに分けた。材料を集める道具は `factory.toml` の `[sources]`、社名・著作権表示・表紙のロゴは `[brand]`（`copyright` がないか仮の値なら組めない。factory-doctor が要修正）、テーマは `[slides.themes.<名前>]`・`[docs.themes.<名前>]`（`url`・`description`・`base`）、会社の素材はワークスペースの `assets/`、ドキュメントのテンプレートは `rules/doc-build/templates/`、会社の道具の使い方は `rules/`。プラグインに残る会社の前提は、組み込みのテーマ visual・company の色（Databricks のブランドの色）だけ。
 - **Documents を移す:** 顧客フォルダの `CLAUDE.md` は `memory.md` に名前を変える（factory-doctor が「顧客の memory」で出す）。`~/Documents` は今も自分の `.agents/skills/` で動いている（factory-doctor が「スキルの重なり」を出す）。移すときは、Documents の AGENTS.md の表を雛形の形（スキルの名前で指す。`rules/` も開く）にし、`.agents/skills/` の中核の 6 つを外し、`.agents/skills/dreaming/log/` を `.factory/dreaming/log/` に、`.agents/skills/deck-build/log/lint_runs.jsonl` を `.factory/lint_runs.jsonl` に移す。`deck-research` の記録は 2026-10-12 に `Research/deck_research/` へ移した。旧い場所の `.agents/skills/deck-research/log` は、移したときに進んでいた会話のための symlink なので、`.agents/skills/` と一緒に消す。ワークスペースの AGENTS.md の「方針を決めたあとを AI のレビューでそのまま作るか、人がレビューするかも選んでもらう」は、雛形の今の文（`[review] plan_reviewer` に従う）に替える（ワークスペースの決まりが優先するので、残すと毎回聞く。factory-doctor が「AGENTS.md の方針のレビュー」に出す）。
 - **代表の 3 枚の選び方:** 図・カード・表かコードから 1 枚ずつ選ぶ案と、`d.table`・`d.card` の決まった形だからと 3 枚から外すのをやめる案は、2026-10-13 の直しのあとの 10 本の記録で、当て漏れが減ったかを見てから決める。組むときの警告は最終行の字数だけを見て、文節の途中の折り返しは見ていない。
 - **文体の残り:** 2026-10-13 の調べのうち、AI らしくない文章の癖（「X ではなく Y」「することができる」、定型の前置き・締め、同じ文末の 3 連続、新しい AI の語、書くときに見本と具体を渡すこと）と、読ませる資料（経営層や別の部署に送る、印刷して配る）で説明文を です・ます にしてよいかは、入れていない。後者は一次資料のない推測なので、読ませる資料で です・ます の指摘が続けて残るかを見てから決める。
+- **kaizen の Issue の残り:** 画像は自分の fork（持ち主は元のリポジトリ）の `pr-assets` ブランチに置くので、Issue を出すにも fork が要る。持ち主が文や ID を変えて入れると、ワークスペースの写しを消す案（`ledger.py candidates` の「写しを消す」）が出ず、dreaming の重なりの見直しに任せる。どちらも、困ったら直す。
 - **見出しの点検の残り:** 言い切りの見出しは、読点と文末の仮名で見込みを出しているだけで、形態素解析はしていない。ドキュメントの言い切りの見出し（H2・H3 の主張の文）は数えていない。要修正と要確認の分け方は、PR のレビューで決め直してよい。
 
 ## ライセンス

@@ -18,7 +18,7 @@ cp -R ~/Documents/rules ~/Documents/AGENTS.md ~/Documents/CLAUDE.md .   # 本番
 - `[drive]` は、検証用の Drive のフォルダにする（下の「消す」）。
 - テンプレートを試すときは、`[slides] template_folder` を検証用のフォルダにし、`[slides.templates]` は検証用に複製したテンプレートの URL にする（空でもよい）。`template.py <テーマ>` は `[slides.templates]` のテンプレートをその場で書き換える。
 - `sandbox/` で `git init` はしない（factory-init が聞いてくる）。入れ子のリポジトリになり、worktree の `git clean` で消えなくなる。
-- `factory-kaizen` だけは、この worktree を試さない。`kaizen.py start` は `[factory] source` の `origin/main` から別の worktree（`sandbox/.factory/kaizen/<名前>/repo`）を作る。
+- `factory-kaizen` だけは、この worktree を試さない。`kaizen.py start` は `[factory] source` の `origin/main`（fork なら `upstream/main`）から別の worktree（`sandbox/.factory/kaizen/<名前>/repo`）を作る。
 
 ## Claude Code
 

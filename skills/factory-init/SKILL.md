@@ -12,7 +12,7 @@ description: AI Deck Factory のワークスペース（資料と決まりを置
 会話で入れているとき（リポジトリの `INSTALL.md`）は、1 と 2 は済んでいる。プラグインを入れたばかりの会話には、このスキルもほかのスキルも読み込まれていないので、ほかのスキル（deck-build・deck-template・factory-doctor）は、入れた場所の `skills/<スキル>/SKILL.md` を開いて従う。
 
 1. **場所を決める。** 言われていなければ、今いるフォルダでよいかを聞く。すでに `factory.toml` か `AGENTS.md` があるフォルダなら、そのことを伝える（上書きはしない。足りないものだけ置く）。
-2. **元のリポジトリを持つかを聞く。** プラグインに PR を出す人（factory-kaizen）なら、プラグインのリポジトリの checkout（持ち主でなければ fork）を用意し、そのパスを `--source` に渡す（`factory.toml` の `[factory] source`）。使うだけの人は渡さない。
+2. **元のリポジトリを持つかを聞く。** プラグインに Issue を出す人（factory-kaizen）なら、プラグインのリポジトリの checkout（持ち主でなければ fork）を用意し、そのパスを `--source` に渡す（`factory.toml` の `[factory] source`）。使うだけの人は渡さない。
 3. **置く。**
    ```sh
    python3 <このスキルのフォルダ>/scripts/init.py <ワークスペース> [--source <元のリポジトリ>]

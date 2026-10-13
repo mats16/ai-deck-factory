@@ -1,5 +1,5 @@
 <!--
-節の名前は factory-kaizen の本文の型（skills/factory-kaizen/SKILL.md）と同じ。kaizen.py open で出す PR は、この下に「検証の記録」が足される。
+factory-kaizen の Issue（skills/factory-kaizen/SKILL.md の本文の型）から作るときは、その「変えること」「理由」「背景」を写し、Issue を「Fixes #<番号>」で閉じる。
 このリポジトリは公開している。顧客の名前、資料の名前・URL・本文、社内だけの情報を書かない（例は「顧客向けの資料」「資料 1」）。
 このような書き方の案内は消してよい。当てはまらない節は「なし」と書き、節そのものは残す。
 -->

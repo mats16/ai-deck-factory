@@ -8,7 +8,7 @@ AI Deck Factory（プラグイン）で、スライドとドキュメントを�
 
 - **このワークスペースの決まりが、プラグインのスキルより優先する。** ワークスペースの決まりは、このファイルと `rules/<スキル>/<ファイル>`（プラグインの同じパスのファイルへの足しと上書き）。食い違うときは、こちらに従う。
 - **このワークスペースは、やり取りで育てる 1 つのプロダクト。** 修正の指示は、決まり（このファイルと `rules/`）と点検（`rules/deck-build/checks.py`）に戻す。プラグインの入った場所は書き換えない（入れ直すと消える）。
-- **大元を直すべきものは PR にする。** ほかの人にも効くものは、dreaming が「プラグインに上げる」提案にし、スキル `factory-kaizen` で過去の資料で確かめてから PR を出す（スキル `deck-practices` の `rules.md` の「決まりの層」）。
+- **大元を直すべきものは Issue にする。** ほかの人にも効くものは、dreaming が「プラグインに上げる」提案にし、スキル `factory-kaizen` で過去の資料で確かめてから Issue を出す（スキル `deck-practices` の `rules.md` の「決まりの層」）。
 
 ## 基本方針
 
@@ -53,7 +53,7 @@ AI Deck Factory（プラグイン）で、スライドとドキュメントを�
 | テンプレートを作る・整える（会社のテンプレートから） | `deck-template/SKILL.md`（3 つの場合、役割への色の当て方、書体、コントラストの直し方） |
 | 仕上げと納品 | `deck-build/SKILL.md`（`gslides.py check` と lint の見方、納品物、Drive への置き方）、ドキュメントは `doc-build/SKILL.md`、`deck-review/SKILL.md`（返す前の全体のレビュー） |
 | 修正の指示を受けた・決まりを足す | `deck-practices/rules.md`（決まりの層、修正の指示の戻し方、決まりの確かめ方） |
-| プラグインを直す | `factory-kaizen/SKILL.md`（過去の資料での検証と PR） |
+| プラグインを直す | `factory-kaizen/SKILL.md`（過去の資料での検証と Issue） |
 
 ### 修正の指示
 

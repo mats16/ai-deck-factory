@@ -28,7 +28,7 @@ def slides(p, r):
 
 ## 大元に上げる
 
-ほかの人にも効くと分かったものは、dreaming が「プラグインに上げる」提案にし、`factory-kaizen` で PR を出す。上げた決まりが入っているプラグインに届いたら、ここの写しを消す提案を dreaming が出す（`ledger.py candidates` の「写しを消す」）。
+ほかの人にも効くと分かったものは、dreaming が「プラグインに上げる」提案にし、`factory-kaizen` で Issue を出す。上げた決まりが入っているプラグインに届いたら、ここの写しを消す提案を dreaming が出す（`ledger.py candidates` の「写しを消す」）。
 
 ## 顧客の memory: `Customers/<顧客>/memory.md`
 
