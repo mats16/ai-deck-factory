@@ -14,7 +14,7 @@ from collections import Counter
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gapi import DRIVE, SLIDES, batch, factory, factory_path, file_id, find_factory, folder_id, request, run, trash
-from lint import JA, cells, contrast, flatten, lum, paras
+from lint import JA, cells, contrast, flatten, lum, paras, solid
 from slides import (BG, BLANK, CARD, COPYRIGHT_PT, DECOR, EMU, FONT, GA, HEAD, INSET, NAVY, NAVY_BLOCK, ON_RED, OSS, PAD, PANEL, PREVIEW, RED, RED_ON_NAVY,
                     RED_SOFT, RED_TEXT, RULE, SLOTS, STAGE_TEXT, SUB, SUB_ON_NAVY, TEXT, THEMES, WHITE, W, X, Y_BODY, Y_FOOT, build, cols, make_deck, number_style, rgb)
 from slides import FIXED as FIXED_DEFAULT, JP_FONTS, LAYOUT_MARK, NAMED, THEME_MARK, VARIANTS, is_blank, need_brand, placeholders, theme_fixed, theme_font, use_layouts, use_theme
@@ -287,7 +287,7 @@ def specimen(theme):
     def make_all(d):
         make(d)
         for kind, vs in VARIANTS.items():  # 表紙・扉のパターン（会社のテンプレートから残したもの）を 1 枚ずつ。pages.py の variant の番号はここで選ぶ
-            for i, (_, t) in enumerate(vs[1:], 2):
+            for i, (_, t) in sorted(vs.items())[1:]:  # 1 は make の表紙・扉
                 if kind == "cover":
                     s = d.cover(f"表紙のパターン {i}", f"d.cover(…, variant={i})", f"地: {t}", variant=i)
                 else:
@@ -310,12 +310,19 @@ def pick(p, names=None):
     used = Counter(s.get("slideProperties", {}).get("masterObjectId") for s in p.get("slides", []))
     master = max(p["masters"], key=lambda m: used[m["objectId"]])
     ls = [l for l in p["layouts"] if l["layoutProperties"].get("masterObjectId") == master["objectId"]]
-    names = {k: [v] if isinstance(v, str) else list(v) for k, v in (names or {}).items()}
+    names = {k: [v] if isinstance(v, str) else v for k, v in (names or {}).items()}
+    if bad := [k for k, v in names.items() if not isinstance(v, list) or not all(isinstance(n, str) for n in v)]:
+        sys.exit(f"テーマの {'・'.join(bad)} は、レイアウトの名前の文字列か、その並びで書く（例: cover = [\"Title Slide 1\", \"Title Slide 2\"]）")
+    if both := set(names.get("cover", [])) & set(names.get("section", [])):  # 目印はレイアウトに 1 つなので、両方に書くと後のものだけが残る
+        sys.exit(f"レイアウト「{'」「'.join(sorted(both))}」が、テーマの cover と section の両方にある。どちらか一方に書く")
     if bad := [n for v in names.values() for n in v if not any(l["layoutProperties"]["displayName"] == n for l in ls)]:
         sys.exit(f"マスター「{master['masterProperties']['displayName']}」に、テーマの cover・section のレイアウト「{'」「'.join(bad)}」がない"
                  "（名前は template.py audit の表のとおりに書く。合わせ直しなら --from-base で作り直す）")
     extras = {k: [l for n in dict.fromkeys(v) for l in ls if l["layoutProperties"]["displayName"] == n] for k, v in names.items()}
     kept = [l for v in extras.values() for l in v]
+    if stale := [l["layoutProperties"]["displayName"] for l in ls if l not in kept and any(LAYOUT_MARK.search(e.get("description", "")) for e in l.get("pageElements", []))]:
+        # 前に表紙・扉として残し、テーマの cover・section から外したパターン。目印が残ると slides.py が使い続け、Blank に選ぶこともある
+        sys.exit(f"テーマの cover・section にない表紙・扉のパターン「{'」「'.join(stale)}」が、テンプレートに残っている。パターンを減らすときは --from-base で作り直す")
     if bad := [l["layoutProperties"]["displayName"] for l in kept if "SLIDE_NUMBER" not in placeholders(l)]:  # 目印はページ番号の枠に書き、slides.py の createSlide もこの枠を対応づける
         sys.exit(f"テーマの cover・section のレイアウト「{'」「'.join(dict.fromkeys(bad))}」に、ページ番号の枠がない。元のテンプレートを複製し、"
                  "画面のテーマビルダーでそのレイアウトにスライド番号のプレースホルダーを足して、その URL を base にする")
@@ -336,12 +343,17 @@ def decor(layout):
 
 def align_decor(layout):
     """表紙・扉の置き物のうち、元のタイトルの枠と左端がそろっていたもの（ロゴ、短い線など）を、slides.py の文字の左端 X に寄せる要求。
-    元の余白（例: 0.83 in）のままだと、0.6 in の余白で組む文字と左端がずれる（2026-10-13）。"""
-    lefts = [e["transform"]["translateX"] / EMU for e in layout.get("pageElements", [])
+    元の余白（例: 0.83 in）のままだと、0.6 in の余白で組む文字と左端がずれる（2026-10-13）。ページの右端まで届くもの（帯、全面の写真や四角）は
+    寄せない（右端に地が見える）。"""
+    lefts = [e.get("transform", {}).get("translateX", 0) / EMU for e in layout.get("pageElements", [])  # API の JSON は 0 の値を省く
              if e.get("shape", {}).get("placeholder", {}).get("type") in ("TITLE", "CENTERED_TITLE")]
+    def right(e):
+        t = e.get("transform", {})
+        return (t.get("translateX", 0) + e.get("size", {}).get("width", {}).get("magnitude", 0) * t.get("scaleX", 1)) / EMU
     return [{"updatePageElementTransform": {"objectId": e["objectId"], "applyMode": "RELATIVE", "transform": {
                 "scaleX": 1, "scaleY": 1, "translateX": round((X - lefts[0]) * EMU), "translateY": 0, "unit": "EMU"}}}
-            for e in decor(layout) if lefts and abs(e.get("transform", {}).get("translateX", 0) / EMU - lefts[0]) < 0.05 and abs(lefts[0] - X) >= 0.05]
+            for e in decor(layout) if lefts and abs(e.get("transform", {}).get("translateX", 0) / EMU - lefts[0]) < 0.05 and abs(lefts[0] - X) >= 0.05
+            and right(e) < 2 * X + W - 0.05]
 
 
 def text_w(layout):
@@ -355,15 +367,17 @@ def text_w(layout):
 
 
 def bg_tone(theme, master, layout):
-    """表紙・扉のパターンの地の明るさ（slides.py の TONES）。地はレイアウトの塗り、なければマスターの塗り（テーマの色はこのテーマの値で引く）。
-    白の文字が 4.5:1 に届けば dark、3:1 なら accent（大きな文字だけ白）、届かなければ light。ponytail: 全面の写真や絵の明るさは見ない（地の塗りだけ）。"""
-    def fill(pg):
-        c = pg.get("pageProperties", {}).get("pageBackgroundFill", {}).get("solidFill", {}).get("color")
-        if c and "themeColor" in c:
-            return colors(theme).get(c["themeColor"])
-        if c and "rgbColor" in c:
-            return "".join(f"{round(c['rgbColor'].get(k, 0) * 255):02X}" for k in ("red", "green", "blue"))
-    r = contrast(WHITE, fill(layout) or fill(master) or "FFFFFF")
+    """表紙・扉のパターンの地の明るさ（slides.py の TONES）。地は、レイアウトの置き物のうちページ全面を覆う塗りの四角（上にあるもの）、
+    なければレイアウトの塗り、なければマスターの塗り（テーマの色はこのテーマの値で引く）。白の文字が 4.5:1 に届けば dark、3:1 なら accent
+    （大きな文字だけ白）、届かなければ light。ponytail: 全面の写真や絵の明るさは見ない（塗りだけ）。"""
+    scheme = colors(theme)
+    def full(e):  # ページ全面（13.33 × 7.5 in）を覆う図形か
+        t, s = e.get("transform", {}), e.get("size", {})
+        return (t.get("translateX", 0) <= 0 and t.get("translateY", 0) <= 0 and s.get("width", {}).get("magnitude", 0) * t.get("scaleX", 1) / EMU >= 2 * X + W - 0.05
+                and s.get("height", {}).get("magnitude", 0) * t.get("scaleY", 1) / EMU >= 7.45)
+    rects = [solid(e.get("shape", {}).get("shapeProperties", {}).get("shapeBackgroundFill"), scheme) for e in decor(layout) if full(e)]
+    page = lambda pg: solid(pg.get("pageProperties", {}).get("pageBackgroundFill"), scheme)
+    r = contrast(WHITE, next((c for c in reversed(rects) if c), None) or page(layout) or page(master) or "FFFFFF")
     return "dark" if r >= 4.5 else "accent" if r >= 3 else "light"
 
 
@@ -542,6 +556,14 @@ def main():
             raise AssertionError
         except SystemExit as e:
             assert "c0" in str(e) and "ページ番号の枠がない" in str(e)
+        marked = lay("c1", "b", {**sn, "description": "ai-deck-factory layout=cover:1 tone=dark"})
+        for names, want in (({"cover": 1}, "文字列"), ({"cover": "b2", "section": ["b2"]}, "両方"), ({}, "c1")):  # 型の違う値、cover と section の重なり、外したパターンの目印
+            try:
+                pick({**p, "layouts": [*p["layouts"], marked]}, names)
+                raise AssertionError(names)
+            except SystemExit as e:
+                assert want in str(e), (names, str(e))
+        assert pick({**p, "layouts": [*p["layouts"], marked]}, {"cover": ["c1"]})[2] == {"cover": [marked]}  # 合わせ直し（目印のあるパターンを同じに書く）は通る
         box = lambda x, y, w, h, **k: {"objectId": f"e{x}{y}", "transform": {"translateX": x * EMU, "translateY": y * EMU, "scaleX": 1, "scaleY": 1},
                                        "size": {"width": {"magnitude": w * EMU}, "height": {"magnitude": h * EMU}}, **k}
         copy = box(0.8, 7.0, 4, 0.2, shape={"text": {"textElements": [{"textRun": {"content": "© 2026"}}]}})
@@ -552,11 +574,18 @@ def main():
         assert text_w(lay("c3", "b", {"description": "ai-deck-factory layout=cover:1 w=7.08 tone=dark"})) == 7.08  # 合わせ直し（枠はもうない）は前の目印の幅
         white = {"objectId": "m", **bg({"rgbColor": {"red": 1, "green": 1, "blue": 1}})}
         assert [bg_tone("company", white, x) for x in (cov, lay("w", "b"), {**lay("n", "b"), **bg({"themeColor": "DARK1"})})] == ["accent", "light", "dark"]
+        navy_rect = box(0, 0, 13.33, 7.5, shape={"shapeProperties": {"shapeBackgroundFill": {"solidFill": {"color": {"themeColor": "DARK1"}}}}})
+        assert bg_tone("company", white, lay("r", "b", navy_rect)) == "dark"  # 地を全面の四角で描いたレイアウトは、四角の色で見る
+        assert bg_tone("company", white, {**lay("r2", "b", navy_rect, box(0, 0, 13.33, 7.5, shape={"shapeProperties": {"shapeBackgroundFill": {
+            "solidFill": {"color": {"rgbColor": {"red": 1, "green": 1, "blue": 1}}}}}})), **bg({"themeColor": "DARK1"})}) == "light"  # 上の四角が先
         alt = [r["updatePageElementAltText"]["description"] for r in styles("company", {**master, **white}, {"pageElements": []}, {"cover": [lay("w", "b", {**sn, **box(12.1, 7, 1, 0.3)}), cov]})
                if "updatePageElementAltText" in r]
         assert alt == ["ai-deck-factory theme=company", "ai-deck-factory layout=cover:1 tone=light", "ai-deck-factory layout=cover:2 w=7.08 tone=accent"]
-        logo, shapes = box(0.83, 0.67, 2.8, 0.44), box(10.6, 3.15, 1.9, 1.7)
-        moved = align_decor(lay("c2", "b", head, logo, shapes))  # 元のタイトルと左端がそろうロゴだけを、文字の左端に寄せる
+        logo, shapes, band = box(0.83, 0.67, 2.8, 0.44), box(10.6, 3.15, 1.9, 1.7), box(0.83, 5.2, 12.5, 2.3)
+        moved = align_decor(lay("c2", "b", head, logo, shapes, band))  # 元のタイトルと左端がそろうロゴだけを、文字の左端に寄せる（右端まで届く帯は寄せない）
+        t0 = {**head, **box(0, 1.3, 6, 2.6), "objectId": "t0"}
+        t0["transform"] = {k: v for k, v in t0["transform"].items() if k != "translateX"}  # API は 0 の translateX を省く
+        assert not align_decor(lay("c4", "b", t0, box(0, 0, 13.33, 7.5)))  # 左端 0 のタイトルでも止まらず、全面の四角は動かさない
         assert [r["updatePageElementTransform"]["objectId"] for r in moved] == [logo["objectId"]] and moved[0]["updatePageElementTransform"]["transform"]["translateX"] == round((X - 0.83) * EMU)
         num = {**sn, "objectId": "n", "size": {"width": {"magnitude": EMU}, "height": {"magnitude": EMU}}}
         st = [r["updateTextStyle"]["style"] for r in styles("visual", {"objectId": "b"}, {"pageElements": [num]}) if "fontSize" in r.get("updateTextStyle", {}).get("style", {})]

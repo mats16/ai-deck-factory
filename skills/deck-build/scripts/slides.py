@@ -82,7 +82,7 @@ THEME_MARK = re.compile(r"ai-deck-factory theme=([A-Za-z0-9_-]+)")  # template.p
 # 代替テキストに書く。w は元のタイトルの枠の右端までの文字の幅（in）、tone は地の明るさ（文字の色を決める）。なければ表紙・扉も Blank に組む
 # （2026-10-13、ユーザー「元の図形が入ったタイトルスライドなどを、維持して欲しい」「セクション区切りで異なる背景の区切りページを使い分けることはよくします」）
 LAYOUT_MARK = re.compile(r"ai-deck-factory layout=(cover|section):(\d+)(?: w=([\d.]+))?(?: tone=(dark|accent|light))?")
-VARIANTS = {}  # 組んでいるデッキの {"cover"・"section": [(文字の幅 in か None, tone), …]}（番号の順。use_layouts が決める）
+VARIANTS = {}  # 組んでいるデッキの {"cover"・"section": {番号: (文字の幅 in か None, tone)}}（目印の番号で引く。build の @COVER<番号> と同じ。use_layouts が決める）
 # 表紙・扉の地の明るさごとの文字の色（タイトル、小見出し・副題、章番号、社名とフッター）。dark は濃紺の地（Blank に組むときも）、accent は
 # 白が大きな文字にだけ届く赤の地（小さな文字は NAVY）、light は白の地
 TONES = {"dark": (WHITE, RED_ON_NAVY, DECOR, SUB_ON_NAVY), "accent": (WHITE, NAVY, RED, NAVY), "light": (HEAD, RED_TEXT, RULE, SUB)}
@@ -324,12 +324,12 @@ class Deck:
 
     def variant(self, kind, n):
         """表紙・扉のパターン n（1 から）のページを作る。戻り: (ページ, 文字の幅, 文字の色 TONES)。テンプレートにパターンがなければ、1 は Blank に濃紺の地。"""
-        vs = VARIANTS.get(kind, [])
-        if not 1 <= n <= max(len(vs), 1):
-            raise ValueError(f"{'表紙' if kind == 'cover' else '扉'}のパターン {n} がない（テンプレートにあるのは {max(len(vs), 1)} まで。見本のページで番号を見る）")
+        vs = VARIANTS.get(kind, {})
+        if n not in (vs or {1: None}):
+            raise ValueError(f"{'表紙' if kind == 'cover' else '扉'}のパターン {n} がない（テンプレートにあるのは {', '.join(map(str, sorted(vs or [1])))}。見本のページで番号を見る）")
         if not vs:
             return self.slide(NAVY), W + 2 * INSET, TONES["dark"]
-        w, tone = vs[n - 1]
+        w, tone = vs[n]
         s = self.slide(None, layout=f"@{kind.upper()}{n}")
         self.footc[s] = TONES[tone][3]
         if tone == "dark":
@@ -794,8 +794,8 @@ def deck_layouts(p):
 def use_layouts(p):
     """表紙・扉のパターン（文字の幅と地の明るさ）を、デッキ（new ならテンプレート）の目印から決める。make_deck の前に呼ぶ。"""
     VARIANTS.clear()
-    for _, m in sorted(layout_marks(p), key=lambda x: (x[1].group(1), int(x[1].group(2)))):
-        VARIANTS.setdefault(m.group(1), []).append((float(m.group(3)) if m.group(3) else None, m.group(4) or "dark"))
+    for _, m in layout_marks(p):
+        VARIANTS.setdefault(m.group(1), {})[int(m.group(2))] = (float(m.group(3)) if m.group(3) else None, m.group(4) or "dark")
 
 
 def theme_table(name):
@@ -1192,9 +1192,9 @@ def selftest():
     lays = {"layouts": [{"objectId": "c", "pageElements": [{"description": "ai-deck-factory layout=cover:1 w=7.08 tone=light"}]},
                         {"objectId": "s2", "pageElements": [{"description": "ai-deck-factory layout=section:2 tone=accent"}]},
                         {"objectId": "s1", "pageElements": [{"description": "ai-deck-factory layout=section:1 w=10.19 tone=dark"}]}]}
-    use_layouts(lays)  # 番号の順に並べる。扉の 2 は本文の幅のまま
+    use_layouts(lays)  # 目印の番号で引く（並びの順でない）。扉の 2 は本文の幅のまま
     assert {k: l["objectId"] for k, l in deck_layouts(lays).items()} == {("cover", 1): "c", ("section", 2): "s2", ("section", 1): "s1"}
-    assert VARIANTS == {"cover": [(7.08, "light")], "section": [(10.19, "dark"), (None, "accent")]}
+    assert VARIANTS == {"cover": {1: (7.08, "light")}, "section": {2: (None, "accent"), 1: (10.19, "dark")}}
     v = Deck("v")
     c, d2 = v.cover("t", "k"), v.divider("01", "t", variant=2)
     assert [r["createSlide"]["slideLayoutReference"]["layoutId"] for r in v.reqs if "createSlide" in r] == ["@COVER1", "@SECTION2"]
@@ -1206,6 +1206,15 @@ def selftest():
         raise AssertionError
     except ValueError:
         pass
+    use_layouts({"layouts": [lays["layouts"][2], {"objectId": "s3", "pageElements": [{"description": "ai-deck-factory layout=section:3 tone=light"}]}]})
+    g = Deck("g")  # 番号が飛んでも（扉の 2 のレイアウトを手で消したデッキ）、3 は 3 の地で組み、2 はないと言う
+    g.divider("03", "t", variant=3)
+    assert g.footc == {g.slides[0]: SUB} and [r["createSlide"]["slideLayoutReference"]["layoutId"] for r in g.reqs if "createSlide" in r] == ["@SECTION3"]
+    try:
+        g.divider("02", "t", variant=2)
+        raise AssertionError
+    except ValueError as e:
+        assert "1, 3" in str(e)
     use_layouts({})
     use_theme({"TEXT": "#37352f", "DECOR": "3E5159", "copyright": "© 2026 Me. All rights reserved."})  # テーマの値で組む（既定と同じ値は置き換えない）
     assert _SWAP == {TEXT: "37352F"} and paint(TEXT) == paint("303f47") == {"rgbColor": rgb("37352F")} and paint(RULE) == {"rgbColor": rgb(RULE)} and paint(NAVY) == {"themeColor": NAVY}
