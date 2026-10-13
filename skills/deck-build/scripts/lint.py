@@ -69,6 +69,10 @@ LINE_GRID = "格子を線で組んでいる（標準の表にできないか）"
 NO_NOTES = "ノートがない"
 TWO_LINES = "見出しかリードが 2 行の見込み"  # 見出しは 1 行、リードは 1 文（visual.md の 1）
 HEAD_PERIOD, BULLET_PERIOD = "見出しの句点", "箇条書きの句点の混在"  # content.md の 6。名前は Docs の規則と同じ（Docs は見出しのスタイル、箇条書きのリストごと）
+# [lint-023] 見出しは短い名詞句。言い切りは判断を頼むページと数字の結論のページの 2〜3 枚だけ（content.md の 4・6、visual_doc.md の 2）
+HEAD_POLITE, HEAD_CLAIMS, CLAIM_MAX = "見出しが「ください・します」で終わる", "言い切りの見出しが多い", 3
+POLITE_END = re.compile(r"(ください|します|しましょう)$")
+CLAIM_END = re.compile(r"[るうくすつむぶぐただい]$")  # 読点があり、動詞・形容詞らしい仮名で終わるものを言い切りの見込みにする。「N つ」で終わる名詞句は除く。形態素解析は入れない
 # [lint-004] 空きと結論バンド。目安は、空いて見えたページを拾う値にした
 EMPTY_BELOW = "本文の下が空いている"
 EMPTY_BOX = "箱の中の下が空いている"
@@ -89,7 +93,7 @@ GAP_HOLE, GAP_TOP = 0.65 * EMU, 1.0 * EMU  # 要素の間の穴と、本文の�
 THIN = 0.05 * EMU  # これより細い四角は線として数える（四角で罫線や軸を引いても、格子と矢印の確かめから漏れないように）  # 全ページにスピーカーノートを書く（visual.md の 1）
 FONT_NG = f"書体が {FONT} でない"  # スライドはテンプレートの書体（deck_font）と比べる。Google Fonts にない書体は、API が受け付けても黙って別の書体で描かれる（slides.md の 5）。英数字だけの MONO（コード）は通す
 MONO_NG = f"等幅の {MONO} に和文"  # MONO に和文の字形はなく、Google が別の書体で描く。和文は FONT にする（slides.py の mono_reqs。visual.md の 2）
-HARD_NAMES = set(HARD) | {f"{MIN_PT}pt 未満の文字", f"{DOC_MIN_PT}pt 未満の文字", COPYRIGHT_NG, FONT_NG, MONO_NG, "用紙が A4 でない", "追跡の印の付いたリンク"}
+HARD_NAMES = set(HARD) | {HEAD_PERIOD, HEAD_POLITE, f"{MIN_PT}pt 未満の文字", f"{DOC_MIN_PT}pt 未満の文字", COPYRIGHT_NG, FONT_NG, MONO_NG, "用紙が A4 でない", "追跡の印の付いたリンク"}
 INS = INSET * 72  # 文字の枠の内側の余白（pt）。Slides API の既定は 0.1 in で、変えられない
 BODY_TOP, BODY_BOTTOM = Y_BODY_NOLEAD * EMU, BAND_BOTTOM * EMU  # 本文の領域（visual.md の 1 の配置）
 FOOT_TOP = (Y_FOOT - 0.13) * EMU  # これより下はフッター（出典の行 6.68 in とフッター 7.08 in の間）
@@ -431,7 +435,7 @@ class Report:
 
 def lint_slides(p, r, reuse=False, talk=False):
     """p は presentations.get の JSON。reuse は社内資料の差し替え用（元の大きさのままなので 11pt の下限と表紙を見ない）。"""
-    titles, sizes, pairs, chars, dark, foot_secret, bands = [], Counter(), defaultdict(list), [], [], [], []
+    titles, sizes, pairs, chars, dark, foot_secret, bands, claims = [], Counter(), defaultdict(list), [], [], [], [], []
     font = deck_font(p)  # 会社のテンプレートは会社の書体（deck-template）
     for i, s in enumerate(p.get("slides", []), 1):
         scheme = scheme_of(p, s.get("slideProperties", {}).get("masterObjectId"))
@@ -540,15 +544,23 @@ def lint_slides(p, r, reuse=False, talk=False):
             avail = b[2] / EMU * 72 - 2 * INS
             n = sum(max(1, -(-em_width(t) * sz // avail)) for t in ts) if avail > 0 else 1
             titles.append(f"p{i}  {' / '.join(ts)}" + (f"  （{int(n)} 行の見込み）" if n > 1 else ""))
-            if "".join(ts).rstrip().endswith("。"):
+            head = "".join(ts).rstrip()
+            if "。" in head:  # 文の途中の句点も（2 文の見出しは短い名詞句でない）
                 r.hits[HEAD_PERIOD].append(f"p{i}: 「{' / '.join(ts)[:30]}」")
+            if POLITE_END.search(head):
+                r.hits[HEAD_POLITE].append(f"p{i}: 「{' / '.join(ts)[:30]}」。頼みごとはリードか本文で言う")
+            if not dark[-1] and "、" in head and CLAIM_END.search(head) and not re.search(r"\d+ つ$", head):
+                claims.append(i)
             if top[1] is not None and n > 1:
                 r.hits[TWO_LINES].append(f"p{i} の見出し: 「{' / '.join(ts)[:30]}」")
         for e, b in els:  # リード（上端 1.20 in の 1 文）
             if "shape" in e and e is not best[1] and abs(b[1] / EMU - Y_LEAD) < 0.12:
+                lead = "".join(ptext(x) for x in paras(e["shape"].get("text"))).strip()
+                if lead:  # 名詞句の見出しのページは、言えることをリードで言うので、一覧に並べる
+                    titles.append(f"      {lead}")
                 k = text_lines(e["shape"], b[2])
                 if k and k > 1:
-                    r.hits[TWO_LINES].append(f"p{i} のリード: 「{''.join(ptext(x) for x in paras(e['shape'].get('text')))[:30]}」")
+                    r.hits[TWO_LINES].append(f"p{i} のリード: 「{lead[:30]}」")
         r.hits[ARROW_MID].extend(f"p{i}: {m}" for m in off_center_arrows(lines, boxes))
         r.hits[LINE_GRID].extend(f"p{i}: 同じ長さの縦線が {n} 本。格子は表にし、月をまたぐバーなどだけ図形で上に置く（slides.md の 4）" for n in line_grid(grid))
         n = body_chars(els, best[1])
@@ -594,15 +606,17 @@ def lint_slides(p, r, reuse=False, talk=False):
             r.hits[SHORT_CH].append(f"p{a} の扉のあとが {f'p{a + 1} だけ' if b - a == 2 else '1 枚もない'}。前後の章とまとめる")
     body_pages = dark.count(False)
     if not reuse and len(bands) > max(1, body_pages / 3):
-        r.hits[MANY_BANDS].append(f"本文 {body_pages} 枚中 {len(bands)} 枚（{', '.join(f'p{k}' for k in bands)}）。見出しで言い切れているページからは外す（visual.md の 1）")
+        r.hits[MANY_BANDS].append(f"本文 {body_pages} 枚中 {len(bands)} 枚（{', '.join(f'p{k}' for k in bands)}）。見出しかリードで言い切れているページからは外す（visual.md の 1）")
+    if len(claims) > CLAIM_MAX:
+        r.hits[HEAD_CLAIMS].append(f"{len(claims)} 枚（{', '.join(f'p{k}' for k in claims)}）。名詞句にし、言い切りは判断を頼むページと数字の結論のページの 2〜3 枚に絞る（content.md の 4）")
     if foot_secret:
         r.hits["社外秘の表示"].append(f"フッター: {len(foot_secret)} ページ（p{foot_secret[0]}〜p{foot_secret[-1]}）。社内向けなら意図どおり、顧客向けなら外す")
-    print("== 見出し（各ページでいちばん大きい文字）。順に読んで話が通るか ==")
+    print("== 見出し（各ページでいちばん大きい文字）とリード（字下げ）。順に読んで話が通るか ==")
     print("\n".join(titles))
     print(f"\n== 本文の字数（見出し・リード・出典・フッターを除く。話す資料は {TALK_MAX} 字まで） ==")
     print(" / ".join(chars))
-    hard = r.show(list(HARD) + [f"{MIN_PT}pt 未満の文字", COPYRIGHT_NG, FONT_NG, MONO_NG], "要修正")
-    r.show(list(WARN) + list(SLIDE_ONLY) + list(NOTES_ONLY) + ["数字に出典の行がない", NO_LINK, BODY_LINES, TWO_LINES, HEAD_PERIOD, BULLET_PERIOD, TALK, NO_NOTES, ARROW_MID, LINE_GRID, EMPTY_BELOW, EMPTY_BOX, EMPTY_HOLE, PAD_NG, NUM_NO_UNIT, OPEN_HEAD, COL_SHIFT, DASH_ROUND, STAGE_NG, CODE_NOT_MONO, BLOCK_ON_NAVY, MANY_BANDS, NO_COVER, NO_DIVIDER, SHORT_CH], "要確認")
+    hard = r.show(list(HARD) + [f"{MIN_PT}pt 未満の文字", COPYRIGHT_NG, FONT_NG, MONO_NG, HEAD_PERIOD, HEAD_POLITE], "要修正")
+    r.show(list(WARN) + list(SLIDE_ONLY) + list(NOTES_ONLY) + ["数字に出典の行がない", NO_LINK, BODY_LINES, TWO_LINES, HEAD_CLAIMS, BULLET_PERIOD, TALK, NO_NOTES, ARROW_MID, LINE_GRID, EMPTY_BELOW, EMPTY_BOX, EMPTY_HOLE, PAD_NG, NUM_NO_UNIT, OPEN_HEAD, COL_SHIFT, DASH_ROUND, STAGE_NG, CODE_NOT_MONO, BLOCK_ON_NAVY, MANY_BANDS, NO_COVER, NO_DIVIDER, SHORT_CH], "要確認")
     hard += workspace_checks("slides", p, r)
     print("\n== 文字サイズ（pt: run の数） ==")
     print(", ".join(f"{k:g}: {v}" for k, v in sorted(sizes.items())))
@@ -622,7 +636,7 @@ DESU = re.compile(r"(です|ます|でした|ました|ません|でしょう|�
 DEARU = re.compile(r"(だ|である|だった|であった|する|した|しない|ない|なかった|ある|あった|いる|いた|できる|なる|なった)$")
 A4_NG, UTM_NG = "用紙が A4 でない", "追跡の印の付いたリンク"
 DOC_ONLY = ("文体の混在", "一文が長い", "段落の文が多い", "1 行の字数が多い", "見出しの段の飛び", "見出しの段が深い", "子が 1 つだけの見出し", "見出しの重複",
-            "見出しの句点", "見出しの中の太字", "中身のない見出し", "太字の段落を見出しにしている", "題が「について」で終わる", "冒頭に要旨がない",
+            "見出しの中の太字", "中身のない見出し", "太字の段落を見出しにしている", "題が「について」で終わる", "冒頭に要旨がない",
             "末尾の「まとめ」", "空の段落の連続", "表の題がない", "図の題がない", "数字に出典のリンクがない", "太字が多い", "太字とコロンで始まる箇条書き",
             "コロンで終わる文", "1 項目だけの箇条書き", "箇条書きの句点の混在", "本文の幅を超える図")
 
@@ -735,6 +749,8 @@ def lint_gdoc(doc, r, template=False):
         sec_link |= bool(links_of(p))
         if style == "TITLE" and text.rstrip("。").endswith("について"):
             r.hits["題が「について」で終わる"].append(f"{where}: 「{text[:30]}」。主題と文書の性格（提案・報告・計画）を入れる（visual_doc.md の 2）")
+        if (style == "TITLE" or style.startswith("HEADING_")) and POLITE_END.search(text):
+            r.hits[HEAD_POLITE].append(f"{where}: 「{text[:24]}」。頼みごとは段落で言う")
         if style.startswith("HEADING_"):
             lv = int(style[-1])
             if lv > 3:
@@ -745,8 +761,8 @@ def lint_gdoc(doc, r, template=False):
                 r.hits["見出しの段の飛び"].append(f"{where}: 最初の見出しが H{lv}「{text[:24]}」")
             if heads and heads[-1][2] and heads[-1][0] >= lv:
                 r.hits["中身のない見出し"].append(f"{heads[-1][2]}: 「{heads[-1][1][:24]}」のあとに本文がない")
-            if text.endswith("。"):
-                r.hits["見出しの句点"].append(f"{where}: 「{text[:24]}」")
+            if "。" in text:
+                r.hits[HEAD_PERIOD].append(f"{where}: 「{text[:24]}」")
             heads.append([lv, text, where])
             firsts.append("  " * (lv - 1) + f"H{lv} {text}")
             if lv <= 2:
@@ -814,7 +830,7 @@ def lint_gdoc(doc, r, template=False):
     print("== 見出しと段落の 1 文目。見出しだけで話が通るか、1 文目を順に読んで要約になるか ==")
     print("\n".join(firsts) or "（見出しも本文もない）")
     print(f"\n== 本文の字数: {body} 字（見出し・表・図表の題・出典・引用を除く）、1 行 約 {per_line:.0f} 字 ==")
-    hard = r.show(list(HARD) + [f"{DOC_MIN_PT}pt 未満の文字", FONT_NG, MONO_NG, A4_NG, UTM_NG], "要修正")
+    hard = r.show(list(HARD) + [f"{DOC_MIN_PT}pt 未満の文字", FONT_NG, MONO_NG, A4_NG, UTM_NG, HEAD_PERIOD, HEAD_POLITE], "要修正")
     r.show(list(WARN) + [NO_LINK] + list(DOC_ONLY), "要確認")
     hard += workspace_checks("doc", doc, r)
     return hard
@@ -886,6 +902,7 @@ def stats(path=None):
 
 def selftest():
     globals()["theme_pages"] = lambda: []  # 回す場所の factory.toml のテーマ（用紙）に左右されない
+    ws_checks, globals()["workspace_checks"] = workspace_checks, lambda *a: 0  # 回す場所のワークスペースの checks.py にも左右されない（最後に戻して試す）
     import contextlib, io
     assert abs(contrast("FFFFFF", "000000") - 21) < 0.01
     assert abs(contrast("7D8E95", "F5F7F8") - 3.16) < 0.02
@@ -931,6 +948,8 @@ def selftest():
     title = lambda t="見出し": shape(1, y=0.62, size=24, w=12, text=[t])
     # 8 行と 9 行の境目。見出し・フッター・出典・表は数えない
     flat = lambda e: next(flatten([e]))
+    _, out, _ = run(deck([(OAT, [title("問い合わせの一次回答の推移"), shape(1, y=Y_LEAD, w=12, text=["一次回答が 3 割減った"])])]))
+    assert "p1  問い合わせの一次回答の推移\n      一次回答が 3 割減った\n" in out  # 名詞句の見出しのページは、リードも一覧に出す
     assert body_lines(*flat(shape(8))) == 8 and body_lines(*flat(shape(9))) == 9
     t = shape(9)
     assert body_lines(t, flat(t)[1], t) is None and body_lines(*flat(shape(9, y=0.62))) is None
@@ -1048,6 +1067,13 @@ def selftest():
     assert hp([title("問い合わせが減っている。")]) == (1, 0) and hp([title("問い合わせが減っている")]) == (0, 0)
     assert hp([title(), bulleted(["夜間に集計する。", "朝に見る"])]) == (0, 1) and hp([title(), bulleted(["夜間の集計", "朝の確認"])]) == (0, 0)
     assert hp([title(), shape(1, text=["夜間に集計する。", "朝に見る"])]) == (0, 0)
+    hd = lambda t: run(deck([(NAVY, [title()]), (OAT, [title(t)])]))[2]
+    assert hd("問い合わせが減っている。") > hd("問い合わせが減っている") == 0 and hd("減っている。理由は 2 つ") > 0  # 見出しの句点は文の途中でも要修正
+    pol = lambda t: bool(run(deck([(NAVY, [title()]), (OAT, [title(t)])]))[0].hits[HEAD_POLITE])
+    assert pol("移行の順番をご確認ください") and pol("夜間の集計を移します") and not pol("夜間の集計の移し先")
+    cl = lambda ts: bool(run(deck([(NAVY, [title("言い切りの扉、多くなる")])] + [(OAT, [title(t)]) for t in ts]))[0].hits[HEAD_CLAIMS])
+    assert cl(["問い合わせが、3 割減っている"] * 4) and not cl(["問い合わせが、3 割減っている"] * 3)  # 扉（濃紺の地）は数えない
+    assert not cl(["問い合わせの推移"] * 4 + ["移す理由、3 つ"] * 2)  # 名詞句と「N つ」で終わるものは数えない
     # 空き: 1 行の本文だけなら下が空く。塗りの箱の中に 1 行なら箱の中が空く。中身で埋まった箱は出さない。結論バンドは本文の 3 分の 1 まで
     fill = lambda c: {"shapeBackgroundFill": {"solidFill": {"color": c}}}
     card = lambda y, h: {"objectId": "c", "shape": {"shapeType": "RECTANGLE", "shapeProperties": fill({"rgbColor": rgb("FFFFFF")})}, **box(0.6, y, 6, h)}
@@ -1103,6 +1129,10 @@ def selftest():
               "太字とコロンで始まる箇条書き", "追跡の印の付いたリンク"):
         assert g.hits[k], k
     assert len(g.hits["文体の混在"]) == 1 and not g.hits["用紙が A4 でない"] and not g.hits["1 行の字数が多い"]
+    with contextlib.redirect_stdout(io.StringIO()):
+        lint_gdoc({**gdoc, "body": {"content": [gp("要旨", "HEADING_1"), gp("本文です。"), gp("移行の順をご確認ください", "HEADING_1"), gp("本文です。"),
+                                                gp("移行は夜間にする。", "HEADING_1"), gp("本文です。")]}}, g := Report())
+    assert g.hits[HEAD_POLITE] and g.hits[HEAD_PERIOD] and not any("要旨" in h for h in g.hits[HEAD_POLITE] + g.hits[HEAD_PERIOD])
     gdoc["documentStyle"]["pageSize"]["height"]["magnitude"] = 792  # レター
     gdoc["documentStyle"]["marginLeft"]["magnitude"] = 40  # 1 行 49 字
     with contextlib.redirect_stdout(io.StringIO()):
@@ -1144,6 +1174,7 @@ def selftest():
         log_run(a, "d1", log), log_run(b, "d1", log), log_run(b, "d2", log)
         with contextlib.redirect_stdout(io.StringIO()):
             assert stats(log) == [("あおり", 2, 3, 2)]
+    globals()["workspace_checks"] = ws_checks
     import gapi, tempfile  # ワークスペースの点検: HARD の名前だけ要修正になる
     from pathlib import Path
     with tempfile.TemporaryDirectory() as ws, contextlib.chdir(ws), contextlib.redirect_stdout(io.StringIO()):
