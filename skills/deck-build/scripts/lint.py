@@ -15,7 +15,7 @@ from slides import BAND_BOTTOM, COPYRIGHT_PT, EMU, FONT, INSET, MONO, STAGE_FILL
 
 DOC_MIN_PT = 9  # ドキュメントの文字の下限。図表の題・出典・表の中・フッターが 9pt（visual_doc.md の 1）
 MIN_PT = 11  # [lint-001] スライドの文字の下限。社内資料の差し替え用（名前に「差し替え用」）は元の大きさのままなので見ない
-FIG_MIN_PT = MIN_PT - 2  # [lint-022] 塗りのある図形の中の文字（ガントのバー、図のラベル）は本文から 2pt 下まで（visual-037）。表のセルと塗りのない文字は MIN_PT のまま
+FIG_MIN_PT = MIN_PT - 2  # [lint-022] 塗りのある図形の中の文字（ガントのバー、図のラベル）は本文から 2pt 下まで（visual-037）。表のセル、塗りのない文字、別の図形の塗りに重ねた文字（カードの本文、背景の四角の上の出典）は MIN_PT のまま
 COPYRIGHT_FOOTER = re.compile(r"^©\s*\d{4}\s+.+?\s+All rights reserved\.(?:\s*｜\s*(?:Internal Only|Confidential))?\s*$", re.I)
 COPYRIGHT_NG = f"{COPYRIGHT_PT}pt 未満の著作権フッター"
 JA = r"぀-ゟァ-ヺー-ヿ㐀-鿿"  # かなと漢字（中黒「・」と全角の記号は含めない）
@@ -156,6 +156,15 @@ def group_lines(els, inside=False):
             yield from group_lines(e["elementGroup"].get("children", []), True)
         elif inside and "line" in e:
             yield e["objectId"]
+
+
+def ancestry(els, up=()):
+    """要素の ID から、入っているグループの ID の並び（外から内）。slides.py の角丸・正円は、背景と文字の枠を 1 つのグループにする（Deck.box）。"""
+    for e in els:
+        if "elementGroup" in e:
+            yield from ancestry(e["elementGroup"].get("children", []), up + (e.get("objectId"),))
+        else:
+            yield e.get("objectId"), up
 
 
 def cells(e, scheme=None):
@@ -430,6 +439,7 @@ def lint_slides(p, r, reuse=False, talk=False):
         grid = []
         shapes, lines, boxes, best, top, has_src, nums = [], [], [], (0, None, None), (0, None, None), False, []
         els = list(flatten(s.get("pageElements", [])))
+        ups = dict(ancestry(s.get("pageElements", [])))
         parts = set(group_lines(s.get("pageElements", [])))
         for e, b in els:
             sh = e.get("shape", {})
@@ -442,16 +452,18 @@ def lint_slides(p, r, reuse=False, talk=False):
                     grid.append(lines[-1])
                 continue
             if "shape" not in e and "table" not in e:  # 画像・動画など。上に重ねた文字の地は分からない
-                shapes.append((b, "IMAGE"))
+                shapes.append((b, "IMAGE", None))
                 continue
             texts = cells(e, scheme)
             own = texts[0][1] if "shape" in e else None
             if "shape" in e and e["shape"].get("shapeType") in ("RECTANGLE", "ROUND_RECTANGLE") and b[3] > 0:
                 boxes.append(b)
-            cx, cy, under, ub = b[0] + b[2] / 2, b[1] + b[3] / 2, bg, None
-            for ob, of in shapes:  # 下に重なっている最後の塗り
+            cx, cy, under, ub, uid = b[0] + b[2] / 2, b[1] + b[3] / 2, bg, None, None
+            for ob, of, oi in shapes:  # 下に重なっている最後の塗り
                 if of and ob[0] <= cx <= ob[0] + ob[2] and ob[1] <= cy <= ob[1] + ob[3]:
-                    under, ub = (None, None) if of == "IMAGE" else (of, ob)
+                    under, ub, uid = (None, None, None) if of == "IMAGE" else (of, ob, oi)
+            up = ups.get(e.get("objectId"))
+            framed = bool(up and uid and up[-1] in ups.get(uid, ()))  # 下の塗りと同じグループの文字の枠（d.label の角丸）。カードの本文や背景の四角の上の文字は別の図形
             footer = b[1] >= FOOT_TOP
             if "shape" in e and not footer and not reuse and (m := tight_pad(e["shape"], b, b if own else ub)):
                 r.hits[PAD_NG].append(f"p{i}: {m}")
@@ -500,7 +512,7 @@ def lint_slides(p, r, reuse=False, talk=False):
                         copyright_footer = footer and COPYRIGHT_FOOTER.fullmatch(t.strip())
                         if copyright_footer:
                             minimum = COPYRIGHT_PT
-                        elif "shape" in e and (f or ub):  # 塗りのある図形の中（自分の塗りか、下に重なった塗り）
+                        elif "shape" in e and (f or framed):  # 塗りのある図形の中（自分の塗りか、同じグループの塗り）
                             minimum = FIG_MIN_PT
                         else:
                             minimum = MIN_PT
@@ -515,7 +527,7 @@ def lint_slides(p, r, reuse=False, talk=False):
                         if 0.3 * EMU <= b[1] <= 1.3 * EMU and sz >= 20 and sz > top[0]:
                             top = (sz, e, b)
             if "shape" in e:
-                shapes.append((b, own))
+                shapes.append((b, own, e.get("objectId")))
         if top[1] is not None:
             best = top
         if best[1] is not None:
@@ -927,6 +939,16 @@ def selftest():
     for size, fill, n in ((9, None, 1), (9, NAVY, 0), (8, NAVY, 1)):
         res, _, _ = run(deck([(NAVY, [title(), shape(1, y=3, size=size, fill=fill)])]))
         assert len(res.hits[f"{MIN_PT}pt 未満の文字"]) == n, (size, fill)
+    # 角丸の札（背景と文字の枠が 1 グループ）は 9pt まで通す。カードの本文・背景の四角の上の出典・中心だけに塗りがある枠は、下に塗りがあっても 11pt で止める
+    under = lambda oid, x, y, w, h: {"objectId": oid, **box(x, y, w, h), "shape": {"shapeType": "RECTANGLE", "shapeProperties": {"shapeBackgroundFill": {"solidFill": {"color": OAT}}}}}
+    group = lambda oid, *ch: {"objectId": oid, "elementGroup": {"children": list(ch)}}
+    for els, n in (([group("g", group("bgs", under("bg", 0, 3, 2, 4)), shape(1, y=3, size=9) | {"objectId": "lb"})], 0),
+                   ([group("g", under("bg", 0, 3, 2, 4), shape(1, y=3, size=8) | {"objectId": "lb"})], 1),
+                   ([under("bg", 0, 2.8, 3, 4.4), shape(1, y=3, size=9) | {"objectId": "lb"}], 1),
+                   ([under("bg", 0, 0, 13.33, 7.5), shape(1, y=3, size=9, prefix="出典：") | {"objectId": "lb"}], 1),
+                   ([under("bg", 0.8, 4.9, 0.2, 0.2), shape(1, y=3, size=9) | {"objectId": "lb"}], 1)):
+        res, _, _ = run(deck([(OAT, [title(), *els])]))
+        assert len(res.hits[f"{MIN_PT}pt 未満の文字"]) == n, els
     # 話す資料の字数: 本文 120 字は出さず、130 字は出す。--talk がなければ出さない
     for lines, talk in ((12, True), (13, True), (13, False)):
         res, out, _ = run(deck([(NAVY, [title(), shape(lines), shape(9, y=7.08), shape(9, prefix="出典：")])]), talk=talk)
