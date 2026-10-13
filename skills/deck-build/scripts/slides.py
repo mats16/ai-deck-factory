@@ -26,8 +26,10 @@ FONT = "Noto Sans JP"  # Google Fonts の名前。Noto Sans CJK JP と字形・�
 # Google Slides で描けることを確かめた、和文のある Google Fonts（2026-10-07。../../deck-template/SKILL.md の「書体」）。会社のテーマの書体はここから選ぶ
 JP_FONTS = {FONT, "Noto Serif JP", "BIZ UDPGothic", "BIZ UDGothic", "BIZ UDPMincho", "M PLUS 1p", "M PLUS 2", "M PLUS Rounded 1c", "Zen Kaku Gothic New",
             "Zen Maru Gothic", "Sawarabi Gothic", "Kosugi Maru", "IBM Plex Sans JP", "LINE Seed JP", "Murecho", "Shippori Mincho", "Zen Old Mincho", "Klee One"}
-MONO = "Cascadia Mono"  # コードの箱・コマンドの等幅の書体（Google Fonts。Windows Terminal の既定でリガチャがない。visual.md の 2）。和文の字形がないので、ASCII の続きにだけ付ける（mono_reqs）
-MONO_EM = 0.586  # Cascadia Mono の英数字の幅（em。hmtx で測った。2026-10-09）
+MONO_DEFAULT = "Cascadia Mono"  # コードの箱・コマンドの等幅の書体の既定（Google Fonts。Windows Terminal の既定でリガチャがない。visual.md の 2）。和文の字形がないので、ASCII の続きにだけ付ける（mono_reqs）
+LIGATURE_MONO = {"JetBrains Mono", "Fira Code", "Cascadia Code"}  # Google Fonts の版にリガチャがあり、Google Slides が描く（2026-10-09。visual.md の 2）。テーマの mono に書けない
+MONO = MONO_DEFAULT  # 組むデッキの等幅の書体。テーマの mono があればそれ（use_theme）
+MONO_EM = 0.586  # Cascadia Mono の英数字の幅（em。hmtx で測った。2026-10-09）。テーマで等幅の書体を替えても、この幅で見込む（ずれる。deck-template の「書体」）
 EMU = 914400
 INSET = 0.1  # 文字の枠の内側の余白（API で変えられない）。枠をこの分だけ外に出し、文字の端を箱の端にそろえる
 PAD = 0.08   # 箱と、その上に重ねる文字の枠の間（INSET と合わせて、枠と文字の間が 1 字分ほどになる）
@@ -50,7 +52,8 @@ def _brand():
 _BRAND = _brand()
 COMPANY = _BRAND.get("company", "")  # 表紙の左下。空なら置かない
 PLACEHOLDER_COPYRIGHT = "© 2026 Example, Inc. All rights reserved."  # [brand] copyright を書いていないときの仮の値。これと空のときは組めない（need_brand）
-COPYRIGHT = _BRAND.get("copyright", PLACEHOLDER_COPYRIGHT)  # 初公表年。既存資料の年を現在年へ自動更新しない
+BRAND_COPYRIGHT = _BRAND.get("copyright", PLACEHOLDER_COPYRIGHT)  # 初公表年。既存資料の年を現在年へ自動更新しない
+COPYRIGHT = BRAND_COPYRIGHT  # 組むデッキの著作権表示。テーマの copyright があればそれ（use_theme）
 LOGO = _BRAND.get("logo")  # ドキュメントの表紙のロゴ（assets/ の中のパスか URL）。なければ置かない
 COPYRIGHT_PT = 9  # 著作権表示と、高さをそろえるページ番号だけは 11pt 以上の例外。本文を邪魔しない（2026-10-08、ページ番号は 2026-10-13）
 # 結論バンドの内側の余白（in）。枠と文字の間は 1 字分より大きめに取る（見た目 1-8。13pt の 1 字は 0.18 in）。左右は pptx 版と同じ 18pt
@@ -64,9 +67,14 @@ EMPH_PT = 2
 NAVY, BG, RED_ON_NAVY, PANEL = "DARK1", "LIGHT1", "DARK2", "LIGHT2"  # 扉の地・見出し・結論バンド／本文の地／濃紺の上の赤／パネル
 NAVY_BLOCK, GA, RED_TEXT, PREVIEW = "ACCENT1", "ACCENT2", "ACCENT3", "ACCENT4"  # 扉の中のブロック／GA の札／18pt 未満の赤の文字／Beta・Preview の札
 SUB, OSS, RED = "ACCENT5", "ACCENT6", "HYPERLINK"  # 補助の文字とフッター／OSS の札／赤のアクセント（塗りと 18pt 以上の文字）
-# テーマに入れない色（どのテーマでも同じ）
+# テーマに入れない色。WHITE・CARD はどのテーマでも同じ
 WHITE = CARD = "FFFFFF"
 TEXT, RULE, RED_SOFT, STAGE_TEXT, DECOR = "303F47", "DCE0E2", "FFECE8", "0B2026", "3E5159"  # 本文／罫線と濃紺の上の補足／淡い赤／札の文字／章番号（飾り）
+# 上の 5 色は既定の値。factory.toml の [slides.themes.<名前>] に同じ名前で書くと、そのテーマのデッキでは paint とアイコンが置き換える（use_theme）。
+# pages.py には名前（か既定の 6 桁）で書く。マスターの配色に枠が残っていない（12 の枠をすべて使う）ので、組むときに置き換える
+FIXED = {"TEXT": TEXT, "RULE": RULE, "RED_SOFT": RED_SOFT, "STAGE_TEXT": STAGE_TEXT, "DECOR": DECOR}
+THEME_MARK = re.compile(r"ai-deck-factory theme=([A-Za-z0-9_-]+)")  # template.py がマスターのページ番号の枠の代替テキストに書く。Drive の複製でも残る（2026-10-13）
+_SWAP = {}  # 組んでいるデッキの、FIXED の既定の値 → テーマの値（use_theme が決める）
 # 提供ステージの札の塗り（visual.md の 1）。本番で使える Public Preview は、Beta・Private Preview（本番向けではない）の黄と分け、GA の緑を 4 割にした色（2026-10-09）
 PUBLIC_PREVIEW = "99DDC7"
 STAGE_FILL = {"GA": GA, "Public Preview": PUBLIC_PREVIEW, "Beta": PREVIEW, "Private Preview": PREVIEW, "OSS": OSS}  # 札の文字は OSS だけ WHITE、ほかは STAGE_TEXT
@@ -204,8 +212,13 @@ def rgb(h):
     return {"red": int(h[0:2], 16) / 255, "green": int(h[2:4], 16) / 255, "blue": int(h[4:6], 16) / 255}
 
 
-def paint(c):  # 役割の名前ならテーマの色、6 桁ならその色
-    return {"themeColor": c} if c in SLOTS else {"rgbColor": rgb(c)}
+def fixed(c):
+    """FIXED の既定の値なら、デッキのテーマの値（6 桁で書いた同じ値も置き換わる。refont と同じ）。ほかはそのまま。"""
+    return _SWAP.get(c.upper(), c) if isinstance(c, str) else c
+
+
+def paint(c):  # 役割の名前ならテーマの色、6 桁ならその色（固定の色はテーマの値）
+    return {"themeColor": c} if c in SLOTS else {"rgbColor": rgb(fixed(c))}
 
 
 def u16(s):  # Slides API の文字位置は UTF-16 の単位
@@ -597,6 +610,7 @@ class Deck:
         （"TbDatabase"。組むときに手元で PNG にして carry で貼る。前の pages.py のため）。color は 6 桁（1 色のアイコンにだけ効く）。代替テキストは名前。"""
         if not re.fullmatch(r"[0-9A-Fa-f]{6}", str(color)):  # テーマの色（NAVY は "DARK1"）は画像の色にできず、透明の画像になる。lint も気づかない
             sys.exit(f"アイコンの色は 6 桁で渡す: {name} に {color!r}。テーマの色（NAVY・SUB など）は使えないので、TEXT か 6 桁にする")
+        color = fixed(color)
         return self.image(sid, iconify(name, color) if ":" in name else render_icon(name, color), x, y, size, size, alt=name)
 
     # ---- 1 枚の型（visual.md の 1） ----
@@ -721,11 +735,57 @@ def revision(pid):
 
 
 def need_brand():
-    """[brand] copyright がなければ止める。仮の著作権表示を全ページに書いた資料を出さないため（lint は形しか見ないので、仮の値も通る）。
+    """[brand] copyright（テーマの copyright があればそれ）がなければ止める。仮の著作権表示を全ページに書いた資料を出さないため（lint は形しか見ないので、仮の値も通る）。
     スライド・ドキュメント・テンプレートを組む build が、Slides・Docs に送る前に呼ぶ。"""
     if COPYRIGHT.strip() in ("", PLACEHOLDER_COPYRIGHT):  # 空（copyright = ""）と、前後に空白を付けた仮の値も、書いていないのと同じ（doctor と同じ判定）
-        sys.exit("factory.toml の [brand] に copyright（例: copyright = \"© 2026 Acme, Inc. All rights reserved.\"）を書いてから組む。"
+        sys.exit("factory.toml の [brand]（テーマごとに変えるなら [slides.themes.<名前>]）に copyright（例: copyright = \"© 2026 Acme, Inc. All rights reserved.\"）を書いてから組む。"
                  "書かないと全ページの左下が仮の表示（Example, Inc.）になる")
+
+
+def deck_theme(p):
+    """presentations の masters・layouts の代替テキストにある、テーマの名前（THEME_MARK）。なければ None（template.py で合わせ直す前のテンプレートから作ったデッキ）。"""
+    return next((m.group(1) for pg in p.get("masters", []) + p.get("layouts", []) for e in pg.get("pageElements", [])
+                 if (m := THEME_MARK.search(e.get("description", "")))), None)
+
+
+def theme_table(name):
+    """factory.toml の [slides.themes.<name>]。name が None か、そのテーマがなければ {}（今の値で組む）。"""
+    return factory().get("slides", {}).get("themes", {}).get(name, {}) if name and gapi.find_factory() else {}
+
+
+def theme_fixed(t):
+    """テーマの表 t の固定の色（名前 → 6 桁）。書いていない色は FIXED の既定。"""
+    if bad := [k for k in FIXED if k in t and not re.fullmatch(r"#?[0-9A-Fa-f]{6}", str(t[k]))]:
+        sys.exit(f"[slides.themes] の {', '.join(bad)} が 6 桁の 16 進の色でない（例: TEXT = \"37352F\"）")
+    return {k: str(t.get(k, v)).lstrip("#").upper() for k, v in FIXED.items()}
+
+
+def use_theme(t):
+    """テーマの表 t（theme_table）の固定の色・著作権表示・等幅の書体で組む。make_deck の前に呼ぶ（pages.py が作る要求に効かせる）。"""
+    global COPYRIGHT, MONO
+    _SWAP.clear()
+    _SWAP.update({FIXED[k]: v for k, v in theme_fixed(t).items() if v != FIXED[k]})
+    COPYRIGHT = t.get("copyright", BRAND_COPYRIGHT)
+    MONO = theme_mono(t)
+
+
+def theme_mono(t):
+    """テーマの表 t（[slides.themes]・[docs.themes]）の等幅の書体。書いていなければ MONO_DEFAULT。和文を載せないので JP_FONTS には限らない（Google Fonts にない書体は黙って別の書体になる）。"""
+    if not isinstance(m := t.get("mono", MONO_DEFAULT), str) or not m.strip():
+        sys.exit(f"テーマの mono {m!r} は書体の名前でない（例: mono = \"Cascadia Mono\"）")
+    if m.strip() in LIGATURE_MONO:
+        sys.exit(f"テーマの mono {m!r} は、Google が描くとリガチャが出る（-> が矢印 1 字になる。visual.md の 2）。リガチャのない書体にする")
+    return m.strip()
+
+
+def deck_mono(p):
+    """デッキの等幅の書体（デッキのテーマの mono。lint が比べる）。マスターにコードの枠がないので、deck_font と違いテーマの名前から引く。"""
+    return theme_mono(theme_table(deck_theme(p)))
+
+
+def theme_of(pid):
+    """プレゼン（かテンプレート）pid のテーマの名前（deck_theme）。"""
+    return deck_theme(request("GET", f"{SLIDES}/{pid}?fields=masters(pageElements(description)),layouts(pageElements(description))"))
 
 
 def build(pid, deck, force=False):
@@ -825,14 +885,19 @@ def templates():
     return {k: file_id(t["url"]) for k, t in factory().get("slides", {}).get("themes", {}).items() if t.get("url")}
 
 
-def new(folder, name, theme=None):
-    """テンプレートを Drive のフォルダに複製して、その ID を返す。theme を省くと factory.toml の default_theme。"""
-    if not re.match(r"\d{8}_", name):
-        sys.exit("Drive 上の名前は YYYYMMDD_ で始める: " + name)
+def template_id(theme=None):
+    """テーマのテンプレートの ID。theme を省くと factory.toml の default_theme。"""
     theme, T = theme or factory().get("slides", {}).get("default_theme", "visual"), templates()  # 既定は factory-doctor と同じ visual
     if theme not in T:
         sys.exit(f"テーマ {theme} のテンプレートが factory.toml の [slides.themes.{theme}] の url にない（url があるテーマ: {', '.join(T) or 'なし'}）。template.py {theme} --from-base で作る")
-    return request("POST", f"{DRIVE}/files/{T[theme]}/copy?supportsAllDrives=true&fields=id",
+    return T[theme]
+
+
+def new(folder, name, src):
+    """テンプレート src（template_id）を Drive のフォルダに複製して、その ID を返す。"""
+    if not re.match(r"\d{8}_", name):
+        sys.exit("Drive 上の名前は YYYYMMDD_ で始める: " + name)
+    return request("POST", f"{DRIVE}/files/{src}/copy?supportsAllDrives=true&fields=id",
                    {"name": name, "parents": [folder_id(folder)]})["id"]
 
 
@@ -1030,6 +1095,31 @@ def selftest():
         raise AssertionError("アイコンにテーマの色を通した")
     except SystemExit:
         pass
+    # テーマの名前はマスターかレイアウトの代替テキストから読む。名前がなければ None
+    mark = lambda d: {"masters": [{"pageElements": [{"description": d, **ph("SLIDE_NUMBER", FONT)}]}]}
+    assert deck_theme(mark("ai-deck-factory theme=plain")) == "plain" and deck_theme({"layouts": [mark("ai-deck-factory theme=a-1")["masters"][0]]}) == "a-1"
+    assert deck_theme(mark("")) is None and deck_theme({"masters": [{}]}) is None and theme_table(None) == {}
+    use_theme({"TEXT": "#37352f", "DECOR": "3E5159", "copyright": "© 2026 Me. All rights reserved."})  # テーマの値で組む（既定と同じ値は置き換えない）
+    assert _SWAP == {TEXT: "37352F"} and paint(TEXT) == paint("303f47") == {"rgbColor": rgb("37352F")} and paint(RULE) == {"rgbColor": rgb(RULE)} and paint(NAVY) == {"themeColor": NAVY}
+    t = make_deck(lambda d: d.text(d.page("t"), 0, 0, 1, 1, "本文"), "foot")
+    assert sum(r.get("insertText", {}).get("text") == "© 2026 Me. All rights reserved." for r in t.reqs) == 1
+    assert {"opaqueColor": {"rgbColor": rgb("37352F")}} in [r["updateTextStyle"]["style"].get("foregroundColor") for r in t.reqs if "updateTextStyle" in r]
+    use_theme({"mono": "IBM Plex Mono"})  # テーマの等幅の書体で組む（字の幅の見込みは MONO_EM のまま）
+    assert {r["updateTextStyle"]["style"]["fontFamily"] for r in mono_reqs("e", "a あ b")} == {"IBM Plex Mono"}
+    for empty in ({}, theme_table("ない")):  # 値がないテーマと、factory.toml にないテーマは、今の値に戻す
+        use_theme(empty)
+        assert not _SWAP and COPYRIGHT == BRAND_COPYRIGHT and theme_fixed(empty) == FIXED and paint(TEXT) == {"rgbColor": rgb("303F47")} and MONO == MONO_DEFAULT
+    for bad in ("Fira Code", " "):  # リガチャの出る書体と、名前でないもの
+        try:
+            theme_mono({"mono": bad})
+            raise AssertionError(f"mono {bad!r} を通した")
+        except SystemExit:
+            pass
+    try:
+        theme_fixed({"RULE": "灰色"})
+        raise AssertionError("6 桁でない色を通した")
+    except SystemExit:
+        pass
     print("selftest ok")
 
 
@@ -1042,13 +1132,15 @@ def main():
     if not (a[:1] == ["build"] and len(a) >= 2 or a[:1] == ["new"] and len(a) >= 3):
         sys.exit(__doc__)
     theme = a[a.index("--theme") + 1] if "--theme" in a else None
-    if a[0] == "new":  # 複製する前に止める（build でも止まるが、作った複製をゴミ箱に移すことになる）
-        need_brand()
+    if a[0] == "new":
         need_theme(theme)
+    src = template_id(theme) if a[0] == "new" else file_id(a[1])
+    use_theme(theme_table(theme_of(src)))  # テーマはデッキ（new ならテンプレート）から読む。複製は同じ代替テキストを持つ
+    need_brand()  # 複製する前に止める（build でも止まるが、作った複製をゴミ箱に移すことになる）
     deck = make_deck(*load_pages())
     if a[0] == "build":
-        return build(file_id(a[1]), deck, "--force" in a)
-    pid = new(a[1], a[2], theme)
+        return build(src, deck, "--force" in a)
+    pid = new(a[1], a[2], src)
     try:
         build(pid, deck, force=True)  # 複製したばかりなので、画面での直しもコメントもない
     except BaseException:  # 組めなかった複製を残さない。直してから new をやり直す（同じ名前の空のプレゼンが増えないように）

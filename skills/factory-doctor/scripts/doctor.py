@@ -62,12 +62,15 @@ def check(ws, local=False):
     from lint import COPYRIGHT_FOOTER  # 9pt で通す著作権表示の形（slides.py が全ページに書く）
     import slides  # 仮の著作権表示（PLACEHOLDER_COPYRIGHT。need_brand と同じ）と、組み込みのテーマの説明（THEME_NOTES）
     brand = cfg.get("brand", {})
-    if not (c := str(brand.get("copyright", "")).strip()):
-        ng("brand.copyright", "空。スライドもドキュメントも組めない（全ページの左下に書く著作権表示がない）。自分の会社の著作権表示を書く")
-    elif c == slides.PLACEHOLDER_COPYRIGHT:
-        ng("brand.copyright", f"「{c}」は書いていないときの仮の値。スライドもドキュメントも組めない。自分の会社の著作権表示を書く")
-    elif not COPYRIGHT_FOOTER.fullmatch(c):
-        ng("brand.copyright", f"「{c}」は「© <年> <社名> All rights reserved.」の形でない。lint が全ページの著作権表示を 11pt 未満として止める")
+    marks = [("brand.copyright", brand.get("copyright", ""))]  # テーマの copyright は、そのテーマのデッキで [brand] の代わりに書く（slides.py の use_theme）
+    marks += [(f"slides.themes.{n}.copyright", t["copyright"]) for n, t in cfg.get("slides", {}).get("themes", {}).items() if "copyright" in t]
+    for key, c in marks:
+        if not (c := str(c).strip()):
+            ng(key, "空。スライドもドキュメントも組めない（全ページの左下に書く著作権表示がない）。自分の会社の著作権表示を書く")
+        elif c == slides.PLACEHOLDER_COPYRIGHT:
+            ng(key, f"「{c}」は書いていないときの仮の値。スライドもドキュメントも組めない。自分の会社の著作権表示を書く")
+        elif not COPYRIGHT_FOOTER.fullmatch(c):
+            ng(key, f"「{c}」は「© <年> <社名> All rights reserved.」の形でない。lint が全ページの著作権表示を 11pt 未満として止める")
     if not brand.get("company"):
         warn("brand.company", "空。表紙の左下に社名を置かない")
     mine, docs = sl.get("themes", {}), cfg.get("docs", {})
@@ -160,6 +163,11 @@ def selftest():
         assert kinds()["brand.copyright"] == "要修正"  # 仮の値をそのまま書いた
         toml.write_text(toml.read_text().replace('"© 2026 Example, Inc. All rights reserved."', '"© 2026 Acme, Inc. All rights reserved."'))
         assert "brand.copyright" not in kinds()
+        toml.write_text(toml.read_text() + '\n[slides.themes.mine]\ncopyright = "© Me 2026"\n')
+        assert kinds()["slides.themes.mine.copyright"] == "要修正"  # テーマの copyright にも同じ確かめ
+        toml.write_text(toml.read_text().replace('"© Me 2026"', '"© 2026 Me. All rights reserved."'))
+        assert "slides.themes.mine.copyright" not in kinds()
+        toml.write_text(toml.read_text().replace('\n[slides.themes.mine]\ncopyright = "© 2026 Me. All rights reserved."\n', ""))
         toml.write_text(toml.read_text() + '\n[slides.templates]\nvisual = "x"\n')
         assert kinds()["slides.templates"] == "要修正"  # 古い書き方だけ
         toml.write_text(toml.read_text().replace('[slides.templates]\nvisual = "x"\n', ""))

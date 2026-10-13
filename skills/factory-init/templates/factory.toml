@@ -34,8 +34,11 @@ default_theme = "visual"  # 説明で決まらないときのテーマ。テー�
 # base = ""
 # font = "Noto Sans JP"
 # NAVY = "002B5C"
+# mono = "Cascadia Mono"  # コードの等幅。どのテーマにも書ける。書かなければ Cascadia Mono（deck-template の「書体」）
+# TEXT = "303F47"  # テーマに入れない色（TEXT・RULE・RED_SOFT・STAGE_TEXT・DECOR）。どのテーマにも書ける。書かなければ visual.md の 1 の値
+# copyright = "© 2026 Acme, Inc. All rights reserved."  # このテーマのデッキだけ [brand] の代わりに使う
 
-[slides.themes.visual]  # 組み込みのテーマ（色は slides.py）。url・description・base だけを書ける
+[slides.themes.visual]  # 組み込みのテーマ（色は slides.py）。url・description・base と、mono・テーマに入れない色・copyright だけを書ける
 base = ""  # template.py visual --from-base が元にする Google Slides（会社のテンプレート）
 # url = ""  # template.py visual --from-base が書き込む
 # description = ""  # 書かなければ組み込みの説明（slides.py themes で見る）

@@ -11,7 +11,7 @@ from collections import Counter, defaultdict
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from slides import BAND_BOTTOM, COPYRIGHT_PT, EMU, FONT, INSET, MONO, STAGE_FILL, Y_BODY, Y_BODY_NOLEAD, Y_FOOT, Y_LEAD, deck_font, em_width  # 版面・書体・字幅の見積もりは、組む側（slides.py）と同じものを使う
+from slides import BAND_BOTTOM, COPYRIGHT_PT, EMU, FONT, INSET, MONO_DEFAULT, STAGE_FILL, Y_BODY, Y_BODY_NOLEAD, Y_FOOT, Y_LEAD, deck_font, deck_mono, em_width  # 版面・書体・字幅の見積もりは、組む側（slides.py）と同じものを使う
 
 DOC_MIN_PT = 9  # ドキュメントの文字の下限。図表の題・出典・表の中・フッターが 9pt（visual_doc.md の 1）
 MIN_PT = 11  # [lint-001] スライドの文字の下限。社内資料の差し替え用（名前に「差し替え用」）は元の大きさのままなので見ない
@@ -83,7 +83,7 @@ OPEN_HEAD = "手の改行のあとの行頭に全角の開き括弧"  # [lint-00
 COL_SHIFT = "隣り合う列の箱の上端か下端がずれている"  # [lint-008] visual.md の 4。片方の列にだけ小見出しを置くと、箱の上下がそろわない
 BIG_NUM_PT, COL_TOL, COL_MAX, NEST = 28, 0.03 * EMU, 1.0 * EMU, 0.25 * EMU  # 大きな数字の大きさ。列のずれは 0.03〜1.0 in を出す（それより大きいのは中身の量の違いとみなす）
 DASH_ROUND = "点線の角丸が Google 標準の丸み"  # slides.md の 5。中のカード（半径 0.1 in）と曲率が合わない。d.box(…, dash=True) にする（2026-10-08）
-CODE_NOT_MONO = f"濃紺の地のコードが等幅の {MONO} でない"  # [lint-009] visual.md の 2。pages.py に残った古いコードの箱の部品で、等幅にならなかった（レビューでも見落としやすい）
+CODE_NOT_MONO = f"濃紺の地のコードが等幅の {MONO_DEFAULT} でない"  # [lint-009] visual.md の 2。pages.py に残った古いコードの箱の部品で、等幅にならなかった（レビューでも見落としやすい）
 CODE_LINE = re.compile(r"\s*(SELECT|UPDATE|INSERT|DELETE|CREATE|ALTER|WITH|FROM|WHERE|SET|ANALYZE|GROUP BY|ORDER BY|import|def|pip|uv|curl|psql|python3?|databricks)(?=[\s(;]|$)")  # コードの行の頭（URL の databricks.com などは数えない）
 BLOCK_ON_NAVY = "濃紺の箱の上に NAVY_BLOCK の箱"  # [lint-010] visual.md の 1。地との差が小さく、群の境が見えない。本文ページでは淡色（PANEL・CARD）にする。扉（濃紺の地）は見ない
 STAGE_NG = "提供ステージの札の塗りが言葉と合わない"  # [lint-011] visual.md の 1。Public Preview（本番で使える）を Beta・Private Preview の黄と分ける
@@ -91,8 +91,9 @@ MANY_BANDS = "結論バンドが本文の 3 分の 1 を超える"  # [lint-012]
 GAP_BELOW, GAP_BOX = 1.0 * EMU, 0.6 * EMU  # 本文の下（本文の領域 5 in の 2 割）と、箱の中の文字より下
 GAP_HOLE, GAP_TOP = 0.65 * EMU, 1.0 * EMU  # 要素の間の穴と、本文の上の空き
 THIN = 0.05 * EMU  # これより細い四角は線として数える（四角で罫線や軸を引いても、格子と矢印の確かめから漏れないように）  # 全ページにスピーカーノートを書く（visual.md の 1）
+MONO = MONO_DEFAULT  # 見ている資料の等幅の書体。lint_slides がデッキのテーマから入れ直す（is_mono などが読む。ponytail: 1 つずつ見る前提の大域の値）
 FONT_NG = f"書体が {FONT} でない"  # スライドはテンプレートの書体（deck_font）と比べる。Google Fonts にない書体は、API が受け付けても黙って別の書体で描かれる（slides.md の 5）。英数字だけの MONO（コード）は通す
-MONO_NG = f"等幅の {MONO} に和文"  # MONO に和文の字形はなく、Google が別の書体で描く。和文は FONT にする（slides.py の mono_reqs。visual.md の 2）
+MONO_NG = f"等幅の {MONO_DEFAULT} に和文"  # 名前は既定の書体のまま（台帳と lint_runs.jsonl が名前で数える）。テーマの mono なら指摘にその名前を出す。MONO に和文の字形はなく、Google が別の書体で描く。和文は FONT にする（slides.py の mono_reqs。visual.md の 2）
 HARD_NAMES = set(HARD) | {HEAD_PERIOD, HEAD_POLITE, f"{MIN_PT}pt 未満の文字", f"{DOC_MIN_PT}pt 未満の文字", COPYRIGHT_NG, FONT_NG, MONO_NG, "用紙が A4 でない", "追跡の印の付いたリンク"}
 INS = INSET * 72  # 文字の枠の内側の余白（pt）。Slides API の既定は 0.1 in で、変えられない
 BODY_TOP, BODY_BOTTOM = Y_BODY_NOLEAD * EMU, BAND_BOTTOM * EMU  # 本文の領域（visual.md の 1 の配置）
@@ -436,7 +437,8 @@ class Report:
 def lint_slides(p, r, reuse=False, talk=False):
     """p は presentations.get の JSON。reuse は社内資料の差し替え用（元の大きさのままなので 11pt の下限と表紙を見ない）。"""
     titles, sizes, pairs, chars, dark, foot_secret, bands, claims = [], Counter(), defaultdict(list), [], [], [], [], []
-    font = deck_font(p)  # 会社のテンプレートは会社の書体（deck-template）
+    global MONO
+    font, MONO = deck_font(p), deck_mono(p)  # 会社のテンプレートは会社の書体（deck-template）。等幅はデッキのテーマの mono
     for i, s in enumerate(p.get("slides", []), 1):
         scheme = scheme_of(p, s.get("slideProperties", {}).get("masterObjectId"))
         bg = page_bg(p, s, scheme)
@@ -511,7 +513,7 @@ def lint_slides(p, r, reuse=False, talk=False):
                             continue
                         if st.get("fontFamily") == MONO:
                             if re.search(r"[^\x00-\x7e]", txt):
-                                r.hits[MONO_NG].append(f"p{i}: 「{txt[:20]}」")
+                                r.hits[MONO_NG].append(f"p{i}: " + (f"{MONO}" if MONO != MONO_DEFAULT else "") + f"「{txt[:20]}」")
                         elif st.get("fontFamily") not in (None, font):
                             r.hits[FONT_NG].append(f"p{i}: {st['fontFamily']}" + (f"（このデッキはテンプレートの {font}）" if font != FONT else "") + f"「{txt[:20]}」")
                         if sz is None:  # プレースホルダーから継承（ページ番号など）
@@ -674,7 +676,7 @@ def theme_pages():
     return [tuple(x * 72 / 25.4 for x in t["page"]) for t in cfg.get("docs", {}).get("themes", {}).values() if "page" in t]
 
 
-def lint_gdoc(doc, r, template=False):
+def lint_gdoc(doc, r, template=False, font=FONT, mono=MONO_DEFAULT):
     """template=True はテンプレートから書いた文書（docs.py の doc.md の template:）。節の順はテンプレートが決めるので、冒頭の要旨を見ない。"""
     ns = {s["namedStyleType"]: s for s in doc.get("namedStyles", {}).get("styles", [])}
     base = ns.get("NORMAL_TEXT", {}).get("textStyle", {})
@@ -712,9 +714,9 @@ def lint_gdoc(doc, r, template=False):
             st, t = x.get("textStyle", {}), x["content"].strip()
             f = eff(p, st, "weightedFontFamily").get("fontFamily", "")
             size = eff(p, st, "fontSize").get("magnitude", 11)
-            if f == MONO and re.search(f"[{JA}]", t):
+            if f == mono and re.search(f"[{JA}]", t):
                 r.hits[MONO_NG].append(f"{where}: 「{t[:20]}」")
-            elif f not in (FONT, MONO):
+            elif f not in (font, mono):
                 r.hits[FONT_NG].append(f"{where}: {f or '（既定）'}「{t[:20]}」")
             if size < DOC_MIN_PT:
                 r.hits[f"{DOC_MIN_PT}pt 未満の文字"].append(f"{where}: {size:g}pt「{t[:20]}」")
@@ -1005,6 +1007,15 @@ def selftest():
     assert hard == 0  # 英数字だけの等幅は通す
     res, _, hard = run(deck([(NAVY, [title(), shape(1, font=MONO, text=["# 名前"])])]))
     assert hard == 1 and len(res.hits[MONO_NG]) == 1
+    import slides  # テーマの mono（マスターの代替テキストのテーマの名前 → factory.toml）と比べる。factory.toml の代わりに表を渡す
+    table, slides.theme_table = slides.theme_table, lambda n: {"mono": "IBM Plex Mono"} if n == "code" else {}
+    themed = deck([(NAVY, [title(), shape(1, font="IBM Plex Mono", text=["# 名前"]), shape(1, font=MONO_DEFAULT, text=["x = 1"])])])
+    themed["masters"][0]["pageElements"] = [{"description": "ai-deck-factory theme=code", "shape": {"placeholder": {"type": "SLIDE_NUMBER"}}}]
+    res, _, hard = run(themed)
+    assert len(res.hits[MONO_NG]) == 1 and "IBM Plex Mono" in res.hits[MONO_NG][0] and len(res.hits[FONT_NG]) == 1 and MONO == "IBM Plex Mono"
+    slides.theme_table = table
+    res, _, hard = run(deck([(NAVY, [title(), shape(1, font=MONO_DEFAULT, text=["# 名前"])])]))
+    assert len(res.hits[MONO_NG]) == 1 and MONO == MONO_DEFAULT  # テーマの名前のないデッキは既定に戻す
     copyright_text = "© 2026 Databricks, Inc. All rights reserved.｜Internal Only"
     for y, size, text, expected in ((7.08, 9, copyright_text, 0), (7.08, 8, copyright_text, 1),
                                     (2, 9, copyright_text, 1), (7.08, 9, "資料名", 1)):
@@ -1157,6 +1168,9 @@ def selftest():
     with contextlib.redirect_stdout(io.StringIO()):
         lint_gdoc(gdoc, g := Report(), template=True)
     assert not g.hits["冒頭に要旨がない"]  # テンプレートから書いた文書は、節の順をテンプレートが決める
+    with contextlib.redirect_stdout(io.StringIO()):
+        lint_gdoc(gdoc, g := Report(), font="Arial", mono="IBM Plex Mono")  # テーマの書体（docs.py check が渡す）と比べる
+    assert g.hits[FONT_NG] and not any("Arial" in x for x in g.hits[FONT_NG]) and all(FONT in x for x in g.hits[FONT_NG])  # 既定の書体の段落を出し、テーマの書体の段落は通す
     br = {"paragraph": {"elements": [{"pageBreak": {}}, {"textRun": {"content": "\n"}}], "paragraphStyle": {}}}
     body = gdoc["body"]["content"]
     i = next(k for k, e in enumerate(body) if "inlineObjectElement" in str(e))

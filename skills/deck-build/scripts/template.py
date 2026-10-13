@@ -17,7 +17,7 @@ from gapi import DRIVE, SLIDES, batch, factory, factory_path, file_id, find_fact
 from lint import JA, cells, contrast, flatten, lum, paras
 from slides import (BG, BLANK, CARD, COPYRIGHT_PT, DECOR, EMU, FONT, GA, INSET, NAVY, NAVY_BLOCK, OSS, PAD, PANEL, PREVIEW, RED, RED_ON_NAVY,
                     RED_SOFT, RED_TEXT, RULE, SLOTS, STAGE_TEXT, SUB, TEXT, THEMES, WHITE, W, X, Y_BODY, Y_FOOT, build, cols, make_deck, number_style, rgb)
-from slides import JP_FONTS, is_blank, need_brand, placeholders
+from slides import FIXED as FIXED_DEFAULT, JP_FONTS, THEME_MARK, is_blank, need_brand, placeholders, theme_fixed, use_theme
 
 THEMES_DIR = "Themes"  # テンプレートを作る Drive のフォルダ。[drive] factory の下（なければ作る）。使うテンプレートは [slides.themes.<名前>] の url で 1 つずつ指す
 FOLDER = "application/vnd.google-apps.folder"
@@ -27,7 +27,7 @@ ROLES = [(NAVY, "NAVY", "扉の地・見出し・結論バンド"), (BG, "BG", "
          (RED_TEXT, "RED_TEXT", "18pt 未満の赤の文字"), (PREVIEW, "PREVIEW", "Beta・Preview の札の塗り"), (SUB, "SUB", "補助の文字・フッター"),
          (OSS, "OSS", "OSS の札の塗り"), (RED, "RED", "赤のアクセント（塗り、18pt 以上）")]
 FIXED = [(TEXT, "TEXT", "本文の文字", WHITE, None), (CARD, "CARD・WHITE", "カードと扉の文字", TEXT, RULE), (RULE, "RULE", "罫線と扉の補足", TEXT, None),
-         (RED_SOFT, "RED_SOFT", "小さな赤の札の地", RED_TEXT, None), (STAGE_TEXT, "STAGE_TEXT", "札の文字", WHITE, None), (DECOR, "DECOR", "章番号。部品が使う", WHITE, None)]  # テーマに入れない色（色, 名前, 用途, 載せる文字, 罫線）
+         (RED_SOFT, "RED_SOFT", "小さな赤の札の地", RED_TEXT, None), (STAGE_TEXT, "STAGE_TEXT", "札の文字", WHITE, None), (DECOR, "DECOR", "章番号。部品が使う", WHITE, None)]  # テーマに入れない色（既定の値, 名前, 用途, 載せる文字, 罫線）
 ON = {NAVY: WHITE, NAVY_BLOCK: WHITE, RED_TEXT: WHITE, SUB: WHITE, OSS: WHITE, BG: TEXT, PANEL: TEXT}  # 枠に載せる文字の色。ほかは札の文字の色
 ROLE = {name: slot for slot, name, _ in ROLES}  # factory.toml の [slides.themes.<名前>] に書く役割の名前 → テーマの枠
 # 役割の組（文字, 地, 基準, どこで使うか）。visual.md の 1・3 の組み合わせ。18pt 未満は 4.5:1、18pt 以上か 14pt 以上の太字は 3:1。visual・company はすべて届く
@@ -55,20 +55,26 @@ def themes():
 def colors(theme):
     """テーマの 12 の枠の色。factory.toml のテーマは役割の名前で書き、書かない役割は visual の値にする。"""
     if theme in THEMES:
-        if bad := set(themes().get(theme, {})) - {"url", "description", "base"}:  # 色は組み込みのまま、font だけが効いてしまう
-            sys.exit(f"[slides.themes.{theme}] は組み込みのテーマ（slides.py の THEMES）。url・description・base のほか（{', '.join(sorted(bad))}）は書けない。会社の色なら別の名前のテーマにする")
+        if bad := set(themes().get(theme, {})) - {"url", "description", "base", "copyright", "mono", *FIXED_DEFAULT}:  # 役割の色は組み込みのまま、font だけが効いてしまう
+            sys.exit(f"[slides.themes.{theme}] は組み込みのテーマ（slides.py の THEMES）。url・description・base・copyright・mono と固定の色（{', '.join(FIXED_DEFAULT)}）のほか"
+                     f"（{', '.join(sorted(bad))}）は書けない。会社の色なら別の名前のテーマにする")
         return THEMES[theme]
     if (t := themes().get(theme)) is None:
         sys.exit(f"テーマ {theme} がない（slides.py の THEMES にも、factory.toml の [slides.themes] にもない）")
     if not re.fullmatch(r"[A-Za-z0-9_-]+", theme):  # [slides.themes.<名前>] の表の名前に、引用符なしで書き込む（set_url）
         sys.exit(f"テーマの名前 {theme!r} は英数字と - _ だけにする")
-    if bad := set(t) - set(ROLE) - {"base", "font", "url", "description"}:
-        sys.exit(f"[slides.themes.{theme}] に知らない名前: {', '.join(sorted(bad))}（色は役割の名前 {', '.join(ROLE)} で書く）")
-    if bad := [k for k, v in t.items() if k in ROLE and not re.fullmatch(r"#?[0-9A-Fa-f]{6}", str(v))]:
+    if bad := set(t) - set(ROLE) - set(FIXED_DEFAULT) - {"base", "font", "mono", "url", "description", "copyright"}:
+        sys.exit(f"[slides.themes.{theme}] に知らない名前: {', '.join(sorted(bad))}（色は役割の名前 {', '.join(ROLE)} と固定の色の名前 {', '.join(FIXED_DEFAULT)} で書く）")
+    if bad := [k for k, v in t.items() if k in {*ROLE, *FIXED_DEFAULT} and not re.fullmatch(r"#?[0-9A-Fa-f]{6}", str(v))]:
         sys.exit(f"[slides.themes.{theme}] の {', '.join(bad)} が 6 桁の 16 進の色でない（例: NAVY = \"002B5C\"）")
     if t.get("font", FONT) not in JP_FONTS:  # ほかの書体は、和文が別の書体になるか、描けない。deck_font も FONT に戻す
         sys.exit(f"[slides.themes.{theme}] の font {t['font']!r} は、和文を描けると確かめた書体（slides.py の JP_FONTS）にない。deck-template の SKILL.md の「書体」から選ぶ")
     return {**THEMES["visual"], **{ROLE[k]: v.lstrip("#").upper() for k, v in t.items() if k in ROLE}}
+
+
+def palette(theme):
+    """colors に、テーマの固定の色（既定の値 → テーマの値）を足したもの。PAIRS と FIXED の色を T.get(c, c) で引く。"""
+    return {**colors(theme), **{FIXED_DEFAULT[k]: v for k, v in theme_fixed(themes().get(theme, {})).items()}}
 
 
 def shift(c, other, need):
@@ -91,14 +97,14 @@ def shift(c, other, need):
 
 
 def fix(T):
-    """T（12 の枠）を PAIRS で測り、届かない組の色を shift で直す。直すのは、文字がテーマの枠ならその文字の色、文字が固定の色なら地の色。
+    """T（palette）を PAIRS で測り、届かない組の色を shift で直す。直すのは、文字がテーマの枠ならその文字の色、文字が固定の色なら地の色。
     戻りは（直した T、[(どこ, 枠, 前, 後, 前の比, 後の比)]）。"""
     T, out = dict(T), []
     for _ in range(3):  # 1 つの枠を直すと、ほかの組の比が変わることがある
         for fg, gr, need, use in PAIRS:
             if (r := contrast(T.get(fg, fg), T.get(gr, gr))) >= need:
                 continue
-            slot, other = (fg, T.get(gr, gr)) if fg in T else (gr, fg)
+            slot, other = (fg, T.get(gr, gr)) if fg in SLOTS else (gr, T.get(fg, fg))
             old, T[slot] = T[slot], shift(T[slot], other, need)
             if T[slot] != old:  # 動かせなかった枠は、check が「届かない」に出す
                 out.append((use, slot, old, T[slot], r, contrast(T.get(fg, fg), T.get(gr, gr))))
@@ -107,7 +113,7 @@ def fix(T):
 
 def check(theme):
     """テーマの役割の組のコントラストと、届かない色の直す案を出す。すべて届けば True。"""
-    T = colors(theme)
+    T = palette(theme)
     F, out = fix(T)
     name = {**{c: n for c, n, *_ in FIXED}, **{slot: n for n, slot in ROLE.items()}}
     print(f"テーマ {theme} の役割の組（文字 / 地、比 / 基準）")
@@ -181,7 +187,8 @@ def audit(url):
 
 def specimen(theme):
     """テンプレートの見本のページ。テーマの色と部品を一通り、決まり（visual.md）どおりの使い方で置く（色の確かめと、部品を直したときの確かめに使う）。"""
-    T = colors(theme)
+    T = palette(theme)
+    use_theme(themes().get(theme, {}))  # 固定の色と著作権表示はテーマの値（slides.py build がデッキのテーマから読むのと同じ）
     docs = "https://developers.google.com/workspace/slides"  # 出典の行の見本のリンク。どの会社のテンプレートにも入るので、会社に結びつかない公開のページ
 
     def make(d):
@@ -199,16 +206,16 @@ def specimen(theme):
             x, y = X + (i % 4) * (cw + gap), Y_BODY + (i // 4) * (ch + 0.15)
             d.box(s, x, y, cw, ch, slot, RULE if slot == BG else None)  # BG は地と同じ色なので、見本だけ罫線を付ける
             d.text(s, x + PAD, y + PAD, cw - 2 * PAD, ch - 2 * PAD, [(f"{name}（{slot}）\n", {"bold": True}), f"{T[slot]}\n", use],
-                   color=ON.get(slot) or max((STAGE_TEXT, WHITE), key=lambda c: contrast(c, T[slot])), spacing=115)
+                   color=ON.get(slot) or max((STAGE_TEXT, WHITE), key=lambda c: contrast(T.get(c, c), T[slot])), spacing=115)
         d.text(s, X + 3 * (cw + gap) + PAD, Y_BODY + 2 * (ch + 0.15) + PAD, cw - 2 * PAD, ch - 2 * PAD,
-               [("テーマに入れない色（下の段）\n", {"bold": True}), "pages.py に 6 桁で書く\nテーマを替えても変わらない"], spacing=115)
+               [("テーマに入れない色（下の段）\n", {"bold": True}), "pages.py に名前で書く\n値は factory.toml で変えられる"], spacing=115)
         for (x, w), (hexc, name, use, fg, line) in zip(cols(6, 0.2), FIXED):
             y = Y_BODY + 3 * ch + 2 * 0.15 + 0.2
             d.box(s, x, y, w, ch, hexc, line)
-            d.text(s, x + PAD, y + PAD, w - 2 * PAD, ch - 2 * PAD, [(f"{name}\n", {"bold": True}), f"{hexc}\n", use], color=fg, spacing=115)
+            d.text(s, x + PAD, y + PAD, w - 2 * PAD, ch - 2 * PAD, [(f"{name}\n", {"bold": True}), f"{T.get(hexc, hexc)}\n", use], color=fg, spacing=115)
         d.source(s, ["出典: visual.md の 1（色の決まり）。ページの大きさとマスターは ", ("元のテンプレート", {"link": base(theme)})])
         d.note(s, f"テーマ「{theme}」の 11 の枠と、テーマに入れない 6 つの色です。キッカーは、このページのように役割を示すときだけ置きます。"
-                  "BG は地と同じ色なので、見本だけ罫線を付けています。値は pages.py に書く形（# を付けない 6 桁）です。DECOR は slides.py の章の扉が使い、pages.py には書きません。")
+                  "BG は地と同じ色なので、見本だけ罫線を付けています。値は factory.toml に書く形（# を付けない 6 桁）です。DECOR は slides.py の章の扉が使い、pages.py には書きません。")
 
         s = d.page("部品は役割の色で塗り、大きさと間隔は既定に従う", "カード、パネル、数字、札、正円の番号、表、矢印、結論バンド、出典の行の見本。")
         hw = (W - 0.3) / 2
@@ -285,7 +292,8 @@ def strip(pid, p, master, blank):
 
 def styles(theme, master, blank):
     """配色、プレースホルダーの書体、ページ番号の枠（文字は slides.py の number_style。右端を本文の右端に、上端を著作権表示の文字にそろえる。
-    この枠は内側の余白が 0）。"""
+    この枠は内側の余白が 0）。ページ番号の枠の代替テキストにテーマの名前を書く（slides.py build がデッキのテーマを知り、固定の色・著作権表示・等幅を
+    factory.toml から引く。THEME_MARK）。"""
     reqs = [{"updatePageProperties": {"objectId": master["objectId"], "pageProperties": {"colorScheme": {"colors": [
         {"type": k, "color": rgb(colors(theme)[k])} for k in SLOTS]}}, "fields": "colorScheme.colors"}}]
     font = themes().get(theme, {}).get("font", FONT)
@@ -296,7 +304,8 @@ def styles(theme, master, blank):
         reqs.append({"updateTextStyle": {"objectId": e["objectId"], "textRange": {"type": "ALL"}, "style": {"fontFamily": font}, "fields": "fontFamily"}})
         if ph == "SLIDE_NUMBER":
             size = e["size"]
-            reqs += [{"updatePageElementTransform": {"objectId": e["objectId"], "applyMode": "ABSOLUTE", "transform": {
+            reqs += [{"updatePageElementAltText": {"objectId": e["objectId"], "description": f"ai-deck-factory theme={theme}"}},
+                     {"updatePageElementTransform": {"objectId": e["objectId"], "applyMode": "ABSOLUTE", "transform": {
                          "scaleX": 1.0 * EMU / size["width"]["magnitude"], "scaleY": 0.28 * EMU / size["height"]["magnitude"],
                          "translateX": round((X + W - 1.0) * EMU), "translateY": round((Y_FOOT + INSET) * EMU), "unit": "EMU"}}},
                      {"updateShapeProperties": {"objectId": e["objectId"], "shapeProperties": {"contentAlignment": "TOP"}, "fields": "contentAlignment"}},
@@ -320,8 +329,9 @@ def template(theme, from_base=False):
     """テンプレートを作る（from_base）か、合わせ直す。Drive に複製する・テンプレートを書き換える前に、要るものを全部確かめる
     （テーマの色、[brand] copyright、作るときは factory.toml に url を書けるか）。作るときは、組んだあとに url を factory.toml に書く。
     複製したあとで止まったら（url を書けなかったときも）、複製をゴミ箱に移す。"""
-    colors(theme)  # 知らないテーマ・書けない値なら止まる
-    need_brand()  # 見本のページ（build）に著作権表示を書く
+    palette(theme)  # 知らないテーマ・書けない値なら止まる
+    use_theme(themes().get(theme, {}))
+    need_brand()  # 見本のページ（build）に著作権表示（テーマの copyright があればそれ）を書く
     if from_base:
         record(theme)  # factory.toml に url を書けるか（書けないのに複製を残さない）
     src = file_id(base(theme))
@@ -394,7 +404,13 @@ def main():
         assert contrast(shift("4A5A70", "5A6E8C", 4.5), "5A6E8C") >= 4.5  # 暗くしても届かない色は明るくする
         F, out = fix({**THEMES["visual"], NAVY: "1F6FB2", RED_ON_NAVY: "B22222"})  # 中くらいの青の NAVY に、RED をそのまま写した RED_ON_NAVY
         assert contrast(F[RED_ON_NAVY], F[NAVY]) >= 4.5 and lum(F[RED_ON_NAVY]) > lum("B22222") and len({o[1] for o in out}) == len(out)
+        F, out = fix({**palette("visual"), TEXT: "8A8A8A"})  # テーマの固定の色でも測る。直すのは役割の枠（地）のほう
+        assert out and all(o[1] in SLOTS for o in out) and F[TEXT] == "8A8A8A" and contrast("8A8A8A", F[BG]) >= 4.5
+        assert palette("visual")[TEXT] == TEXT and set(palette("visual")) == set(SLOTS) | set(FIXED_DEFAULT.values())  # 書いていなければ既定の値
         sn = {"shape": {"placeholder": {"type": "SLIDE_NUMBER"}}}
+        master = {"objectId": "m", "pageElements": [{"objectId": "n", "size": {"width": {"magnitude": EMU}, "height": {"magnitude": EMU}}, **sn}]}
+        alt = [r["updatePageElementAltText"] for r in styles("visual", master, {"pageElements": []}) if "updatePageElementAltText" in r]
+        assert alt == [{"objectId": "n", "description": "ai-deck-factory theme=visual"}] and THEME_MARK.search(alt[0]["description"]).group(1) == "visual"  # slides.py build が読む
         lay = lambda i, m, *els, name="": {"objectId": i, "layoutProperties": {"masterObjectId": m, "displayName": i, "name": name}, "pageElements": list(els)}
         p = {"masters": [{"objectId": "a"}, {"objectId": "b"}], "slides": [{"slideProperties": {"masterObjectId": "b"}}],
              "layouts": [lay("a1", "a", sn), lay(BLANK, "b", sn, {"shape": {"placeholder": {"type": "TITLE"}}}), lay("b1", "b", sn), lay("b2", "b", sn, name="BLANK")]}

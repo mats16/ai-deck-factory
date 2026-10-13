@@ -68,10 +68,10 @@ def make(d):
 | `d.source(s, parts)` / `d.note(s, text)` | 出典の行（頭に「出典: 」がなければ足す）／スピーカーノート |
 | `cols(n, gap, x0, w)` | 幅を n 列に分けた (左端, 幅) の並び |
 
-- 色は役割の名前で渡す（`NAVY`・`SUB`・`RED_TEXT` など。一覧は `slides.py` の冒頭と visual.md の 1）。位置も `slides.py` の名前（`X`・`W`・`Y_BODY`・`BAND_BOTTOM` など）を使い、数字を写さない。役割の名前はテーマの色を指すので、テンプレートを替えると色が変わる。6 桁の色を直接書くのは、テーマに入れない色（`TEXT`・`RULE`・`CARD`・`RED_SOFT`・`STAGE_TEXT`・`PUBLIC_PREVIEW`）だけにする。提供ステージの札の塗りは `STAGE_FILL[<GA・Public Preview・Beta・Private Preview・OSS>]` で引く。
+- 色は役割の名前で渡す（`NAVY`・`SUB`・`RED_TEXT` など。一覧は `slides.py` の冒頭と visual.md の 1）。位置も `slides.py` の名前（`X`・`W`・`Y_BODY`・`BAND_BOTTOM` など）を使い、数字を写さない。役割の名前はテーマの色を指すので、テンプレートを替えると色が変わる。テーマに入れない色（`TEXT`・`RULE`・`CARD`・`RED_SOFT`・`STAGE_TEXT`・`PUBLIC_PREVIEW`）も名前で書く。`TEXT`・`RULE`・`RED_SOFT`・`STAGE_TEXT`・`DECOR` はテーマで値が替わり、組むときに `paint` とアイコンが置き換える（既定の 6 桁で書いた同じ値も置き換わる）。提供ステージの札の塗りは `STAGE_FILL[<GA・Public Preview・Beta・Private Preview・OSS>]` で引く。
 - ページへのリンク（`{"link": 12}`）は、組むときにそのページの ID で付く。画面でページを足したり並べ替えたりしても、同じページを指す。
 - `d.text` の行間（`spacing`）を省くと、2 行以上の見込みなら 125、1 行なら 100 になる（visual.md の 2）。表のセルは 2 行以上なら 120。
-- フッター（左下の著作権表示）は表紙・扉を含む全ページに自動で入る。文言は `slides.py` の `COPYRIGHT`、文字は 9pt（`COPYRIGHT_PT`）、明るい地は `SUB`、濃紺の地は `RULE`。資料名は表示せず、`NAME` 末尾の `Internal Only`・`Confidential` だけを残す。初公表年は現在年へ自動更新しない。`foot=False` の流用ページには重ねない。ページ番号は表紙以外の右下に著作権表示と同じ 9pt で入り、テンプレートの枠なので、画面でページを並べ替えても合う。
+- フッター（左下の著作権表示）は表紙・扉を含む全ページに自動で入る。文言は `factory.toml` の `[brand] copyright`（デッキのテーマの `copyright` があればそれ。`slides.py` の `COPYRIGHT`）、文字は 9pt（`COPYRIGHT_PT`）、明るい地は `SUB`、濃紺の地は `RULE`。資料名は表示せず、`NAME` 末尾の `Internal Only`・`Confidential` だけを残す。初公表年は現在年へ自動更新しない。`foot=False` の流用ページには重ねない。ページ番号は表紙以外の右下に著作権表示と同じ 9pt で入り、テンプレートの枠なので、画面でページを並べ替えても合う。
 - [slides-004] **部品は slides.py にあるものを使う。前の資料から写さない**。1 つの資料でだけ要る部品は pages.py に関数で書き、2 つ目の資料で要ったら slides.py に移す。
 - slides.py の部品を足したり直したりしたら、`python3 $K/slides.py --selftest` と `python3 $K/template.py --selftest` を通し、テンプレートの見本を組み直して見る（`python3 $K/template.py visual`。そのあと `gslides.py check <テンプレートの URL>`）。company は使っていないので、組み直さなくてよい（下の 3）。部品を変えると、それを使う資料を組み直したときに見た目も変わる。
 
@@ -93,10 +93,12 @@ def make(d):
 url = "https://docs.google.com/presentation/d/<テンプレート>/edit"   # このテーマのテンプレート。template.py <名前> --from-base が書き込む
 description = "アクメの会社の色のテーマ。顧客に出す提案・説明と社外の登壇に使う。社内の勉強会には使わない（visual）"
 # 会社のテンプレートから作るときだけ: base（元のテンプレート）、font、役割ごとの色（../deck-template/SKILL.md）
+# どのテーマにも書ける: mono（コードの等幅）、テーマに入れない色（TEXT・RULE・RED_SOFT・STAGE_TEXT・DECOR）、copyright（[brand] の代わり）
 ```
 - **テンプレートのあるテーマが 2 つ以上あるのに `--theme` なしで `new` すると、一覧を出して止まる**（選び忘れを防ぐため。kaizen の検証の仮の資料は止めない）。
 - **`description` は選ぶ手がかりのすべて。** エージェントは `slides.py themes`（名前・既定か・テンプレートがあるか・`description` の一覧）だけを見て選ぶ。何のテーマか、どの資料・聞き手に使うか、使わない場面（ほかのどれにするか）を 1〜3 文で書く。資料の種類や聞き手の言葉（「顧客向けの提案」「社内の勉強会」）を入れると選びやすい。
-- 組み込みのテーマ（visual・company）は、コードに既定の説明がある。`[slides.themes.visual]` には `url`・`description`・`base`（元にするテンプレート）だけを書ける（`description` を書けば既定の説明より優先する）。
+- 組み込みのテーマ（visual・company）は、コードに既定の説明がある。`[slides.themes.visual]` には `url`・`description`・`base`（元にするテンプレート）と、`mono`・テーマに入れない色・`copyright` だけを書ける（`description` を書けば既定の説明より優先する）。
+- **デッキは自分のテーマの名前を持つ。** `template.py` が、テンプレートのマスターのページ番号の枠の代替テキストに `ai-deck-factory theme=<名前>` を書き、複製したデッキにも残る。`slides.py build`（`new` はテンプレート）はそれを読み、`mono`・テーマに入れない色・`copyright` を `factory.toml` から引いて組む。名前のないデッキ（合わせ直す前のテンプレートから作ったもの）と、`factory.toml` にそのテーマがないデッキは、既定の値で組む。
 
 | テーマ | 色 |
 |---|---|
@@ -143,8 +145,8 @@ description = "アクメの会社の色のテーマ。顧客に出す提案・�
 - [slides-016] 文字は枠からはみ出しても切れない。lint は 8 行を超える本文だけを見るので、はみ出しは画像で見る。手で改行した行が枠に収まるかは、組むときに `em_width` の見込みで警告する。見込みは 1 字の差まで当たらないので、枠の幅の 98% を超える行は画像で確かめる。
 - リンクを付けると、色を書かない限りテーマのリンクの色（赤）になる。`d.text` は周りの色を書く。
 - 表のセルの内側の余白は、API で変えられない。
-- **書体の名前は、ないものでも API が受け付けて、黙って別の書体で描く。** `Noto Sans CJK JP`（docx の書体）・`Hiragino Sans`・`Yu Gothic` は明朝と欧文のセリフ体になった。Google Fonts の和文の書体（BIZ UDPGothic、M PLUS 2、IBM Plex Sans JP など）は描ける（`Research/google_slides_jp_fonts_20261007.md`）。lint は Noto Sans JP でない書体を要修正で止める（コードの等幅の Cascadia Mono は、英数字だけなら通し、和文が入ると止める）。
-- [slides-017] **等幅の書体は、Google Fonts の版にリガチャがあると Google Slides がそれを描き、API では止められない。** JetBrains Mono の `->` が矢印 1 字になった。コードはリガチャのない Cascadia Mono（`MONO`）にし、`mono=True`・`mono_cols` で付ける。`mono_reqs` は行頭の字下げの空白も等幅にする（空白が Noto Sans JP のままだと、4 字の字下げが 1.5 字ほどに縮む）。字の幅は `MONO_EM`（0.586 em）で見積もる（`Research/monospace_font_google_slides_20261009.md`）。
+- **書体の名前は、ないものでも API が受け付けて、黙って別の書体で描く。** `Noto Sans CJK JP`（docx の書体）・`Hiragino Sans`・`Yu Gothic` は明朝と欧文のセリフ体になった。Google Fonts の和文の書体（BIZ UDPGothic、M PLUS 2、IBM Plex Sans JP など）は描ける（`Research/google_slides_jp_fonts_20261007.md`）。lint はテンプレートの書体（既定は Noto Sans JP）でない書体を要修正で止める（コードの等幅の書体〔既定は Cascadia Mono、テーマの `mono`〕は、英数字だけなら通し、和文が入ると止める）。
+- [slides-017] **等幅の書体は、Google Fonts の版にリガチャがあると Google Slides がそれを描き、API では止められない。** JetBrains Mono の `->` が矢印 1 字になった。コードはリガチャのない Cascadia Mono（`MONO`。テーマの `mono` で替えられるが、リガチャのある `LIGATURE_MONO` は止める）にし、`mono=True`・`mono_cols` で付ける。`mono_reqs` は行頭の字下げの空白も等幅にする（空白が Noto Sans JP のままだと、4 字の字下げが 1.5 字ほどに縮む）。字の幅は `MONO_EM`（0.586 em。Cascadia Mono の値で、テーマの `mono` でも替えない）で見積もる（`Research/monospace_font_google_slides_20261009.md`）。
 - [slides-018] **確認は、PDF に書き出さずにサムネイル（`pages.getThumbnail`）に一本化した**。12 枚で約 5 秒（6 本並列）で、PDF に書き出して画像にするのと同じ速さだった。Google Slides の画面と同じ描画で、ページごとに取り直せ、Drive の書き出しの 10 MB の上限もなく、poppler も要らない。サムネイルは重い読み込みの枠（1 分あたりの上限）に数えられるので、`gslides.py` は 429 が返ると待って取り直す。サムネイルの URL は 30 分で切れる。
 - Drive の `files.export` は 10 MB で止まる（403「This file is too large to be exported.」）。pptx が要るときは `gslides.py export`（`exportLinks` から書き出す。65 枚の社内テンプレートの 14.6 MB も書き出せた）。
 - **書き出した pptx は、和文でも言語が `en` になる**（`../deck-research/sources.md`）。顧客に pptx で渡すように頼まれたら、書き出したあとに ワークスペースの `Archive/pptx_pipeline_20261007/skills/office-jp/scripts/fixjp.py --all` で書体と言語をそろえる（言語がないと、PowerPoint で行頭に句読点が来る）。渡す前にユーザーに聞く。

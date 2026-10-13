@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gapi
 import lint
 from gapi import DOCS, DRIVE, GDOCS, delete, file_id, folder_id, request, run, trash
-from slides import COPYRIGHT, COPYRIGHT_PT, LOGO, need_brand, FONT, MONO, RULE, TEXT, WHITE, asset, carry, png, u16
+from slides import COPYRIGHT, COPYRIGHT_PT, LOGO, need_brand, FONT, JP_FONTS, MONO_DEFAULT as MONO, theme_mono, RULE, TEXT, WHITE, asset, carry, png, u16  # FONT・MONO はテーマで替わる（load_theme）
 
 # ---- 版面と書体（visual_doc.md の 1。大きさは pt、版面は mm） ----
 # 1 行は全角 40 字まで（jlreq・デジタル庁。visual_doc.md の 1）。左右 30 mm（Word の和文の既定と同じ）で、本文の幅 150 mm・10.5pt が 40 字
@@ -465,8 +465,12 @@ def need_theme(doc):
 
 def load_theme(t):
     """テーマの版面・大きさ・色を入れる（style_reqs・put_table・Doc が読む値）。書いていない値は既定のまま。
-    page・margins は mm（[幅, 高さ]・[上下, 左右]）、body・headings は pt、heading・table_head は 6 桁の色。description は使い分けの説明（cmd_themes）。"""
-    global PAGE_MM, MARGIN_TB_MM, MARGIN_LR_MM, TEXT_MM, TABLE_HEAD, SCALE
+    page・margins は mm（[幅, 高さ]・[上下, 左右]）、body・headings は pt、heading・table_head は 6 桁の色。description は使い分けの説明（cmd_themes）。
+    font・mono は本文と等幅の書体。font は和文を描けると確かめた書体（slides.py の JP_FONTS）だけ。文字の幅の見込みは Noto Sans JP と Cascadia Mono のまま。"""
+    global PAGE_MM, MARGIN_TB_MM, MARGIN_LR_MM, TEXT_MM, TABLE_HEAD, SCALE, FONT, MONO
+    if t.get("font", FONT) not in JP_FONTS:
+        sys.exit(f"[docs.themes] の font {t['font']!r} は、和文を描けると確かめた書体（slides.py の JP_FONTS）にない。deck-template の SKILL.md の「書体」から選ぶ")
+    FONT, MONO = t.get("font", FONT), theme_mono(t)  # 等幅の確かめはスライドと同じ（リガチャのある書体を止める）
     PAGE_MM = tuple(t.get("page", PAGE_MM))
     MARGIN_TB_MM, MARGIN_LR_MM = t.get("margins", (MARGIN_TB_MM, MARGIN_LR_MM))
     TABLE_HEAD = tuple(t.get("table_head", TABLE_HEAD))
@@ -945,7 +949,7 @@ def cmd_check(src):
     if src:  # 画像のパスは build/ からなので、そこで読む（出力は /tmp に書く）
         os.chdir(src)
     md = load_doc() if src else None
-    hard = lint.lint_gdoc(doc, r := lint.Report(), template=bool(md and (md.meta.get("template") or md.meta.get("source"))))  # テンプレートとその見本は、節の順をテンプレートが決める
+    hard = lint.lint_gdoc(doc, r := lint.Report(), template=bool(md and (md.meta.get("template") or md.meta.get("source"))), font=FONT, mono=MONO)  # 書体は doc.md のテーマ（load_doc で入る）。テンプレートとその見本は、節の順をテンプレートが決める
     if not any(w in doc["title"].lower() for w in ("tmp", "template", "作業用", "テンプレート")):  # 一時の文書は数えない（gslides.py と同じ）
         lint.log_run(r, did)
     for f in glob.glob(f"{d}/p-*.png"):
@@ -1006,6 +1010,17 @@ def selftest():
     load_theme({"page": [215.9, 279.4], "margins": [12.7, 12.7], "body": 10, "headings": [12, 11, 10.5], "heading": "4A86E8", "table_head": ["F3F3F3", TEXT]})
     assert PAGE_MM == (215.9, 279.4) and TEXT_MM == 190.5 and STYLES["NORMAL_TEXT"][0] == 10 and STYLES["HEADING_2"][:3] == (11, True, "4A86E8")
     assert TABLE_HEAD == ("F3F3F3", TEXT) and STYLES["HEADING_1"][3:] == rest
+    assert (FONT, MONO) == ("Noto Sans JP", "Cascadia Mono")  # 書かなければ既定の書体
+    load_theme({"font": "BIZ UDPGothic", "mono": "IBM Plex Mono"})
+    w = Writer(1)
+    w.mono(1, "a あ", 9)
+    assert {r["updateTextStyle"]["textStyle"]["weightedFontFamily"]["fontFamily"] for r in w.reqs} == {"IBM Plex Mono"}  # テーマの mono で組む
+    assert any(x["textStyle"]["weightedFontFamily"]["fontFamily"] == "BIZ UDPGothic" for r in style_reqs() if "updateNamedStyle" in r for x in [r["updateNamedStyle"]["namedStyle"]])
+    try:
+        load_theme({"font": "Inter"})
+        raise AssertionError("和文を描けない書体を通した")
+    except SystemExit:
+        pass
     print("selftest ok")
 
 

@@ -16,6 +16,7 @@ from PIL import Image
 sys.dont_write_bytecode = True  # scripts/ に __pycache__ を残さない（gslides.py と同じ）
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lint  # noqa: E402
+import slides  # noqa: E402
 from lint import EMU, INSET, flatten, paras, ptext, size_of, solid, text_lines  # noqa: E402
 
 INK, EDGE, EDGE_FRAC = 60, 6, 0.85  # 淡色のパネル（EEEDE9）と地（F9F7F4）の差は 10 ほど。文字とみなす濃さの差、箱の端とみなす差と、行の中でその差がある画素の割合
@@ -76,6 +77,7 @@ def check(p, folder, pages=None):
     """戻りは [(見出し, 1 件), …]。"""
     out = []
     page_w = p["pageSize"]["width"]["magnitude"]
+    rule = slides.theme_fixed(slides.theme_table(slides.deck_theme(p)))["RULE"]  # 白いカードの枠線の色。デッキのテーマの値
     for i, s in enumerate(p["slides"], 1):
         path = f"{folder}/p-{i:02d}.png"
         if (pages and i not in pages) or not os.path.exists(path):
@@ -99,7 +101,7 @@ def check(p, folder, pages=None):
             lines = text_lines(sh, b[2]) or 0
             if not inside or lines < 1:
                 continue
-            if any(c in ("FFFFFF", "DCE0E2") for f, c in inside):  # 白いカード（枠線は RULE の角丸に白を重ねて描く）は、列で高さをそろえるので見ない
+            if any(c in ("FFFFFF", rule) for f, c in inside):  # 白いカード（枠線は RULE の角丸に白を重ねて描く）は、列で高さをそろえるので見ない
                 panel = []
             else:
                 panel = [f for f, c in inside if c != scheme.get("DARK1", "1B3139")]  # 濃紺の箱（コード・結論バンド）も見ない
