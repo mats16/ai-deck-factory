@@ -555,9 +555,12 @@ def lint_slides(p, r, reuse=False, talk=False):
                 r.hits[TWO_LINES].append(f"p{i} の見出し: 「{' / '.join(ts)[:30]}」")
         for e, b in els:  # リード（上端 1.20 in の 1 文）
             if "shape" in e and e is not best[1] and abs(b[1] / EMU - Y_LEAD) < 0.12:
+                lead = "".join(ptext(x) for x in paras(e["shape"].get("text"))).strip()
+                if lead:  # 名詞句の見出しのページは、言えることをリードで言うので、一覧に並べる
+                    titles.append(f"      {lead}")
                 k = text_lines(e["shape"], b[2])
                 if k and k > 1:
-                    r.hits[TWO_LINES].append(f"p{i} のリード: 「{''.join(ptext(x) for x in paras(e['shape'].get('text')))[:30]}」")
+                    r.hits[TWO_LINES].append(f"p{i} のリード: 「{lead[:30]}」")
         r.hits[ARROW_MID].extend(f"p{i}: {m}" for m in off_center_arrows(lines, boxes))
         r.hits[LINE_GRID].extend(f"p{i}: 同じ長さの縦線が {n} 本。格子は表にし、月をまたぐバーなどだけ図形で上に置く（slides.md の 4）" for n in line_grid(grid))
         n = body_chars(els, best[1])
@@ -608,7 +611,7 @@ def lint_slides(p, r, reuse=False, talk=False):
         r.hits[HEAD_CLAIMS].append(f"{len(claims)} 枚（{', '.join(f'p{k}' for k in claims)}）。名詞句にし、言い切りは判断を頼むページと数字の結論のページの 2〜3 枚に絞る（content.md の 4）")
     if foot_secret:
         r.hits["社外秘の表示"].append(f"フッター: {len(foot_secret)} ページ（p{foot_secret[0]}〜p{foot_secret[-1]}）。社内向けなら意図どおり、顧客向けなら外す")
-    print("== 見出し（各ページでいちばん大きい文字）。順に読んで話が通るか ==")
+    print("== 見出し（各ページでいちばん大きい文字）とリード（字下げ）。順に読んで話が通るか ==")
     print("\n".join(titles))
     print(f"\n== 本文の字数（見出し・リード・出典・フッターを除く。話す資料は {TALK_MAX} 字まで） ==")
     print(" / ".join(chars))
@@ -945,6 +948,8 @@ def selftest():
     title = lambda t="見出し": shape(1, y=0.62, size=24, w=12, text=[t])
     # 8 行と 9 行の境目。見出し・フッター・出典・表は数えない
     flat = lambda e: next(flatten([e]))
+    _, out, _ = run(deck([(OAT, [title("問い合わせの一次回答の推移"), shape(1, y=Y_LEAD, w=12, text=["一次回答が 3 割減った"])])]))
+    assert "p1  問い合わせの一次回答の推移\n      一次回答が 3 割減った\n" in out  # 名詞句の見出しのページは、リードも一覧に出す
     assert body_lines(*flat(shape(8))) == 8 and body_lines(*flat(shape(9))) == 9
     t = shape(9)
     assert body_lines(t, flat(t)[1], t) is None and body_lines(*flat(shape(9, y=0.62))) is None
