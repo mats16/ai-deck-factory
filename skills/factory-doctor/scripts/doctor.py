@@ -38,6 +38,8 @@ def check(ws, local=False):
     if old := sorted((root / "Customers").glob("*/CLAUDE.md")):
         how = lambda p: f"{p.relative_to(root)}（{'memory.md に中身を移して消す' if (p.parent / 'memory.md').exists() else 'memory.md に名前を変える'}）"
         warn("顧客の memory", f"前の形の CLAUDE.md がある。Claude Code しか読まない（hook が Claude Code と pi で続けて出すのは memory.md）: {', '.join(map(how, old))}")
+    if "人がレビューするかも選んでもらう" in ((root / "AGENTS.md").read_text() if (root / "AGENTS.md").is_file() else ""):  # 2026-10-13 までの雛形
+        warn("AGENTS.md の方針のレビュー", "前の雛形の「人がレビューするかも選んでもらう」が残っている。ワークスペースの決まりが優先するので、factory.toml の [review] plan_reviewer が効かず、資料ごとに聞く。factory-init の雛形の今の文（plan_reviewer に従う）に替える")
     if src := cfg.get("factory", {}).get("source"):
         p = Path(src).expanduser()
         if (p / ".git").exists() and (p / "skills").is_dir():
@@ -83,6 +85,11 @@ def check(ws, local=False):
         warn("docs.themes の説明", f"{', '.join(bad)} に description がない。エージェントが資料ごとにテーマを選べない")
     if (d := docs.get("default_theme")) and d not in docs.get("themes", {}) and d != "standard":  # standard は組み込み（docs.py の STANDARD）
         ng("docs.default_theme", f"{d} が [docs.themes] にない。theme を書かない doc.md が組めない")
+    review = cfg.get("review", {})  # 書いていなければ既定。読むのはエージェント（deck-practices の 5 と 6）
+    if (p := review.get("plan_reviewer", "ai")) not in ("ai", "human"):
+        ng("review.plan_reviewer", f"{p!r} は使えない。\"ai\" か \"human\" にする")
+    if type(n := review.get("deck_review_max_rounds", 3)) is not int or not 1 <= n <= 3:  # bool は int の子なので type で見る
+        ng("review.deck_review_max_rounds", f"{n!r} は使えない。1〜3 の整数にする（直すと欠陥が増えるので 3 より多くしない）")
     for k in ("customers", "internal", "docs", "factory"):
         if not dr.get(k):
             warn(f"drive.{k}", "空。資料の置き場所が決まらない")
@@ -141,6 +148,10 @@ def selftest():
         (Path(tmp) / "Customers" / "acme" / "memory.md").unlink()
         (Path(tmp) / "Customers" / "acme" / "CLAUDE.md").rename(Path(tmp) / "Customers" / "acme" / "memory.md")
         assert "顧客の memory" not in kinds()
+        agents = Path(tmp) / "AGENTS.md"
+        assert "AGENTS.md の方針のレビュー" not in kinds()  # 今の雛形
+        agents.write_text(agents.read_text() + "\n同じ問いで、方針を決めたあとを AI のレビューでそのまま作るか、人がレビューするかも選んでもらう。\n")
+        assert kinds()["AGENTS.md の方針のレビュー"] == "要確認"
         toml = Path(tmp) / "factory.toml"
         assert kinds()["brand.copyright"] == "要修正" and kinds()["brand.company"] == "要確認"
         toml.write_text(toml.read_text().replace("[brand]", '[brand]\ncopyright = "© Acme 2026"', 1))
@@ -158,6 +169,13 @@ def selftest():
         assert "docs.default_theme" not in kinds()  # 組み込みの standard
         toml.write_text(toml.read_text().replace('default_theme = "standard"', 'default_theme = "us"').replace("[docs.themes.us]\n", '[docs.themes.us]\ndescription = "米国向け"\n'))
         assert "docs.default_theme" not in kinds() and "docs.themes の説明" not in kinds()
+        assert "review.plan_reviewer" not in kinds() and "review.deck_review_max_rounds" not in kinds()  # 雛形の既定
+        toml.write_text(toml.read_text().replace('plan_reviewer = "ai"', 'plan_reviewer = "AI"').replace("deck_review_max_rounds = 3", "deck_review_max_rounds = 5"))
+        assert kinds()["review.plan_reviewer"] == "要修正" and kinds()["review.deck_review_max_rounds"] == "要修正"
+        toml.write_text(toml.read_text().replace('plan_reviewer = "AI"', 'plan_reviewer = "human"').replace("deck_review_max_rounds = 5", "deck_review_max_rounds = true"))
+        assert "review.plan_reviewer" not in kinds() and kinds()["review.deck_review_max_rounds"] == "要修正"
+        toml.write_text(toml.read_text().replace("deck_review_max_rounds = true", "deck_review_max_rounds = 1"))
+        assert "review.deck_review_max_rounds" not in kinds()
         with contextlib.redirect_stdout(io.StringIO()):
             assert main([tmp, "--local"]) == (0 if shutil.which("uv") else 1)
     print("selftest ok")

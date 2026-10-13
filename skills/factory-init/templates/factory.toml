@@ -54,6 +54,10 @@ base = ""  # template.py visual --from-base が元にする Google Slides（会�
 
 [docs.templates]  # ドキュメントのテンプレート（Google Docs）。正本は rules/doc-build/templates/<名前>/doc.md。そのフォルダで docs.py new して URL を書く
 
+[review]  # レビューの進め方（deck-practices の 5 と 6）。既定のままでよい
+plan_reviewer = "ai"        # 構成を決めたあと、誰が見るか。"ai"（AI がレビューして、そのまま作る）か "human"（人が確かめてから作る）。資料ごとに言われたら、そちらを使う
+deck_review_max_rounds = 3  # /deck-review を回す周の上限（1〜3）。直す指摘が 0 件になったら、その周で止める。1 なら、直したあとを子に見直させない。ドキュメントも同じ
+
 [sources]  # 材料を集める道具（deck-practices/materials.md）。値は MCP のサーバーかスキルの名前。使わない役割は書かない（資料や URL を貼ってもらう）
 # 道具ごとの使い方とその会社の探し場所は rules/deck-practices/materials.md に書く。factory-doctor が、書いた道具が使えるかを見る
 # search   = "glean"       # 社内の横断検索

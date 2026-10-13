@@ -24,6 +24,7 @@ description: AI Deck Factory のワークスペース（資料と決まりを置
    - `[brand]`: `copyright`（全ページの左下の著作権表示。「© <年> <社名> All rights reserved.」の形）は要る。書かないと、スライドもドキュメントもテンプレートも組めない。`company`（表紙の左下の社名）と `logo`（ドキュメントの表紙のロゴ。`assets/` の中のパスか URL）は任意。
    - `[slides.themes.visual]`: テーマの `base`（元にする Google Slides）を書き、`[drive] factory` を埋めたら、`python3 <deck-build のフォルダ>/scripts/template.py visual --from-base`（会社の色なら `company` も）でテンプレートを作る（`[drive] factory` の下の Themes に作る）。URL は `[slides.themes.<テーマ>]` の `url` に書き込まれる。テーマを 2 つ以上使うなら、それぞれに `description`（どの資料・聞き手に使うか）を書いてもらう。会社のテンプレートを使うなら、スキル `deck-template` で作る（`[brand]` と `[slides.themes]`）。
    - `[drive]`: 顧客向け・社内向けのスライドとドキュメントの置き場所の根元。
+   - `[review]`: 聞かない。雛形の既定（構成のレビューは AI、`/deck-review` は 3 周まで）のままにする。ユーザーが言ったときだけ変える。
    - `[sources]`: 材料を集める道具（社内の検索・チャット・会議の記録・wiki・顧客の台帳・利用額）。自分の道具の一覧にある MCP とスキルから候補を出して聞く。道具ごとの使い方を決まりにするときは `rules/deck-practices/materials.md` に書く。
 5. **`AGENTS.md` を合わせる。** 「顧客とフォルダ」の表に担当の顧客を足す。置いた雛形の決まりで合わないものは、ユーザーに聞いてから直す（ワークスペースの決まりが優先するので、ここで直したことが効く）。
 6. **git にするかを聞く。** 決まりと点検を育てていく履歴を残すなら、ワークスペースで `git init` し、最初の commit をする（置いた `.gitignore` が、決まりと設定だけを入れる）。リモートに上げるかはユーザーが決める。
