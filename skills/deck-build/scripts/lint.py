@@ -15,6 +15,7 @@ from slides import BAND_BOTTOM, COPYRIGHT_PT, EMU, FONT, INSET, MONO, STAGE_FILL
 
 DOC_MIN_PT = 9  # ドキュメントの文字の下限。図表の題・出典・表の中・フッターが 9pt（visual_doc.md の 1）
 MIN_PT = 11  # [lint-001] スライドの文字の下限。社内資料の差し替え用（名前に「差し替え用」）は元の大きさのままなので見ない
+FIG_MIN_PT = MIN_PT - 2  # [lint-022] 塗りのある図形の中の文字（ガントのバー、図のラベル）は本文から 2pt 下まで（visual-037）。表のセルと塗りのない文字は MIN_PT のまま
 COPYRIGHT_FOOTER = re.compile(r"^©\s*\d{4}\s+.+?\s+All rights reserved\.(?:\s*｜\s*(?:Internal Only|Confidential))?\s*$", re.I)
 COPYRIGHT_NG = f"{COPYRIGHT_PT}pt 未満の著作権フッター"
 JA = r"぀-ゟァ-ヺー-ヿ㐀-鿿"  # かなと漢字（中黒「・」と全角の記号は含めない）
@@ -497,7 +498,12 @@ def lint_slides(p, r, reuse=False, talk=False):
                             continue
                         sizes[sz] += 1
                         copyright_footer = footer and COPYRIGHT_FOOTER.fullmatch(t.strip())
-                        minimum = COPYRIGHT_PT if copyright_footer else MIN_PT
+                        if copyright_footer:
+                            minimum = COPYRIGHT_PT
+                        elif "shape" in e and (f or ub):  # 塗りのある図形の中（自分の塗りか、下に重なった塗り）
+                            minimum = FIG_MIN_PT
+                        else:
+                            minimum = MIN_PT
                         if sz < minimum and not reuse:
                             r.hits[COPYRIGHT_NG if copyright_footer else f"{MIN_PT}pt 未満の文字"].append(f"p{i}: {sz:g}pt「{txt[:20]}」")
                         col, ground = hexof(st.get("foregroundColor"), scheme), f or under
@@ -917,6 +923,10 @@ def selftest():
     for lines in (8, 9):
         res, _, hard = run(deck([(NAVY, [title(), shape(lines), shape(9, y=7.08), shape(9, prefix="出典：")])]))
         assert hard == 0 and len(res.hits[BODY_LINES]) == (1 if lines == 9 else 0)
+    # 文字の下限: 塗りのない文字は 11pt 未満で止め、塗りのある図形の中の文字は 9pt まで通す（8pt は止める）
+    for size, fill, n in ((9, None, 1), (9, NAVY, 0), (8, NAVY, 1)):
+        res, _, _ = run(deck([(NAVY, [title(), shape(1, y=3, size=size, fill=fill)])]))
+        assert len(res.hits[f"{MIN_PT}pt 未満の文字"]) == n, (size, fill)
     # 話す資料の字数: 本文 120 字は出さず、130 字は出す。--talk がなければ出さない
     for lines, talk in ((12, True), (13, True), (13, False)):
         res, out, _ = run(deck([(NAVY, [title(), shape(lines), shape(9, y=7.08), shape(9, prefix="出典：")])]), talk=talk)
