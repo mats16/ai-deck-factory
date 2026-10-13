@@ -307,10 +307,21 @@ def pick(p):
 
 def strip(pid, p, master, blank):
     """元のテンプレートの複製から、残すマスターとレイアウト（pick）のほかを消す。"""
-    # 見本のページを消す前に 1 枚作っておく。ページが 0 枚になると、使われていないマスターごと消える
-    batch(pid, [{"createSlide": {"objectId": "keep_slide", "slideLayoutReference": {"layoutId": blank["objectId"]}}}]
+    # 見本のページを消す前に 1 枚作っておく。ページが 0 枚になると、使われていないマスターごと消える。
+    # 足す位置の前のページのマスターのレイアウトしか使えないので、残すマスターのページの直後に足す（末尾が別のマスターだと 400。2026-10-13）
+    at = next((i + 1 for i, s in enumerate(p["slides"]) if s.get("slideProperties", {}).get("masterObjectId") == master["objectId"]), None)
+    batch(pid, [{"createSlide": {"objectId": "keep_slide", "slideLayoutReference": {"layoutId": blank["objectId"]},
+                                 **({"insertionIndex": at} if at is not None else {})}}]
           + [{"deleteObject": {"objectId": s["objectId"]}} for s in p["slides"]])
-    dels = [l["objectId"] for l in p["layouts"] if l is not blank] + [m["objectId"] for m in p["masters"] if m is not master]
+    # ページを消すと、そのページだけが使っていたマスターとレイアウトを Google が消すことがある。読み直して、残っているものだけを消す（2026-10-13）
+    now = request("GET", f"{SLIDES}/{pid}?fields=masters.objectId,layouts.objectId,slides(objectId,pageElements.shape.placeholder.type)")
+    slide = next(s for s in now["slides"] if s["objectId"] == "keep_slide")
+    if not any(e.get("shape", {}).get("placeholder", {}).get("type") == "SLIDE_NUMBER" for e in slide.get("pageElements", [])):
+        # 元のファイルの「スライド番号」の設定がオフだと、API で足したページにページ番号の枠ができない。API では変えられない（2026-10-13）
+        sys.exit("元のテンプレートは、足したページにページ番号の枠ができない（ファイルの「スライド番号」の設定がオフ）。元を複製し、複製の画面の"
+                 "「挿入 → スライド番号」で「オン」にして「すべてに適用」を押し、その URL を base にする")
+    dels = ([l["objectId"] for l in now["layouts"] if l["objectId"] != blank["objectId"]]
+            + [m["objectId"] for m in now["masters"] if m["objectId"] != master["objectId"]])
     # マスターの著作権の行とロゴ、Blank の全面の四角（ページの地を覆う）など、プレースホルダーでないもの。フッターは slides.py が書く
     dels += [e["objectId"] for pg in (master, blank) for e in pg.get("pageElements", []) if "placeholder" not in e.get("shape", {})]
     batch(pid, [{"deleteObject": {"objectId": o}} for o in dels])
