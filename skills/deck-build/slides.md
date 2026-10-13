@@ -43,7 +43,7 @@ NAME = "〇〇様_ご説明資料"
 def make(d):
     s = d.cover("タイトル", "〇〇様｜2026-10-07", "副題")
     d.note(s, "表紙のノート。")
-    s = d.page("見出しの主張の文", "リード（このページの問い）", kicker="キッカー（要るページだけ）")
+    s = d.page("見出し（短い名詞句）", "リード（このページで言えること）", kicker="キッカー（要るページだけ）")
     d.text(s, X, 1.78, W, 1.0, ["本文。", ("強調", {"bold": True}), "。"], spacing=125)
     d.source(s, ["出典: ", ("ブログの名前", {"link": "https://…"})])
     d.note(s, "話すこと。")
@@ -53,7 +53,7 @@ def make(d):
 |---|---|
 | `d.cover(title, kicker, sub)` | 表紙。2 行のタイトルは、文節の切れ目に `\n` を入れる |
 | `d.divider(num, title, sub)` | 章の扉 |
-| `d.page(title, lead, kicker)` | 本文のページ（キッカー・タイトル・リード）。ページの ID を返す。見出しが 1 行に収まらなければ 18pt まで縮めて警告する（言い切りを短くするのが先） |
+| `d.page(title, lead, kicker)` | 本文のページ（キッカー・タイトル・リード）。ページの ID を返す。見出しが 1 行に収まらなければ 18pt まで縮めて警告する（見出しを短くするのが先） |
 | `d.slide(bg, foot)` | 型のないページ。`foot=False` でフッターとページ番号を置かない（全面に画像を貼るページ。reuse.md の段階 1） |
 | `d.text(s, x, y, w, h, parts, size, color, bold, align, valign, spacing, fill, line, bullets, kind, radius, edge, pad, gap, dash, weight)` | 文字の枠。`parts` は文字列か `(文字列, {"bold", "size", "color", "link"})` の並び。`\n` で段落を分け、`\v` は段落の中の改行。塗りがある枠は半径 0.1 in の角丸が既定。`spacing` は行間（%）。`edge=True` で文字の端を `(x, y)`・幅 `w` にそろえる（塗りのない文字。4）。塗りか枠線のある左寄せ・右寄せの文字は、箱の端と文字の間を 1 字分（枠でいちばん小さい文字の大きさ。lint と同じ測り方）空ける（`pad` で変える。4）。`gap` は段落の間の空き（pt）。基準の 2 倍以上の大きさの段落（大きな数字）は、行間を 100% にする（4） |
 | `d.label(s, v, x, y, w, h, fill, color, size, bold, align, radius, pad)` | 札（日付・工程の名前など、塗りの箱と短い言葉の 1 つの図形）。既定は PANEL の地に濃紺の太字、中央寄せ。左寄せにすると、箱の端と文字の間を 1 字分空ける |
