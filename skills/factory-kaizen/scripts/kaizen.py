@@ -197,6 +197,14 @@ def check_body(body, changed, verify_text, images):
     return miss
 
 
+def place_images(verify_text, urls):
+    """目印（<!-- img:<ファイル名> -->、rebuild が変わったページに付ける）を画像に替える。目印のない画像（verify/img/ に手で置いたもの）は、黙って落とさず末尾にまとめて載せる。"""
+    marked = set(re.findall(r"<!-- img:(.+?) -->", verify_text))
+    text = re.sub(r"<!-- img:(.+?) -->", lambda m: f"![{m.group(1)}]({urls[m.group(1)]})" if m.group(1) in urls else "", verify_text)
+    rest = [n for n in urls if n not in marked]
+    return text.rstrip() + "\n\n### ほかの画像（verify/img/ に手で置いたもの）\n\n" + "".join(f"![{n}]({urls[n]})\n" for n in rest) if rest else text
+
+
 def open_pr(w, title, body_file, draft=False):
     w.need()
     if sh("git", "-C", w.repo, "status", "--porcelain").stdout.strip():
@@ -219,7 +227,7 @@ def open_pr(w, title, body_file, draft=False):
         sys.exit("PR にできない: 題・本文（検証の記録を含む）・コミットメッセージ・ファイルの名前・足した行に、顧客や社内の資料の名前がある: " + "、".join(hit)
                  + "。「顧客向けの資料」「（顧客）」のような一般の形にして commit し直す（コミットメッセージは git commit --amend か rebase で直す）")
     urls = upload_images(w, images) if images else {}
-    verify_text = re.sub(r"<!-- img:(.+?) -->", lambda m: f"![{m.group(1)}]({urls[m.group(1)]})" if m.group(1) in urls else "", verify_text)
+    verify_text = place_images(verify_text, urls)
     final = body.rstrip() + "\n\n## 検証の記録（factory-kaizen）\n\n変えたファイル: " + ", ".join(f"`{f}`" for f in changed) + "\n\n" + verify_text
     (w.dir / "pr_body.md").write_text(final)
     sh("git", "-C", w.repo, "push", "-q", "-u", "origin", w.branch)
@@ -251,6 +259,10 @@ def selftest():
     assert len(check_body(body, ["skills/deck-practices/visual.md"], "x", [])) == 1  # 見た目なのに画像がない
     assert len(check_body("## 理由", ["skills/deck-build/scripts/lint.py"], "", [])) == 4  # 節が 3 つと、検証がない
     assert check_body(body + "\n検証しない理由: 文の直しだけ", ["skills/dreaming/SKILL.md"], "", []) == []
+    urls = {"deck1_p2.png": "u1", "sample_p1.png": "u2"}
+    placed = place_images("### 組み直し\n\n<!-- img:deck1_p2.png -->\n", urls)
+    assert placed.index("![deck1_p2.png](u1)") < placed.index("### ほかの画像") < placed.index("![sample_p1.png](u2)") and placed.count("](u1)") == 1  # 目印のない画像も落とさず、末尾に 1 回だけ
+    assert place_images("x\n<!-- img:deck1_p2.png -->\n", {"deck1_p2.png": "u1"}) == "x\n![deck1_p2.png](u1)\n"  # みな目印があれば、末尾には足さない
     with tempfile.TemporaryDirectory() as d:  # 顧客と資料のフォルダの名前、[factory] private の語が PR に入ったら止める
         for x in ("Customers/Acme/sample_briefing_202610", "Customers/Acme/review_2026q3", "Customers/Acme/assets", "Internal/grok_study_202610", "Internal/drafts"):
             (Path(d) / x).mkdir(parents=True)
