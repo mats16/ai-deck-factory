@@ -23,6 +23,7 @@ python3 <このスキルのフォルダ>/scripts/doctor.py --local  # 手元だ�
 | スキルの重なり | ワークスペースの `.agents/skills/`・`.claude/skills/` に同じ名前のスキルがある。プラグインと二重に読まれるので、どちらを使うかをユーザーに聞く（ワークスペースのものを外すのはユーザーが決める） |
 | `google.quota_project`、`slides.themes` の `url`、`drive.*` | factory-init の 4 のとおり埋める。`slides.templates`（前の版の書き方）が要修正なら、URL を `[slides.themes.<名前>]` の `url` に移す |
 | テーマの説明 | `description` がないテーマは、エージェントが資料ごとに選べない。何のテーマで、どの資料・聞き手に使うかを書く（`deck-build/slides.md` の 3） |
+| `review.*`、AGENTS.md の方針のレビュー | `review.*` は雛形の範囲の値（`"ai"`・`"human"`、1〜3）に直す。AGENTS.md に前の雛形の「人がレビューするかも選んでもらう」が残っていれば、ユーザーに見せてから雛形の今の文（`[review] plan_reviewer` に従う）に替える（ワークスペースの決まりなので、黙って直さない） |
 | Google の認証 | 出たコマンド（`gcloud auth application-default login --scopes=…`）をユーザーに回してもらう。トークンの取り方は `factory.toml` の `[google]` のコメント |
 | テンプレート・Drive のフォルダ | 開けないものは、URL の誤りか、共有されていない。持ち主に共有を頼むか、URL を直す |
 
