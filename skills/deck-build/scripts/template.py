@@ -15,8 +15,8 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gapi import DRIVE, SLIDES, batch, factory, factory_path, file_id, find_factory, folder_id, request, run, trash
 from lint import JA, cells, contrast, flatten, lum, paras
-from slides import (BG, BLANK, CARD, DECOR, EMU, FONT, GA, INSET, NAVY, NAVY_BLOCK, OSS, PAD, PANEL, PREVIEW, RED, RED_ON_NAVY,
-                    RED_SOFT, RED_TEXT, RULE, SLOTS, STAGE_TEXT, SUB, TEXT, THEMES, WHITE, W, X, Y_BODY, Y_FOOT, build, cols, make_deck, pt, rgb)
+from slides import (BG, BLANK, CARD, COPYRIGHT_PT, DECOR, EMU, FONT, GA, INSET, NAVY, NAVY_BLOCK, OSS, PAD, PANEL, PREVIEW, RED, RED_ON_NAVY,
+                    RED_SOFT, RED_TEXT, RULE, SLOTS, STAGE_TEXT, SUB, TEXT, THEMES, WHITE, W, X, Y_BODY, Y_FOOT, build, cols, make_deck, number_style, rgb)
 from slides import JP_FONTS, is_blank, need_brand, placeholders
 
 THEMES_DIR = "Themes"  # テンプレートを作る Drive のフォルダ。[drive] factory の下（なければ作る）。使うテンプレートは [slides.themes.<名前>] の url で 1 つずつ指す
@@ -284,7 +284,8 @@ def strip(pid, p, master, blank):
 
 
 def styles(theme, master, blank):
-    """配色、プレースホルダーの書体、ページ番号の枠（11pt・SUB。右端を本文の右端に、上端を著作権表示の文字にそろえる。この枠は内側の余白が 0）。"""
+    """配色、プレースホルダーの書体、ページ番号の枠（文字は slides.py の number_style。右端を本文の右端に、上端を著作権表示の文字にそろえる。
+    この枠は内側の余白が 0）。"""
     reqs = [{"updatePageProperties": {"objectId": master["objectId"], "pageProperties": {"colorScheme": {"colors": [
         {"type": k, "color": rgb(colors(theme)[k])} for k in SLOTS]}}, "fields": "colorScheme.colors"}}]
     font = themes().get(theme, {}).get("font", FONT)
@@ -299,8 +300,7 @@ def styles(theme, master, blank):
                          "scaleX": 1.0 * EMU / size["width"]["magnitude"], "scaleY": 0.28 * EMU / size["height"]["magnitude"],
                          "translateX": round((X + W - 1.0) * EMU), "translateY": round((Y_FOOT + INSET) * EMU), "unit": "EMU"}}},
                      {"updateShapeProperties": {"objectId": e["objectId"], "shapeProperties": {"contentAlignment": "TOP"}, "fields": "contentAlignment"}},
-                     {"updateTextStyle": {"objectId": e["objectId"], "textRange": {"type": "ALL"},
-                                          "style": {"fontSize": pt(11), "foregroundColor": {"opaqueColor": {"themeColor": SUB}}}, "fields": "fontSize,foregroundColor"}}]
+                     *number_style(e["objectId"])]
     return reqs
 
 
@@ -399,6 +399,9 @@ def main():
         p = {"masters": [{"objectId": "a"}, {"objectId": "b"}], "slides": [{"slideProperties": {"masterObjectId": "b"}}],
              "layouts": [lay("a1", "a", sn), lay(BLANK, "b", sn, {"shape": {"placeholder": {"type": "TITLE"}}}), lay("b1", "b", sn), lay("b2", "b", sn, name="BLANK")]}
         assert [x["objectId"] for x in pick(p)] == ["b", "b2"]  # ページが使うマスターの、ページ番号の枠だけのレイアウト（名前が BLANK でも枠が多ければ使わない。型が BLANK を先に）
+        num = {**sn, "objectId": "n", "size": {"width": {"magnitude": EMU}, "height": {"magnitude": EMU}}}
+        st = [r["updateTextStyle"]["style"] for r in styles("visual", {"objectId": "b"}, {"pageElements": [num]}) if "fontSize" in r.get("updateTextStyle", {}).get("style", {})]
+        assert [s["fontSize"]["magnitude"] for s in st] == [COPYRIGHT_PT]  # ページ番号は著作権表示と同じ大きさ（高さをそろえる）
         assert page_ok({"width": {"magnitude": 12192000}, "height": {"magnitude": 6858000}}) and not page_ok({"width": {"magnitude": 9144000}, "height": {"magnitude": 5143500}})
         md = "# 設定\n[slides.themes.visual]  # 注\nurl = \"a\"  # 書き込む\ndescription = \"d\"\n\n[slides.themes.acme]\nNAVY = \"002B5C\"\n\n[drive]\nx = 1\n"
         assert set_url(md, "visual", "b") == md.replace('"a"', '"b"')  # url の行を書き換え、ほかは変えない
