@@ -68,6 +68,7 @@ ARROW_MID = "横向きの矢印が、両側の箱の上下の中央にない"
 LINE_GRID = "格子を線で組んでいる（標準の表にできないか）"
 NO_NOTES = "ノートがない"
 TWO_LINES = "見出しかリードが 2 行の見込み"  # 見出しは 1 行、リードは 1 文（visual.md の 1）
+HEAD_PERIOD, BULLET_PERIOD = "見出しの句点", "箇条書きの句点の混在"  # content.md の 6。名前は Docs の規則と同じ（Docs は見出しのスタイル、箇条書きのリストごと）
 # [lint-004] 空きと結論バンド。目安は、空いて見えたページを拾う値にした
 EMPTY_BELOW = "本文の下が空いている"
 EMPTY_BOX = "箱の中の下が空いている"
@@ -191,11 +192,11 @@ def body_chars(els, title=None):
 
 
 def paras(text):
-    """段落ごとに (段落の書式, [(文字, 書式), …]) を返す。段落の中の改行（\\v）は文字に残す。"""
+    """段落ごとに (段落の書式, [(文字, 書式), …]) を返す。段落の中の改行（\\v）は文字に残す。箇条書きの段落は書式に bullet: True を足す。"""
     out = []
     for te in (text or {}).get("textElements", []):
         if "paragraphMarker" in te:
-            out.append((te["paragraphMarker"].get("style", {}), []))
+            out.append((te["paragraphMarker"].get("style", {}) | ({"bullet": True} if "bullet" in te["paragraphMarker"] else {}), []))
         elif "textRun" in te and out:
             out[-1][1].append((te["textRun"]["content"].replace("\n", ""), te["textRun"].get("style", {})))
     return out
@@ -478,6 +479,9 @@ def lint_slides(p, r, reuse=False, talk=False):
             if "shape" in e and src_without_link(e["shape"]):
                 r.hits[NO_LINK].append(f"p{i}: 「{''.join(ptext(x) for x in paras(e['shape'].get('text'))).strip()[:30]}」")
             for text, f in texts:
+                items = [ptext(x).strip() for x in paras(text) if x[0].get("bullet") and ptext(x).strip()]
+                if len({t.endswith("。") for t in items}) > 1:  # 1 つの枠の箇条書き（ひとまとまり）で、句点のある項目とない項目が混ざる
+                    r.hits[BULLET_PERIOD].append(f"p{i}: 「{items[0][:20]}」から {len(items)} 項目。文なら全部に「。」、語なら全部なし")
                 for para in paras(text):
                     t = ptext(para)
                     if not t.strip():
@@ -536,6 +540,8 @@ def lint_slides(p, r, reuse=False, talk=False):
             avail = b[2] / EMU * 72 - 2 * INS
             n = sum(max(1, -(-em_width(t) * sz // avail)) for t in ts) if avail > 0 else 1
             titles.append(f"p{i}  {' / '.join(ts)}" + (f"  （{int(n)} 行の見込み）" if n > 1 else ""))
+            if "".join(ts).rstrip().endswith("。"):
+                r.hits[HEAD_PERIOD].append(f"p{i}: 「{' / '.join(ts)[:30]}」")
             if top[1] is not None and n > 1:
                 r.hits[TWO_LINES].append(f"p{i} の見出し: 「{' / '.join(ts)[:30]}」")
         for e, b in els:  # リード（上端 1.20 in の 1 文）
@@ -596,7 +602,7 @@ def lint_slides(p, r, reuse=False, talk=False):
     print(f"\n== 本文の字数（見出し・リード・出典・フッターを除く。話す資料は {TALK_MAX} 字まで） ==")
     print(" / ".join(chars))
     hard = r.show(list(HARD) + [f"{MIN_PT}pt 未満の文字", COPYRIGHT_NG, FONT_NG, MONO_NG], "要修正")
-    r.show(list(WARN) + list(SLIDE_ONLY) + list(NOTES_ONLY) + ["数字に出典の行がない", NO_LINK, BODY_LINES, TWO_LINES, TALK, NO_NOTES, ARROW_MID, LINE_GRID, EMPTY_BELOW, EMPTY_BOX, EMPTY_HOLE, PAD_NG, NUM_NO_UNIT, OPEN_HEAD, COL_SHIFT, DASH_ROUND, STAGE_NG, CODE_NOT_MONO, BLOCK_ON_NAVY, MANY_BANDS, NO_COVER, NO_DIVIDER, SHORT_CH], "要確認")
+    r.show(list(WARN) + list(SLIDE_ONLY) + list(NOTES_ONLY) + ["数字に出典の行がない", NO_LINK, BODY_LINES, TWO_LINES, HEAD_PERIOD, BULLET_PERIOD, TALK, NO_NOTES, ARROW_MID, LINE_GRID, EMPTY_BELOW, EMPTY_BOX, EMPTY_HOLE, PAD_NG, NUM_NO_UNIT, OPEN_HEAD, COL_SHIFT, DASH_ROUND, STAGE_NG, CODE_NOT_MONO, BLOCK_ON_NAVY, MANY_BANDS, NO_COVER, NO_DIVIDER, SHORT_CH], "要確認")
     hard += workspace_checks("slides", p, r)
     print("\n== 文字サイズ（pt: run の数） ==")
     print(", ".join(f"{k:g}: {v}" for k, v in sorted(sizes.items())))
@@ -1031,6 +1037,17 @@ def selftest():
     assert len(res.hits["社外秘の表示"]) == 1 and "2 ページ" in res.hits["社外秘の表示"][0]
     res = run(deck([(NAVY, [title("あ" * 40), shape(1, y=1.2, w=12, size=12, text=["い" * 80])])]))[0]
     assert len(res.hits[TWO_LINES]) == 2
+    # 見出しの句点と、1 つの枠の箇条書きの句点の混在（content.md の 6）。箇条書きでない段落は数えない
+    def bulleted(ts):
+        e = shape(1, text=ts)
+        for te in e["shape"]["text"]["textElements"]:
+            if "paragraphMarker" in te:
+                te["paragraphMarker"]["bullet"] = {"listId": "b"}
+        return e
+    hp = lambda els: (lambda r: (len(r.hits[HEAD_PERIOD]), len(r.hits[BULLET_PERIOD])))(run(deck([(NAVY, [title()]), (OAT, els)]))[0])
+    assert hp([title("問い合わせが減っている。")]) == (1, 0) and hp([title("問い合わせが減っている")]) == (0, 0)
+    assert hp([title(), bulleted(["夜間に集計する。", "朝に見る"])]) == (0, 1) and hp([title(), bulleted(["夜間の集計", "朝の確認"])]) == (0, 0)
+    assert hp([title(), shape(1, text=["夜間に集計する。", "朝に見る"])]) == (0, 0)
     # 空き: 1 行の本文だけなら下が空く。塗りの箱の中に 1 行なら箱の中が空く。中身で埋まった箱は出さない。結論バンドは本文の 3 分の 1 まで
     fill = lambda c: {"shapeBackgroundFill": {"solidFill": {"color": c}}}
     card = lambda y, h: {"objectId": "c", "shape": {"shapeType": "RECTANGLE", "shapeProperties": fill({"rgbColor": rgb("FFFFFF")})}, **box(0.6, y, 6, h)}
