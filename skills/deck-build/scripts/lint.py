@@ -545,7 +545,7 @@ def lint_slides(p, r, reuse=False, talk=False):
             n = sum(max(1, -(-em_width(t) * sz // avail)) for t in ts) if avail > 0 else 1
             titles.append(f"p{i}  {' / '.join(ts)}" + (f"  （{int(n)} 行の見込み）" if n > 1 else ""))
             head = "".join(ts).rstrip()
-            if head.endswith("。"):
+            if "。" in head:  # 文の途中の句点も（2 文の見出しは短い名詞句でない）
                 r.hits[HEAD_PERIOD].append(f"p{i}: 「{' / '.join(ts)[:30]}」")
             if POLITE_END.search(head):
                 r.hits[HEAD_POLITE].append(f"p{i}: 「{' / '.join(ts)[:30]}」。頼みごとはリードか本文で言う")
@@ -758,7 +758,7 @@ def lint_gdoc(doc, r, template=False):
                 r.hits["見出しの段の飛び"].append(f"{where}: 最初の見出しが H{lv}「{text[:24]}」")
             if heads and heads[-1][2] and heads[-1][0] >= lv:
                 r.hits["中身のない見出し"].append(f"{heads[-1][2]}: 「{heads[-1][1][:24]}」のあとに本文がない")
-            if text.endswith("。"):
+            if "。" in text:
                 r.hits[HEAD_PERIOD].append(f"{where}: 「{text[:24]}」")
             heads.append([lv, text, where])
             firsts.append("  " * (lv - 1) + f"H{lv} {text}")
@@ -1063,7 +1063,7 @@ def selftest():
     assert hp([title(), bulleted(["夜間に集計する。", "朝に見る"])]) == (0, 1) and hp([title(), bulleted(["夜間の集計", "朝の確認"])]) == (0, 0)
     assert hp([title(), shape(1, text=["夜間に集計する。", "朝に見る"])]) == (0, 0)
     hd = lambda t: run(deck([(NAVY, [title()]), (OAT, [title(t)])]))[2]
-    assert hd("問い合わせが減っている。") > hd("問い合わせが減っている") == 0  # 見出しの句点は要修正
+    assert hd("問い合わせが減っている。") > hd("問い合わせが減っている") == 0 and hd("減っている。理由は 2 つ") > 0  # 見出しの句点は文の途中でも要修正
     pol = lambda t: bool(run(deck([(NAVY, [title()]), (OAT, [title(t)])]))[0].hits[HEAD_POLITE])
     assert pol("移行の順番をご確認ください") and pol("夜間の集計を移します") and not pol("夜間の集計の移し先")
     cl = lambda ts: bool(run(deck([(NAVY, [title("言い切りの扉、多くなる")])] + [(OAT, [title(t)]) for t in ts]))[0].hits[HEAD_CLAIMS])
