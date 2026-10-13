@@ -10,6 +10,7 @@ usage:
 置き場所は <ワークスペース>/.factory/kaizen/<名前>/（repo/ 変える版、base/ 前の版、verify/ 検証の記録）。資料の名前・URL・本文は verify/detail.md にだけ書き、
 Issue には「資料 1」のような番号と、規則ごとの数の変化と、選んだ画像と、変更案の差分だけを出す。ブランチは push しない。"""
 import json, os, re, shutil, subprocess, sys, tempfile, time
+from functools import cached_property
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -40,10 +41,20 @@ class Work:
         src = gapi.factory().get("factory", {}).get("source")
         self.src = Path(src).expanduser() if src else None
 
-    def main(self):
-        """差分の起点。fork なら元のリポジトリ（gh repo fork --clone が作る upstream）の main。Issue を出す先と合わせる。"""
-        fork = self.src and sh("git", "-C", self.src, "remote", "get-url", "upstream", check=False).returncode == 0
-        return "upstream/main" if fork else "origin/main"
+    @cached_property
+    def github(self):
+        """(画像を置くリポジトリ, Issue を出すリポジトリ, 差分の起点) を、origin の URL から 1 回で決める。
+        fork なら、画像は自分の fork（origin の pr-assets）、Issue と差分の起点は元のリポジトリ（upstream のリモート）。"""
+        self.src or sys.exit("factory.toml の [factory] source に、プラグインのリポジトリの git の checkout（持ち主でなければ fork）を書く")
+        view = lambda url: json.loads(sh("gh", "repo", "view", url, "--json", "nameWithOwner,parent").stdout)
+        me = view(sh("git", "-C", self.src, "remote", "get-url", "origin").stdout.strip())
+        if not me.get("parent"):
+            return me["nameWithOwner"], me["nameWithOwner"], "origin/main"
+        parent = f"{me['parent']['owner']['login']}/{me['parent']['name']}"
+        up = sh("git", "-C", self.src, "remote", "get-url", "upstream", check=False).stdout.strip()
+        if not up or view(up)["nameWithOwner"] != parent:  # fork の main は古いか、自分の commit があるかもしれない
+            sys.exit(f"origin は {parent} の fork なのに、upstream のリモートが {parent} を指していない。git -C {self.src} remote add upstream https://github.com/{parent}.git（あれば set-url）")
+        return me["nameWithOwner"], parent, "upstream/main"
 
     def need(self):
         if not self.repo.is_dir():
@@ -90,7 +101,7 @@ def start(w):
         sys.exit("factory.toml の [factory] source に、プラグインのリポジトリの git の checkout（持ち主でなければ fork）を書く")
     if w.dir.exists():
         sys.exit(f"{w.dir} がもうある（続けるならそのまま使う。やり直すなら kaizen.py clean {w.name}）")
-    main = w.main()
+    main = w.github[2]
     sh("git", "-C", w.src, "fetch", "-q", main.split("/")[0])
     sh("git", "-C", w.src, "worktree", "add", "-q", "-b", w.branch, w.repo, main)
     w.base.mkdir(parents=True)
@@ -167,8 +178,7 @@ def upload_images(w, files):
     tree = sh("git", "-C", repo, "write-tree", env=env).stdout.strip()
     commit = sh("git", "-C", repo, "commit-tree", tree, *(["-p", parent] if parent else []), "-m", f"{w.branch} の画像").stdout.strip()
     sh("git", "-C", repo, "push", "-q", "origin", f"{commit}:refs/heads/pr-assets")
-    slug = sh("gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner", cwd=repo).stdout.strip()
-    return {f.name: f"https://github.com/{slug}/blob/pr-assets/{w.branch}/{f.name}?raw=true" for f in files}
+    return {f.name: f"https://github.com/{w.github[0]}/blob/pr-assets/{w.branch}/{f.name}?raw=true" for f in files}
 
 
 def private_words(ws, extra=()):
@@ -232,7 +242,7 @@ def open_issue(w, title, body_file):
     if sh("git", "-C", w.repo, "status", "--porcelain").stdout.strip():
         sys.exit("変える版に commit していない変更がある。commit してから open する")
     git = lambda *a: sh("git", "-c", "core.quotepath=false", "-C", w.repo, *a).stdout  # 日本語のファイルの名前を \343… に書き換えさせない（確かめで見えなくなる）
-    main = w.main()
+    _, repo, main = w.github
     changed = git("diff", "--name-only", f"{main}...HEAD").splitlines()
     if not changed:
         sys.exit(f"{main} からの変更がない")
@@ -265,8 +275,6 @@ def open_issue(w, title, body_file):
         sys.exit(f"{url} は閉じている（{state}）。出し直すなら kaizen.py clean {w.name} のあと、別の名前で start する")
     urls = upload_images(w, files) if files else {}
     (w.dir / "issue_body.md").write_text(issue_body(body, changed, base, place_images(verify_text, urls), patch))
-    view = json.loads(sh("gh", "repo", "view", "--json", "nameWithOwner,parent", cwd=w.repo).stdout)
-    repo = f"{view['parent']['owner']['login']}/{view['parent']['name']}" if view.get("parent") else view["nameWithOwner"]  # fork なら元のリポジトリに出す
     if url:
         sh("gh", "issue", "edit", url, "--title", title, "--body-file", w.dir / "issue_body.md", cwd=w.repo)
     else:
@@ -307,6 +315,30 @@ def selftest():
     assert "載せていない" in long and "+x" not in long  # 長い差分は載せない
     fenced = issue_body(body, [], "abc1234", "", " ````` 前からある行\n+x\n")
     assert "\n``````diff\n" in fenced and fenced.rstrip().endswith("``````\n\n</details>")  # 差分の中の ````` より長い囲い
+    def github(remotes):  # remotes: リモートの名前 → (nameWithOwner, 親)。gh と git の代わりに答える
+        global sh
+        repos = {f"u/{k}": v for k, v in remotes.items()}
+        def fake(*cmd, cwd=None, env=None, check=True):
+            if cmd[:2] == ("gh", "repo"):
+                name, parent = repos[cmd[3]]
+                out = json.dumps({"nameWithOwner": name, "parent": parent and {"owner": {"login": parent.split("/")[0]}, "name": parent.split("/")[1]}})
+            else:
+                out = f"u/{cmd[-1]}" if cmd[-1] in remotes else ""
+            return subprocess.CompletedProcess(cmd, 0, out, "")
+        real, sh, w = sh, fake, object.__new__(Work)
+        w.src = Path("src")
+        try:
+            return w.github
+        finally:
+            sh = real
+    assert github({"origin": ("o/r", None)}) == ("o/r", "o/r", "origin/main")  # 持ち主
+    assert github({"origin": ("me/r", "o/r"), "upstream": ("o/r", None)}) == ("me/r", "o/r", "upstream/main")  # 画像は fork、Issue と起点は元
+    for remotes in ({"origin": ("me/r", "o/r")}, {"origin": ("me/r", "o/r"), "upstream": ("x/r", None)}):  # upstream がないか、ほかを指す
+        try:
+            github(remotes)
+            raise AssertionError(remotes)
+        except SystemExit as e:
+            assert "upstream" in str(e)
     with tempfile.TemporaryDirectory() as d:  # 顧客と資料のフォルダの名前、[factory] private の語が Issue に入ったら止める
         for x in ("Customers/Acme/sample_briefing_202610", "Customers/Acme/review_2026q3", "Customers/Acme/assets", "Internal/grok_study_202610", "Internal/drafts"):
             (Path(d) / x).mkdir(parents=True)

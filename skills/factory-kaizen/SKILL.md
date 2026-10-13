@@ -9,7 +9,7 @@ description: 工場（プラグイン、大元）を改善する。現場（ワ�
 
 Issue を読んだプラグインの持ち主が、入れるかを決め、ほかのコードと合わせて書き直して PR にする。だから Issue には、持ち主がワークスペースを見ずに決められるだけの材料（何が起きたか、数、確かめた結果、画像、変更案の差分、迷ったところ）を入れる。変更案は、確かめられる形で動けば足りる。きれいにする・縮める・レビューを回す（simplify・review-loop など）のは持ち主がするので、ここではしない。
 
-前提: `factory.toml` の `[factory] source` に、プラグインのリポジトリの git の checkout があること（持ち主でなければ fork を `gh repo fork --clone` で作る）。`gh` にログインしていること。ワークスペースで回す。
+前提: `factory.toml` の `[factory] source` に、プラグインのリポジトリの git の checkout があること（持ち主でなければ fork を `gh repo fork --clone` で作る。fork には、元のリポジトリを指す `upstream` のリモートが要る。`--clone` が作り、ないと `start`・`open` が止まる）。`gh` にログインしていること。ワークスペースで回す。
 
 ```sh
 P="python3 <このスキルのフォルダ>/scripts/kaizen.py"
@@ -34,7 +34,7 @@ $P clean <名前>                                   # Issue が閉じられた�
 5. **ユーザーに確かめてから `open` する。** Issue はリポジトリの外の人も読む。次の 2 つを見せて、よいと言われてから出す。
    - 本文
    - 載せる画像（`verify/img/` と、変えた png。png は差分に中身が出ないので、`open` が変えた版を画像として載せる）。顧客向けの資料（`Customers/`）の画像は、顧客の名前・数字・社外秘が写るので、原則として載せない。社内向けか、公開の内容だけの資料で確かめ直す。
-   `open` は、節がそろっているか、検証があるか、見た目の変更に画像があるかを確かめてから、画像を origin（fork なら自分の fork）の `pr-assets` ブランチに置き、検証の記録（資料は「資料 1」の番号だけ。名前・URL・本文は出さない）と、前の版の commit と、変更案の差分（`git diff <起点>...HEAD`。起点は、fork で `upstream` のリモートがあれば `upstream/main`、なければ `origin/main`。`start` も同じ起点から作る）を本文に足して Issue を作る。本文が上限を超えるほど差分が長いときは、差分を載せず行数だけを書く（分けて出す）。
+   `open` は、節がそろっているか、検証があるか、見た目の変更に画像があるかを確かめてから、画像を origin（fork なら自分の fork）の `pr-assets` ブランチに置き、検証の記録（資料は「資料 1」の番号だけ。名前・URL・本文は出さない）と、前の版の commit と、変更案の差分（`git diff <起点>...HEAD`。起点は `origin/main`、fork なら `upstream/main`。`start` も同じ起点から作る）を本文に足して Issue を作る。本文が上限を超えるほど差分が長いときは、差分を載せず行数だけを書く（分けて出す）。
 6. **返す。** Issue の URL を返す。dreaming のプラグインへの提案（P-ID）から出したなら、`ledger.py sent <P-ID> --issue <URL>` で決まりの台帳に残す（変更案で提案と違う ID にしたら `--rule <その ID>` も付ける）（dreaming が同じ提案を出し直さない）。Issue の行方は `gh issue view <URL> --json state,stateReason` で見る。入れずに閉じられたら（`NOT_PLANNED`）、`ledger.py reject <P-ID> --reason <理由>`。直して閉じられたら（`COMPLETED`）、`claude plugin update ai-deck-factory@ai-deck-factory`（pi は入れ方による）で届くことを伝え、`clean` する。届くと、dreaming が `ledger.py candidates` の「写しを消す」で、ワークスペースの `rules/` の写しを消す提案を出す（上げた文が、入っているプラグインにあるかで見る。持ち主が文や ID を変えて入れたら出ないので、dreaming の 4e の重なりで消す）。出典の指摘は `sent` で新しい ID につながっている。出典にしなかった指摘が写しに残っていれば（`ledger.py why <ws-ID>`）、指摘ごとに `ledger.py route <c-ID> <プラグインの ID>` でつなぎ直す。
 
 ## 本文の型
