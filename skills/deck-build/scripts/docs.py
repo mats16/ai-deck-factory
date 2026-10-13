@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gapi
 import lint
 from gapi import DOCS, DRIVE, GDOCS, delete, file_id, folder_id, request, run, trash
-from slides import COPYRIGHT, COPYRIGHT_PT, LOGO, need_brand, FONT, MONO, RULE, TEXT, WHITE, asset, carry, png, u16
+from slides import COPYRIGHT, COPYRIGHT_PT, LOGO, need_brand, FONT, FONT as FONT_DEFAULT, MONO_DEFAULT, MONO_DEFAULT as MONO, theme_font, theme_mono, RULE, TEXT, WHITE, asset, carry, png, u16  # FONT・MONO はテーマで替わる（load_theme）
 
 # ---- 版面と書体（visual_doc.md の 1。大きさは pt、版面は mm） ----
 # 1 行は全角 40 字まで（jlreq・デジタル庁。visual_doc.md の 1）。左右 30 mm（Word の和文の既定と同じ）で、本文の幅 150 mm・10.5pt が 40 字
@@ -49,6 +49,7 @@ TIGHT, CODE_LS = 80, 85  # 表の中・図表の題・出典の行間と、コ�
 # 組んだ直後の本文の指紋を、Drive のファイルの appProperties に残す（gapi.guard が比べる）。revisionId は「24 時間しか有効でなく、内部の理由でも変わる」
 # と公式に書いてあり、直していないのに止まるので使わない（ワークスペースの Research/deck_research/log/20261009_en_gdocs_generation.md の 1-2。2 回読んで同じ指紋になることを確かめた）
 STAMP = "docs_py_body"
+FONTS = "docs_py_fonts"  # 組んだときの本文と等幅の書体（タブで区切る）。check はこれと比べる（今いるフォルダの doc.md が別の文書のものでも、取り違えない）
 SRC = "docs_py_src"  # 組んだ doc.md のフォルダ（factory.toml のフォルダからの相対パス）。check が build/ の外で動いても、照合の相手を見つける
 P_FIELDS = ("namedStyleType,alignment,indentStart,indentFirstLine,indentEnd,shading,borderTop,borderBottom,borderLeft,borderRight,"
             "spaceAbove,spaceBelow,lineSpacing,keepWithNext")
@@ -414,6 +415,7 @@ def build(did, doc, force=False):
         if carrier:  # 貼った画像は文書の中に写し取られているので、仮のファイルは消してよい
             delete(carrier)
     footer(did, doc.name)
+    gapi.stamp(did, f"{FONT}\t{MONO}", FONTS)  # 版（STAMP）より先に書く。途中で止まっても、版の新しい文書に前の書体が残らない
     gapi.stamp(did, fingerprint(did), STAMP)
     gapi.stamp(did, os.path.relpath(os.getcwd(), gapi.factory_path().parent), SRC)
     print(json.dumps({"documentId": did, "url": f"https://docs.google.com/document/d/{did}/edit", "blocks": len(doc.blocks),
@@ -465,8 +467,10 @@ def need_theme(doc):
 
 def load_theme(t):
     """テーマの版面・大きさ・色を入れる（style_reqs・put_table・Doc が読む値）。書いていない値は既定のまま。
-    page・margins は mm（[幅, 高さ]・[上下, 左右]）、body・headings は pt、heading・table_head は 6 桁の色。description は使い分けの説明（cmd_themes）。"""
-    global PAGE_MM, MARGIN_TB_MM, MARGIN_LR_MM, TEXT_MM, TABLE_HEAD, SCALE
+    page・margins は mm（[幅, 高さ]・[上下, 左右]）、body・headings は pt、heading・table_head は 6 桁の色。description は使い分けの説明（cmd_themes）。
+    font・mono は本文と等幅の書体。font は和文を描けると確かめた書体（slides.py の JP_FONTS）だけ。文字の幅の見込みは Noto Sans JP と Cascadia Mono のまま。"""
+    global PAGE_MM, MARGIN_TB_MM, MARGIN_LR_MM, TEXT_MM, TABLE_HEAD, SCALE, FONT, MONO
+    FONT, MONO = theme_font(t), theme_mono(t)  # 書体の確かめはスライドと同じ（和文を描けない書体、リガチャのある等幅を止める）
     PAGE_MM = tuple(t.get("page", PAGE_MM))
     MARGIN_TB_MM, MARGIN_LR_MM = t.get("margins", (MARGIN_TB_MM, MARGIN_LR_MM))
     TABLE_HEAD = tuple(t.get("table_head", TABLE_HEAD))
@@ -907,6 +911,12 @@ def source_dir(did):
     return p if p and os.path.isfile(os.path.join(p, "doc.md")) else None
 
 
+def built_fonts(did):
+    """build が文書に残した (本文, 等幅) の書体（FONTS）。残していない文書は、テーマで書体を変えられる前の版で組んだものなので、既定の書体。"""
+    v = request("GET", f"{DRIVE}/files/{did}?supportsAllDrives=true&fields=appProperties").get("appProperties", {}).get(FONTS, "")
+    return tuple(v.split("\t")) if v.count("\t") == 1 else (FONT_DEFAULT, MONO_DEFAULT)
+
+
 def source_checks(doc, d):
     """doc.md と比べる（doc.md と組んだ文書の照合、テンプレートとの照合、元の文書との骨組みの比較）。戻り: 要修正があるか。"""
     if not d:
@@ -945,7 +955,8 @@ def cmd_check(src):
     if src:  # 画像のパスは build/ からなので、そこで読む（出力は /tmp に書く）
         os.chdir(src)
     md = load_doc() if src else None
-    hard = lint.lint_gdoc(doc, r := lint.Report(), template=bool(md and (md.meta.get("template") or md.meta.get("source"))))  # テンプレートとその見本は、節の順をテンプレートが決める
+    font, mono = built_fonts(did)  # 書体は組んだときのもの（doc.md のテーマではない）
+    hard = lint.lint_gdoc(doc, r := lint.Report(), template=bool(md and (md.meta.get("template") or md.meta.get("source"))), font=font, mono=mono)  # テンプレートとその見本は、節の順をテンプレートが決める
     if not any(w in doc["title"].lower() for w in ("tmp", "template", "作業用", "テンプレート")):  # 一時の文書は数えない（gslides.py と同じ）
         lint.log_run(r, did)
     for f in glob.glob(f"{d}/p-*.png"):
@@ -1006,6 +1017,20 @@ def selftest():
     load_theme({"page": [215.9, 279.4], "margins": [12.7, 12.7], "body": 10, "headings": [12, 11, 10.5], "heading": "4A86E8", "table_head": ["F3F3F3", TEXT]})
     assert PAGE_MM == (215.9, 279.4) and TEXT_MM == 190.5 and STYLES["NORMAL_TEXT"][0] == 10 and STYLES["HEADING_2"][:3] == (11, True, "4A86E8")
     assert TABLE_HEAD == ("F3F3F3", TEXT) and STYLES["HEADING_1"][3:] == rest
+    assert (FONT, MONO) == ("Noto Sans JP", "Cascadia Mono")  # 書かなければ既定の書体
+    load_theme({"font": "BIZ UDPGothic", "mono": "IBM Plex Mono"})
+    w = Writer(1)
+    w.mono(1, "a あ", 9)
+    assert {r["updateTextStyle"]["textStyle"]["weightedFontFamily"]["fontFamily"] for r in w.reqs} == {"IBM Plex Mono"}  # テーマの mono で組む
+    assert any(x["textStyle"]["weightedFontFamily"]["fontFamily"] == "BIZ UDPGothic" for r in style_reqs() if "updateNamedStyle" in r for x in [r["updateNamedStyle"]["namedStyle"]])
+    for bad in ({"font": "Inter"}, {"font": ["BIZ UDPGothic"]}, {"mono": "Fira Code"}):
+        try:
+            load_theme(bad)
+            raise AssertionError(f"{bad} を通した")
+        except SystemExit:
+            pass
+    got = lambda props: (globals().__setitem__("request", lambda *a, **k: {"appProperties": props}), built_fonts("x"))[1]
+    assert got({FONTS: "BIZ UDPGothic\tIBM Plex Mono"}) == ("BIZ UDPGothic", "IBM Plex Mono") and got({}) == ("Noto Sans JP", "Cascadia Mono") != (FONT, MONO)  # 組んだときの書体。印のない文書は、入れたテーマによらず既定
     print("selftest ok")
 
 

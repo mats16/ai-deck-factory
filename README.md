@@ -80,6 +80,40 @@ pi install git:github.com/mats16/ai-deck-factory        # git から
 
 自分だけの画像は `assets/` に置く。`slides.asset()` はここを先に探し、なければ `deck-build/assets/` を使う。
 
+## 書体
+
+テーマに書けば変えられる。書かなければ既定の書体で組む。
+
+| 使うところ | 書く場所 | 既定 | 書ける書体 |
+|---|---|---|---|
+| スライドの本文 | `[slides.themes.<名前>] font`（`template.py` がマスターに書く） | Noto Sans JP | 下の「本文の書体」の 18 個（`slides.py` の `JP_FONTS`）。ほかは `template.py` が止める |
+| スライドのコード | `[slides.themes.<名前>] mono` | Cascadia Mono | Google Fonts の等幅の書体。リガチャのある書体（`LIGATURE_MONO`）は止める |
+| ドキュメントの本文 | `[docs.themes.<名前>] font` | Noto Sans JP | スライドの本文と同じ 18 個 |
+| ドキュメントのコード | `[docs.themes.<名前>] mono` | Cascadia Mono | スライドのコードと同じ |
+
+- **文字の幅の見込みは、既定の 2 つの書体で測った値のまま。** `slides.py` の `em_width`・`ASCII_EM`（Noto Sans JP Regular）と `MONO_EM`（Cascadia Mono、0.586 em）は、書体を替えても変えない。ほかの書体では折り返しの見込み（組むときの警告、`d.card` の高さ、lint の行数）がずれるので、Google が描いたページの画像で見る。
+- **Google Fonts にない名前は、API が受け付けて黙って別の書体で描く。** 書いたら見本のページ（`template.py <名前>`、ドキュメントはそのテーマの文書）を組み、画像で確かめる。
+- lint の「書体が … でない」「等幅の … に和文」は、テーマの書体と比べる。
+
+**本文の書体（和文あり）:** 2026-10-07 に、テンプレートを複製した試しのデッキで同じ文を書体ごとに描き、Google Slides で描けることを確かめた。Google Docs で組んでいるのは Noto Sans JP だけで、ほかは Docs では確かめていない。印象ごとの選び方は `deck-template/SKILL.md` の「書体」。
+
+| 分け | 書体 |
+|---|---|
+| ゴシック | Noto Sans JP（既定）、IBM Plex Sans JP、BIZ UDPGothic、BIZ UDGothic、Zen Kaku Gothic New、M PLUS 1p、M PLUS 2、LINE Seed JP、Murecho、Sawarabi Gothic |
+| 丸ゴシック | M PLUS Rounded 1c、Zen Maru Gothic、Kosugi Maru |
+| 明朝 | Noto Serif JP、BIZ UDPMincho、Shippori Mincho、Zen Old Mincho |
+| 手書き風 | Klee One |
+| 描けない（明朝と欧文のセリフ体になる。`template.py` の `NO_RENDER`） | Noto Sans CJK JP、Hiragino Sans、Yu Gothic |
+
+**コードの等幅の書体:** 2026-10-09 に調べた。等幅には和文の字形がないので、和文は本文の書体のまま、英数字の続きにだけ付ける。
+
+| 分け | 書体 |
+|---|---|
+| Google Slides で描いたページの画像で確かめた | Cascadia Mono（既定。リガチャなし） |
+| リガチャがないことを、Google Fonts の版を HarfBuzz で組んで確かめた（Google が描いたページでは見ていない） | Source Code Pro、Fira Mono、IBM Plex Mono、Roboto Mono |
+| リガチャが出る（`->` が矢印 1 字になる。`mono` に書くと止める） | JetBrains Mono（Google Slides で出た）、Fira Code、Cascadia Code |
+| Google Fonts にない（Arial で描かれる） | Iosevka、Hack、SF Mono、Menlo、Commit Mono、Monaspace |
+
 ## 決まりの層と育て方
 
 ワークスペースは、やり取りの積み重ねで決まりと点検を育てていく 1 つのプロダクト。大元（プラグイン）を直すべきものだけを Issue にし、持ち主が Issue から直す。
@@ -138,6 +172,9 @@ gcloud の既定の OAuth クライアントで作った認証情報は、`googl
 - 2026-10-13: 右下のページ番号を、左下の著作権表示と同じ 9pt・行間 100 にし、文字の高さをそろえる。著作権表示の位置は変えない。テンプレート（`template.py`）のほか、前のテンプレートから作ったデッキも組み直せばそろうよう、`slides.py` が各ページの番号に書く。9pt は、塗りのある図形の中の補助の文字（本文から 2pt 下）と同じ下限に収まる。Google Slides にはフッターの設定（PowerPoint の「ヘッダーとフッター」）がないので、画面で触れないフッターにはしない（ユーザー「All rights reserved. の位置を維持してページ番号側を合わせてください」「google slides で設定がなければ対応不要です」）。
 - 2026-10-13: 本文のページの見出しの既定を、主張の文から短い名詞句に変える。言い切りの文にするのは、判断を頼むページと数字の結論のページの 2〜3 枚だけにし、構成案の型の欄に「言い切り」と書く。名詞句の見出しのページでは、言えること（だから何か）をリードか本文か結論バンドで言う。ドキュメントの見出し（H1〜H3）も名詞句にし、主張は段落の 1 文目で言う。見出しに句点を付けず、「〜ください」「〜します」で終えない。lint は、見出しの句点と「〜ください・〜します」で終わる見出しを要修正、言い切りの見出しが 3 枚を超えるデッキを要確認に出す。ワークスペースの決まりとして育てていたものを、プラグインの既定にした（ユーザー「見出しは短い名詞句。言い切りは、判断を頼むページや数字の結論が要るページの2、3枚だけ／見出しに句点をつけない。「〜ください」「〜します」で終えない」。上げるときに「プラグインの既定を変えてよい」）。
 
+- 2026-10-13: テーマに入れない色（`TEXT`・`RULE`・`RED_SOFT`・`STAGE_TEXT`・`DECOR`）と著作権表示を、`[slides.themes.<名前>]` に書いてテーマごとに変えられるようにする。書かなければ今の値（色は `slides.py` の既定、著作権表示は `[brand]`）。デッキは、`template.py` がマスターのページ番号の枠の代替テキストに書いたテーマの名前を持ち、`slides.py build` がそれで `factory.toml` から値を引く（Drive の `properties` は複製で消え、代替テキストは残ることを 2026-10-13 に確かめた）。ドキュメントの色とフッター、表紙の社名（`company`）は範囲の外にした（ユーザー「スライドのテーマごとに「固定の 5 色」と「著作権表示（copyright）」を変えられるようにして、PR にしてください。」）。
+- 2026-10-13: 書体も `factory.toml` で変えられるようにする。スライドの等幅は `[slides.themes.<名前>] mono`、ドキュメントは `[docs.themes.<名前>] font`・`mono`。文字の幅の見込みは Noto Sans JP と Cascadia Mono で測った値のまま（ユーザー「内部の文字幅の計算などは Noto Sans JP と Cascadia Mono 前提のままで良いので、factory.toml で変更可能にしてください。未指定時は Noto Sans JP と Cascadia Mono を、使うで良いです。」）。本文の書体は和文を描けると確かめた `JP_FONTS` に限り、等幅はリガチャの出る書体だけを止める。使える書体と確かめた書体を README の「書体」に載せる（ユーザー「README にサポートフォント、検証済みフォントの表示を追加して」）。
+
 ## 入れていないもの
 
 `databricks-updates`（毎朝のアップデートのまとめ）と `pi-compaction-report`（pi の運用レポート）は、使う人のチャット・フォルダ・セッションに結びついた個人の定期の作業なので入れていない。
@@ -150,6 +187,7 @@ gcloud の既定の OAuth クライアントで作った認証情報は、`googl
 - **外部に出すとき:** 2026-10-12 に会社ごとの値をワークスペースに分けた。材料を集める道具は `factory.toml` の `[sources]`、社名・著作権表示・表紙のロゴは `[brand]`（`copyright` がないか仮の値なら組めない。factory-doctor が要修正）、テーマは `[slides.themes.<名前>]`・`[docs.themes.<名前>]`（`url`・`description`・`base`）、会社の素材はワークスペースの `assets/`、ドキュメントのテンプレートは `rules/doc-build/templates/`、会社の道具の使い方は `rules/`。プラグインに残る会社の前提は、組み込みのテーマ visual・company の色（Databricks のブランドの色）だけ。
 - **Documents を移す:** 顧客フォルダの `CLAUDE.md` は `memory.md` に名前を変える（factory-doctor が「顧客の memory」で出す）。`~/Documents` は今も自分の `.agents/skills/` で動いている（factory-doctor が「スキルの重なり」を出す）。移すときは、Documents の AGENTS.md の表を雛形の形（スキルの名前で指す。`rules/` も開く）にし、`.agents/skills/` の中核の 6 つを外し、`.agents/skills/dreaming/log/` を `.factory/dreaming/log/` に、`.agents/skills/deck-build/log/lint_runs.jsonl` を `.factory/lint_runs.jsonl` に移す。`deck-research` の記録は 2026-10-12 に `Research/deck_research/` へ移した。旧い場所の `.agents/skills/deck-research/log` は、移したときに進んでいた会話のための symlink なので、`.agents/skills/` と一緒に消す。ワークスペースの AGENTS.md の「方針を決めたあとを AI のレビューでそのまま作るか、人がレビューするかも選んでもらう」は、雛形の今の文（`[review] plan_reviewer` に従う）に替える（ワークスペースの決まりが優先するので、残すと毎回聞く。factory-doctor が「AGENTS.md の方針のレビュー」に出す）。
 - **代表の 3 枚の選び方:** 図・カード・表かコードから 1 枚ずつ選ぶ案と、`d.table`・`d.card` の決まった形だからと 3 枚から外すのをやめる案は、2026-10-13 の直しのあとの 10 本の記録で、当て漏れが減ったかを見てから決める。組むときの警告は最終行の字数だけを見て、文節の途中の折り返しは見ていない。
+- **テーマの残り:** テーマに入れない色・`copyright`・`mono` は組むたびに `factory.toml` から引くので、デッキを作ったあとで変えると、組み直したデッキでは役割の色だけが当時のままになる。ドキュメントの色（`docs.py` の `TEXT`・`RULE`）とフッターの著作権表示、表紙の社名（`company`）は、テーマごとには変えられない（同じ仕組みで足すかは、要るときに決める）。書体ごとの文字の幅は測っていない（既定の 2 つの値で見込む）。
 - **文体の残り:** 2026-10-13 の調べのうち、AI らしくない文章の癖（「X ではなく Y」「することができる」、定型の前置き・締め、同じ文末の 3 連続、新しい AI の語、書くときに見本と具体を渡すこと）と、読ませる資料（経営層や別の部署に送る、印刷して配る）で説明文を です・ます にしてよいかは、入れていない。後者は一次資料のない推測なので、読ませる資料で です・ます の指摘が続けて残るかを見てから決める。
 - **kaizen の Issue の残り:** 画像は自分の fork（持ち主は元のリポジトリ）の `pr-assets` ブランチに置くので、Issue を出すにも fork が要る。持ち主が文や ID を変えて入れると、ワークスペースの写しを消す案（`ledger.py candidates` の「写しを消す」）が出ず、dreaming の重なりの見直しに任せる。どちらも、困ったら直す。
 - **見出しの点検の残り:** 言い切りの見出しは、読点と文末の仮名で見込みを出しているだけで、形態素解析はしていない。ドキュメントの言い切りの見出し（H2・H3 の主張の文）は数えていない。要修正と要確認の分け方は、PR のレビューで決め直してよい。
