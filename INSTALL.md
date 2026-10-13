@@ -8,7 +8,7 @@ README の「会話で入れる」のプロンプトを貼られたエージェ�
 
 - **この会話には、まだスキルがない。** 入れたスキルは次の会話から読み込まれる。この会話では `/ai-deck-factory:factory-init` や `/skill:factory-init` を呼ばずに、入れた場所の `SKILL.md` を開いて従う（4）。
 - **ワークスペースだけに入れる。** `~/.claude/settings.json`・`~/.pi/agent/settings.json` は変えない。ほかのフォルダの会話にはスキルが出ない。
-- **ユーザーが決めることは聞いてから進める。** 場所、PR を出すか、ツールを入れるか、`factory.toml` の値。ブラウザが開くログイン（`gcloud auth application-default login`）は、ユーザーに回してもらう。
+- **ユーザーが決めることは聞いてから進める。** 場所、プラグインに Issue を出すか、ツールを入れるか、`factory.toml` の値。ブラウザが開くログイン（`gcloud auth application-default login`）は、ユーザーに回してもらう。
 - **あるファイルは上書きしない。** factory-init の `init.py` も上書きしない。
 - 手順の `<ワークスペース>` と `<プラグイン>` は、1 と 3 で決まったパスに置き換える。スクリプトは今いるフォルダから `factory.toml` を探すので、ワークスペースのコマンドは `cd <ワークスペース> &&` を付けて回す。
 

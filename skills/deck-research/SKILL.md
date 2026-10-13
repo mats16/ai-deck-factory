@@ -29,7 +29,7 @@ description: 資料づくり（スライド・ドキュメントの中身と見�
    [deck-research-001] 資料の中身は日本語圏の発信のほうが質が高く、仕組み（スキル・指示）は英語圏のほうが多い（見立て。初回の調査でもそうだった）。
 3. [deck-research-002] **テーマごとにサブエージェントを並べる。** バックグラウンドで同時に走らせる。Claude Code では `model: "opus"` を渡す（省くと会社の設定のフックで haiku になる）。依頼文は下の型を使う。報告の全文は `log/` に書かせ、こちらには要点だけを返させる（会話の文脈を節約し、コンパクションでも残る）。
 4. **報告を読み、state.md と突き合わせる。** 採用済み・見送り済みのものは除き、新しいものと、前回から変わったものだけを拾う。
-5. **反映先を決める。** 反映するのはプラグインの `skills/` で、スキル `factory-kaizen` の PR にする（`sources.md` も同じ PR に入れる。`log/`・`state.md` はワークスペースに残し、PR に入れない）。誰が使っても同じ知見だけを入れ、その人・その組織だけのことはワークスペースの `AGENTS.md`・`rules/` への提案にする（`deck-practices/rules.md` の「決まりの層」）。毎回必ず守らせたいもので機械で見られるもの → `lint.py`。作るときだけ要るもの → `deck-practices`（中身・見た目）か `deck-build` の `slides.md`・`doc-build` の `SKILL.md`（Slides API・Docs API の書き方）。どの会話でも要るもの → `AGENTS.md`（短く。資料を作るときだけ要るものは入れない。20,000 バイトまで。dreaming の 4h）。同じ失敗が 2 回起きたら指示に足す（`Research/deck_research/log/20261006_en_skills_instructions.md` の 1-17）。**AGENTS.md の方針や値と食い違うものは、反映する前にユーザーに聞く。**
+5. **反映先を決める。** 反映するのはプラグインの `skills/` で、スキル `factory-kaizen` の Issue にする（`sources.md` の直しも同じ Issue の変更案に入れる。`log/`・`state.md` はワークスペースに残し、Issue に入れない）。誰が使っても同じ知見だけを入れ、その人・その組織だけのことはワークスペースの `AGENTS.md`・`rules/` への提案にする（`deck-practices/rules.md` の「決まりの層」）。毎回必ず守らせたいもので機械で見られるもの → `lint.py`。作るときだけ要るもの → `deck-practices`（中身・見た目）か `deck-build` の `slides.md`・`doc-build` の `SKILL.md`（Slides API・Docs API の書き方）。どの会話でも要るもの → `AGENTS.md`（短く。資料を作るときだけ要るものは入れない。20,000 バイトまで。dreaming の 4h）。同じ失敗が 2 回起きたら指示に足す（`Research/deck_research/log/20261006_en_skills_instructions.md` の 1-17）。**AGENTS.md の方針や値と食い違うものは、反映する前にユーザーに聞く。**
 6. **state.md と sources.md を更新する。** 新しい情報源、外れだった検索語、アクセスのコツも足す。
 
 ## 調べ方の決まり

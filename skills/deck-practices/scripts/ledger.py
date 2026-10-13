@@ -15,12 +15,12 @@ usage:
   ledger.py candidates                             決まりごとの次の一手（下ろす・書き直す・条件を足す・上げる・写しを消す・上書きを見直す）と、その決まりへの前の提案
   ledger.py next <接頭辞>                          次の決まりの ID（ワークスペースの決まりは ws-visual のように ws- を付ける）
   ledger.py propose --file <ワークスペースのファイル> --new <新しい文> [--old <今の文>] [--rule <ID>] --why <要点> [--src c-1,c-2] [--kind <種類>] [--plugin] [--replaces ws-x-001,…]
-                                                   --plugin は変更先がプラグイン（--file は skills/ からのパス）。当てず、factory-kaizen で PR にする
-                                                   --replaces は、その PR が届いたら要らなくなるワークスペースの決まり（上書きなど。出典の指摘の決まりは書かなくてよい）
-  ledger.py pending [--status 却下|適用済み|戻した|取り下げ|PR にした|all]   提案と差分（既定は未適用。却下は理由も）
+                                                   --plugin は変更先がプラグイン（--file は skills/ からのパス）。当てず、factory-kaizen で Issue にする
+                                                   --replaces は、その Issue の直しが届いたら要らなくなるワークスペースの決まり（上書きなど。出典の指摘の決まりは書かなくてよい）
+  ledger.py pending [--status 却下|適用済み|戻した|取り下げ|Issue にした|all]   提案と差分（既定は未適用。却下は理由も）
   ledger.py apply <P-ID ...|all>                   提案を当てる（今の文がそのまま 1 か所にあるときだけ。プラグインへの提案は当てない）
-  ledger.py sent <P-ID> --pr <URL> [--rule <ID>]   プラグインへの提案を PR にした（出典の指摘をその決まりにつなぐ。--rule は PR で提案と違う ID にしたとき）
-  ledger.py reject <P-ID> --reason <理由>           ユーザーが却下した（dreaming は同じ趣旨の提案をもう出さない）。PR にしたものが断られたときも（出典の指摘は前の戻し先に戻る）
+  ledger.py sent <P-ID> --issue <URL> [--rule <ID>]   プラグインへの提案を Issue にした（出典の指摘をその決まりにつなぐ。--rule は Issue で提案と違う ID にしたとき）
+  ledger.py reject <P-ID> --reason <理由>           ユーザーが却下した（dreaming は同じ趣旨の提案をもう出さない）。Issue にしたものが断られたときも（出典の指摘は前の戻し先に戻る）
   ledger.py withdraw <P-ID か Q-ID> --reason <理由>   出した側が取り下げる（書き間違いの出し直しなど。却下には数えない）
   ledger.py undo <P-ID>                            当てた提案を逆向きに当てて戻す
   ledger.py drift                                  当てたあとに手で直された・消えた決まり（ユーザーが直したものとして扱う）
@@ -29,7 +29,7 @@ usage:
   ledger.py questions [--all]                      判断待ち（--all は答えたものと取り下げたものも）
   ledger.py review --deck <資料のフォルダ> --table <指摘の表のファイル>   deck-review の指摘の表から、決まりの列のある行の結果を取り込む（同じ行は 2 度数えず、周をまたぐ同じ行はあとの周の結果）
   ledger.py --selftest
-台帳の原文には顧客のことが入る。.factory/ から外（PR・チャット）に写さない。"""
+台帳の原文には顧客のことが入る。.factory/ から外（Issue・チャット）に写さない。"""
 import argparse, difflib, hashlib, json, re, sys, tempfile, time
 from collections import Counter
 from datetime import datetime, timezone
@@ -128,7 +128,7 @@ def rule_arg(s):
 def state(ws):
     """台帳を読み直して、いまの指摘（戻し先は最後の route）、提案と判断待ち（状態は最後の出来事）、レビューの結果にする。
     指摘の recur（再発）は、初めてつないだ決まりの ID（first。ファイルは数えない）が、言われたときにあったか。つないだ時刻ではなく、言われた時刻で見る。
-    台帳の提案で作った決まり（ID を書き入れた提案を当てた・PR にした時から、戻した・断られた時まで）は、その間に言われたか（作り直したら、どの間でもよい）。
+    台帳の提案で作った決まり（ID を書き入れた提案を当てた・Issue にした時から、戻した・断られた時まで）は、その間に言われたか（作り直したら、どの間でもよい）。
     台帳で作っていなければ、プラグインの決まりは前からある。ワークスペースの決まりは、初めてつないだ指摘のうち、いちばん早く言われたときにできたとみなす。
     あとで別の決まりに移しても（大元に上げたときなど）first は変えない。未・戻さないに戻したら決め直す。"""
     cs, ps, qs, rv = {}, {}, {}, {}
@@ -154,11 +154,11 @@ def state(ws):
             else:
                 cs[r["ref"]]["plan"] = r["plan"]
         elif k == "proposal":
-            ps[r["id"]] = {**r, "status": "未適用", "proposed": r["rule"]}  # proposed は提案の文に書いた ID（PR で替えたら rule が替わる）
+            ps[r["id"]] = {**r, "status": "未適用", "proposed": r["rule"]}  # proposed は提案の文に書いた ID（Issue で替えたら rule が替わる）
         elif k in ("applied", "rejected", "withdrawn", "undone", "sent") and r["ref"] in ps:
             p = ps[r["ref"]]
-            intro = introduces(p)  # PR で別の ID にしたときも、もとの提案の文で見る
-            p.update(status={"applied": "適用済み", "rejected": "却下", "withdrawn": "取り下げ", "undone": "戻した", "sent": "PR にした"}[k], seq=n,
+            intro = introduces(p)  # Issue で別の ID にしたときも、もとの提案の文で見る
+            p.update(status={"applied": "適用済み", "rejected": "却下", "withdrawn": "取り下げ", "undone": "戻した", "sent": "Issue にした"}[k], seq=n,
                      **{x: r[x] for x in ("appended", "reason", "prev", "pr", "rule") if x in r})
             if k in ("applied", "sent") and intro and p["rule"] not in made:
                 life.setdefault(p["rule"], []).append([r["ts"], None])
@@ -307,8 +307,8 @@ def candidates(ws, plugin=PLUGIN):
     _, ps, _, _ = state(ws)
     plug = "\n".join(texts([plugin], {Path(__file__).resolve()}))
     mine = "\n".join(texts([ws / "AGENTS.md", ws / "rules", *(ws / "Customers").glob("*/memory.md")]))  # ワークスペースの決まりと顧客の memory
-    sent = [p for p in ps.values() if p["status"] == "PR にした"]
-    promoted = {t: p for p in sent for t in [*p.get("prev", {}).values(), *p.get("replaces", [])] if t.startswith("ws-")}  # PR が届いたら要らなくなるワークスペースの決まり（出典の指摘の前の戻し先と --replaces）→ その提案
+    sent = [p for p in ps.values() if p["status"] == "Issue にした"]
+    promoted = {t: p for p in sent for t in [*p.get("prev", {}).values(), *p.get("replaces", [])] if t.startswith("ws-")}  # Issue の直しが届いたら要らなくなるワークスペースの決まり（出典の指摘の前の戻し先と --replaces）→ その提案
     out = []
     for k, x in tally(ws).items():
         if not k.startswith("lint:") and f"[{k}]" not in (mine if k.startswith("ws-") else plug):
@@ -320,9 +320,9 @@ def candidates(ws, plugin=PLUGIN):
             out.append(("書き直す", k, f"{layer}。残した（誤り）{d['残した（誤り）']} 本の資料（拾う範囲が外れている。消す・緩めるは判断待ち）"))
         if d["聞く"] >= TWICE:
             out.append(("条件を足す", k, f"{layer}。聞く {d['聞く']} 本の資料（決まりからは決めきれない）"))
-        if k.startswith("ws-") and not k.startswith("ws-memory-") and x["顧客"] >= TWICE and k not in promoted:  # PR にしたものは出し直さない
+        if k.startswith("ws-") and not k.startswith("ws-memory-") and x["顧客"] >= TWICE and k not in promoted:  # Issue にしたものは出し直さない
             out.append(("上げる", k, f"顧客 {x['顧客']} 社・資料 {len(x['decks'] - {''})} 本（その人の好みや顧客の事情でなければ、プラグインに）"))
-    gone = {t: p for t, p in promoted.items() if f"[{t}]" in mine and landed(p, plugin)}  # PR が入っているプラグインに届いたら、ワークスペースの写しは要らない
+    gone = {t: p for t, p in promoted.items() if f"[{t}]" in mine and landed(p, plugin)}  # Issue の直しが入っているプラグインに届いたら、ワークスペースの写しは要らない
     for w, p in sorted(gone.items()):
         out.append(("写しを消す", w, f"{p['rule']} がプラグインに入った（{p['id']}、{p.get('pr', '')}）"))
     for w, base in ((w, b) for w, clause in OVERRIDE.findall(mine) for b in PLUGIN_ID.findall(clause) if w not in gone):
@@ -340,8 +340,8 @@ def candidates(ws, plugin=PLUGIN):
 
 
 def landed(p, plugin):
-    """プラグインへの提案の文（PR で ID を替えたなら、替えた ID にした文）が、入っているプラグインの行き先のファイルにあるか。
-    ID だけでは見ない（今ある決まりを書き直す提案は、ID が前からある）。PR で文を変えたら届いたとは分からないので、写しを消す案を出さない（重なりは dreaming の 4e で見る）。"""
+    """プラグインへの提案の文（Issue で ID を替えたなら、替えた ID にした文）が、入っているプラグインの行き先のファイルにあるか。
+    ID だけでは見ない（今ある決まりを書き直す提案は、ID が前からある）。Issue で文を変えたら届いたとは分からないので、写しを消す案を出さない（重なりは dreaming の 4e で見る）。"""
     tag = f"[{p['proposed']}]"
     want = [x.replace(tag, f"[{p['rule']}]").strip() for x in p["new"].splitlines() if p["proposed"] and tag in x]
     f = plugin / p["file"]
@@ -352,7 +352,7 @@ def next_id(ws, prefix):
     found = texts([PLUGIN, ws / "rules", ws / "AGENTS.md", ws / "Customers"], {Path(__file__).resolve()})  # このファイルの selftest の ID は数えない
     num = re.compile(rf"{re.escape(prefix)}-(\d{{3}})")
     ids = [m.group(1) for t in found for m in RULE_ID.finditer(t)]
-    ids += [r.get("rule", "") for r in records(ws) if r["kind"] in ("proposal", "sent")]  # 提案だけで、まだ当てていない ID と、PR で替えた ID も使ったものにする
+    ids += [r.get("rule", "") for r in records(ws) if r["kind"] in ("proposal", "sent")]  # 提案だけで、まだ当てていない ID と、Issue で替えた ID も使ったものにする
     used = [int(m.group(1)) for x in ids if (m := num.fullmatch(x))]
     return f"{prefix}-{max(used, default=0) + 1:03d}"
 
@@ -360,7 +360,7 @@ def next_id(ws, prefix):
 def target(ws, f):
     p = (ws / f).resolve()
     if not p.is_relative_to(ws) or p.is_relative_to(PLUGIN):
-        sys.exit(f"変更先はワークスペースの中のファイルだけ（プラグインは factory-kaizen で PR にする）: {f}")
+        sys.exit(f"変更先はワークスペースの中のファイルだけ（プラグインは factory-kaizen で Issue にする）: {f}")
     return p
 
 
@@ -398,7 +398,7 @@ def apply(ws, ids):
         if p["status"] != "未適用":
             sys.exit(f"{i} は {p['status']}")
         if p.get("plugin"):
-            print(f"{i}: プラグインへの提案なので当てない（factory-kaizen で PR にし、ledger.py sent {i} --pr <URL> で残す）")
+            print(f"{i}: プラグインへの提案なので当てない（factory-kaizen で Issue にし、ledger.py sent {i} --issue <URL> で残す）")
             continue
         f = target(ws, p["file"])
         text = f.read_text(encoding="utf-8") if f.exists() else ""
@@ -415,7 +415,7 @@ def apply(ws, ids):
 
 
 def close(ws, p, kind, **extra):
-    """提案を当てた・PR にした出来事を書き、出典の指摘をその決まりにつなぐ。戻すときのために、前の戻し先を残す。"""
+    """提案を当てた・Issue にした出来事を書き、出典の指摘をその決まりにつなぐ。戻すときのために、前の戻し先を残す。"""
     cs = state(ws)[0]
     write(ws, {"kind": kind, "ref": p["id"], "prev": {c: cs[c]["to"] for c in p["src"] if c in cs}, **extra})
     for c in p["src"]:
@@ -530,7 +530,7 @@ def main(argv):
     s = sub.add_parser("withdraw"); s.add_argument("id"); s.add_argument("--reason", required=True)
     s = sub.add_parser("undo"); s.add_argument("id")
     sub.add_parser("drift")
-    s = sub.add_parser("sent"); s.add_argument("id"); s.add_argument("--pr", required=True); s.add_argument("--rule", type=rule_arg)
+    s = sub.add_parser("sent"); s.add_argument("id"); s.add_argument("--issue", dest="pr", required=True); s.add_argument("--rule", type=rule_arg)
     s = sub.add_parser("ask"); s.add_argument("--q", required=True); s.add_argument("--rule", type=rule_arg); s.add_argument("--src")
     s = sub.add_parser("answer"); s.add_argument("id"); s.add_argument("--a", required=True)
     s = sub.add_parser("questions"); s.add_argument("--all", action="store_true")
@@ -567,11 +567,11 @@ def main(argv):
     elif a.cmd in ("reject", "withdraw", "sent"):
         _, ps, qs, _ = state(ws)
         p = ps.get(a.id) or (qs.get(a.id) if a.cmd == "withdraw" else None) or sys.exit(f"提案がない: {a.id}")
-        sent = p["status"] == "PR にした"  # PR が断られた・取り下げたときは閉じられる
+        sent = p["status"] == "Issue にした"  # Issue が断られた・取り下げたときは閉じられる
         p["status"] in ("未適用", "未回答") or (sent and a.cmd != "sent") or sys.exit(f"{a.id} は {p['status']}")
         if a.cmd == "sent":
             p.get("plugin") or sys.exit(f"{a.id} はワークスペースへの提案。apply で当てる")
-            renamed = {"rule": a.rule} if a.rule else {}  # PR で提案と違う ID にした
+            renamed = {"rule": a.rule} if a.rule else {}  # Issue で提案と違う ID にした
             close(ws, {**p, **renamed}, "sent", pr=a.pr, **renamed)
         else:
             write(ws, {"kind": {"reject": "rejected", "withdraw": "withdrawn"}[a.cmd], "ref": a.id, "reason": a.reason})
@@ -703,7 +703,7 @@ def selftest():
                 raise AssertionError("時刻でない --at を通した")
             except SystemExit:
                 pass
-            # プラグインへの提案は当てず、PR にしたか却下で閉じる。PR にしたら出典の指摘をつなぎ、断られたら前の戻し先に戻す
+            # プラグインへの提案は当てず、Issue にしたか却下で閉じる。Issue にしたら出典の指摘をつなぎ、断られたら前の戻し先に戻す
             with quiet():
                 main(["add", "--deck", ".", "--quote", "表は分けて（別の会話）", "--at", "2000-01-01T09:00+09:00"])
             assert state(ws)[0]["c-0009"]["at"] == "2000-01-01T00:00:00Z"  # --at は UTC にそろえる
@@ -715,7 +715,7 @@ def selftest():
                 main(["apply", "all"])
             ps = state(ws)[1]
             assert [ps[i]["status"] for i in ("P0010", "P0011", "P0012")] == ["未適用", "未適用", "適用済み"]
-            for argv in (["sent", "P0012", "--pr", "u"], ["propose", "--plugin", "--file", "../../x.md", "--new", "x", "--why", "y"]):
+            for argv in (["sent", "P0012", "--issue", "u"], ["propose", "--plugin", "--file", "../../x.md", "--new", "x", "--why", "y"]):
                 try:
                     with quiet():
                         main(argv)
@@ -723,26 +723,26 @@ def selftest():
                 except SystemExit:
                     pass
             with quiet():
-                main(["sent", "P0010", "--pr", "https://github.com/o/r/pull/1"])
+                main(["sent", "P0010", "--issue", "https://github.com/o/r/issues/1"])
                 main(["reject", "P0011", "--reason", "この人だけの好み"])
-                assert [p["id"] for p in pending(ws, "PR にした")] == ["P0010"] and "P0011" in [p["id"] for p in pending(ws, "却下")]
+                assert [p["id"] for p in pending(ws, "Issue にした")] == ["P0010"] and "P0011" in [p["id"] for p in pending(ws, "却下")]
             c = state(ws)[0]["c-0009"]
-            assert c["to"] == "visual-099" and c["recur"] is False  # PR の決まりを作った指摘で、再発ではない
+            assert c["to"] == "visual-099" and c["recur"] is False  # Issue にした決まりを作った指摘で、再発ではない
             try:
-                main(["sent", "P0010", "--pr", "u"])
-                raise AssertionError("PR にしたものをもう一度 PR にした")
+                main(["sent", "P0010", "--issue", "u"])
+                raise AssertionError("Issue にしたものをもう一度 Issue にした")
             except SystemExit:
                 pass
             with quiet():
-                main(["reject", "P0010", "--reason", "マージされなかった"])
+                main(["reject", "P0010", "--reason", "入れずに閉じられた"])
             assert state(ws)[1]["P0010"]["status"] == "却下" and state(ws)[0]["c-0009"]["to"] == "未"
-            # 決まりができた時刻は、その ID を書き入れた提案だけで決める。今ある決まりの書き直しは作らず、戻したら消す。PR で ID を変えたら追う
+            # 決まりができた時刻は、その ID を書き入れた提案だけで決める。今ある決まりの書き直しは作らず、戻したら消す。Issue で ID を変えたら追う
             cid = lambda q: next(c["id"] for c in state(ws)[0].values() if c["quote"] == q)
             pid = lambda w: next(p["id"] for p in state(ws)[1].values() if p["why"] == w)
             with quiet():
                 main(["add", "--deck", ".", "--quote", "既存の決まりなのに", "--at", "2000-01-01T00:00"])
                 main(["propose", "--plugin", "--file", "deck-practices/visual.md", "--old", "- [visual-050] a", "--new", "- [visual-050] b", "--rule", "visual-050", "--why", "書き直す", "--src", cid("既存の決まりなのに")])
-                main(["sent", pid("書き直す"), "--pr", "u"])
+                main(["sent", pid("書き直す"), "--issue", "u"])
             assert state(ws)[0][cid("既存の決まりなのに")]["recur"] is True  # visual-050 は前からプラグインにある
             with quiet():  # 当てる → 戻す → その間に言われる → 作り直す。時刻を離すため、出来事の行は ts を書いて足す
                 main(["propose", "--file", "rules/u.md", "--new", "- [ws-u-001] u", "--rule", "ws-u-001", "--why", "作って戻す"])
@@ -769,12 +769,12 @@ def selftest():
             with quiet():
                 main(["add", "--deck", ".", "--quote", "ID が変わる", "--at", "2000-01-01T00:00"])
                 main(["propose", "--plugin", "--file", "deck-practices/visual.md", "--new", "- [visual-060] x", "--rule", "visual-060", "--why", "ID を変える", "--src", cid("ID が変わる")])
-                main(["sent", pid("ID を変える"), "--pr", "u", "--rule", "visual-061"])
+                main(["sent", pid("ID を変える"), "--issue", "u", "--rule", "visual-061"])
             c = state(ws)[0][cid("ID が変わる")]
             assert (c["to"], c["recur"], state(ws)[1][pid("ID を変える")]["rule"]) == ("visual-061", False, "visual-061")
-            with quiet():  # PR で替えた ID も、次の ID の取り置きに入る
+            with quiet():  # Issue で替えた ID も、次の ID の取り置きに入る
                 main(["propose", "--plugin", "--file", "deck-practices/visual.md", "--new", "- [zz-900] x", "--rule", "zz-900", "--why", "zz"])
-                main(["sent", pid("zz"), "--pr", "u", "--rule", "zz-901"])
+                main(["sent", pid("zz"), "--issue", "u", "--rule", "zz-901"])
             assert next_id(ws, "zz") == "zz-902"
             # 台帳の外で書かれた決まりに、あとから 3 件まとめてつなぐと、いちばん早く言われたものだけが再発でない
             with quiet():
@@ -921,7 +921,7 @@ def selftest_candidates(quiet):
             # 上げた決まりがプラグインに届くまでは、写しを残す
             with quiet():
                 main(["propose", "--plugin", "--file", "deck-practices/visual.md", "--new", "- [visual-099] 表は分ける。", "--rule", "visual-099", "--why", "上げる", "--src", "c-0001,c-0002"])
-                main(["sent", "P0001", "--pr", "https://github.com/o/r/pull/1"])
+                main(["sent", "P0001", "--issue", "https://github.com/o/r/issues/1"])
                 assert not any(a == "写しを消す" for a, _, _ in candidates(ws, plug))
             (plug / "deck-practices" / "visual.md").write_text("- [visual-012] 本文は 16pt。\n- [visual-013] 線は 1pt。\n- [visual-099] 表は分ける。\n")
             with quiet():
@@ -929,7 +929,7 @@ def selftest_candidates(quiet):
             (ws / "rules" / "deck-practices" / "visual.md").write_text("- [ws-visual-002] 本文は 18pt（visual-012 より優先）。\n")
             with quiet():
                 assert not any(a == "写しを消す" for a, _, _ in candidates(ws, plug))  # 消したら出ない
-            # 今ある決まりを書き直す提案は、ID が前からあるので、文が届くまで写しを残す。PR で ID を替えたら、替えた ID の文で見る
+            # 今ある決まりを書き直す提案は、ID が前からあるので、文が届くまで写しを残す。Issue で ID を替えたら、替えた ID の文で見る
             (ws / "rules" / "deck-practices" / "visual.md").write_text("- [ws-visual-002] 本文は 18pt。\n- [ws-visual-006] 線は 2pt。\n")
             with quiet():
                 main(["add", "--deck", "Customers/a/d1", "--quote", "18pt に", "--to", "ws-visual-002"])
@@ -938,13 +938,13 @@ def selftest_candidates(quiet):
                 main(["propose", "--plugin", "--file", "deck-practices/visual.md", "--old", "- [visual-012] 本文は 16pt。", "--new", "- [visual-012] 本文は 18pt。", "--rule", "visual-012", "--why", "書き直す", "--src", c18])
                 main(["propose", "--plugin", "--file", "deck-practices/visual.md", "--new", "- [visual-098] 線は 2pt。", "--rule", "visual-098", "--why", "ID を替える", "--src", c2])
                 pids = [p["id"] for p in state(ws)[1].values() if p["why"] in ("書き直す", "ID を替える")]
-                main(["sent", pids[0], "--pr", "u"])
-                main(["sent", pids[1], "--pr", "u", "--rule", "visual-100"])
+                main(["sent", pids[0], "--issue", "u"])
+                main(["sent", pids[1], "--issue", "u", "--rule", "visual-100"])
                 assert not any(a == "写しを消す" for a, _, _ in candidates(ws, plug))  # まだ 16pt で、visual-100 もない
             (plug / "deck-practices" / "visual.md").write_text("- [visual-012] 本文は 18pt。\n- [visual-013] 線は 1pt。\n- [visual-099] 表は分ける。\n- [visual-100] 線は 2pt。\n")
             with quiet():
                 assert {k for a, k, _ in candidates(ws, plug) if a == "写しを消す"} == {"ws-visual-002", "ws-visual-006"}
-            # PR にした出典の決まりは「上げる」を出し直さない。消した決まりは、レビューの結果が残っても出さない
+            # Issue にした出典の決まりは「上げる」を出し直さない。消した決まりは、レビューの結果が残っても出さない
             (ws / "rules" / "deck-practices" / "visual.md").write_text("- [ws-visual-007] 図は左から。\n- [ws-visual-008] 扉は使わない（visual-012 より優先）。\n")
             t = ws / "review.md"
             t.write_text("p1 | 画像 | 5 | 直す | 図 | 直す | 直した | ws-visual-007\n")
@@ -955,17 +955,17 @@ def selftest_candidates(quiet):
                 assert ("上げる", "ws-visual-007") in {(a, k) for a, k, _ in candidates(ws, plug)}
                 cz = next(c["id"] for c in state(ws)[0].values() if c["quote"] == "図は左から")
                 main(["propose", "--plugin", "--file", "deck-practices/visual.md", "--new", "- [visual-101] 図は左から。", "--rule", "visual-101", "--why", "図", "--src", cz])
-                main(["sent", next(p["id"] for p in state(ws)[1].values() if p["why"] == "図"), "--pr", "u"])
+                main(["sent", next(p["id"] for p in state(ws)[1].values() if p["why"] == "図"), "--issue", "u"])
                 out = candidates(ws, plug)
             assert ("上げる", "ws-visual-007") not in {(a, k) for a, k, _ in out} and ("下ろす", "ws-visual-007") in {(a, k) for a, k, _ in out}
             (ws / "rules" / "deck-practices" / "visual.md").write_text("- [ws-visual-008] 扉は使わない（visual-012 より優先）。\n")
             with quiet():
                 assert not any(k == "ws-visual-007" for _, k, _ in candidates(ws, plug))  # 写しを消したあとは出さない
-            # 上書きしている先を直す PR が届いたら、上書きの写しを消す
+            # 上書きしている先を直す Issue の直しが届いたら、上書きの写しを消す
             with quiet():
                 main(["propose", "--plugin", "--file", "deck-practices/visual.md", "--old", "- [visual-012] 本文は 18pt。", "--new", "- [visual-012] 扉は使わない。", "--rule", "visual-012", "--why", "扉", "--replaces", "ws-visual-008"])
-                main(["sent", next(p["id"] for p in state(ws)[1].values() if p["why"] == "扉"), "--pr", "u"])
-                assert ("上書きを見直す", "visual-012") in {(a, k) for a, k, _ in candidates(ws, plug)}  # まだ届いていない（前に届いた visual-012 の別の PR では消さない）
+                main(["sent", next(p["id"] for p in state(ws)[1].values() if p["why"] == "扉"), "--issue", "u"])
+                assert ("上書きを見直す", "visual-012") in {(a, k) for a, k, _ in candidates(ws, plug)}  # まだ届いていない（前に届いた visual-012 の別の Issue の直しでは消さない）
             (plug / "deck-practices" / "visual.md").write_text("- [visual-012] 扉は使わない。\n- [visual-013] 線は 1pt。\n")
             with quiet():
                 acts = {(a, k) for a, k, _ in candidates(ws, plug)}
