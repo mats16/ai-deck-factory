@@ -78,6 +78,14 @@ FIXED = {"TEXT": TEXT, "RULE": RULE, "RED_SOFT": RED_SOFT, "STAGE_TEXT": STAGE_T
 NAMED = {"HEAD": NAVY, "CARD": WHITE, "SUB_ON_NAVY": RULE, "ON_RED": WHITE}
 HEAD, CARD, SUB_ON_NAVY, ON_RED = NAMED  # 本文のページの見出しの文字／カードと表のセルの地／濃紺の上の補足の文字とフッター／RED の塗りの上の文字
 THEME_MARK = re.compile(r"ai-deck-factory theme=([A-Za-z0-9_-]+)")  # template.py がマスターのページ番号の枠の代替テキストに書く。Drive の複製でも残る（2026-10-13）
+# 会社のテンプレートから残した表紙・扉のレイアウト（図形・ロゴ・写真付き。パターンごとに番号）。template.py がそのレイアウトのページ番号の枠の
+# 代替テキストに書く。w は元のタイトルの枠の右端までの文字の幅（in）、tone は地の明るさ（文字の色を決める）。なければ表紙・扉も Blank に組む
+# （2026-10-13、ユーザー「元の図形が入ったタイトルスライドなどを、維持して欲しい」「セクション区切りで異なる背景の区切りページを使い分けることはよくします」）
+LAYOUT_MARK = re.compile(r"ai-deck-factory layout=(cover|section):(\d+)(?: w=([\d.]+))?(?: tone=(dark|accent|light))?")
+VARIANTS = {}  # 組んでいるデッキの {"cover"・"section": {番号: (文字の幅 in か None, tone)}}（目印の番号で引く。build の @COVER<番号> と同じ。use_layouts が決める）
+# 表紙・扉の地の明るさごとの文字の色（タイトル、小見出し・副題、章番号、社名とフッター）。dark は濃紺の地（Blank に組むときも）、accent は
+# 白が大きな文字にだけ届く赤の地（小さな文字は NAVY）、light は白の地
+TONES = {"dark": (WHITE, RED_ON_NAVY, DECOR, SUB_ON_NAVY), "accent": (WHITE, NAVY, RED, NAVY), "light": (HEAD, RED_TEXT, RULE, SUB)}
 _SWAP = {}  # 組んでいるデッキの、FIXED の既定の値 → テーマの値（use_theme が決める）
 _NAMED = {}  # 組んでいるデッキの、テーマが書いた NAMED の値（use_theme が決める）
 # 提供ステージの札の塗り（visual.md の 1）。本番で使える Public Preview は、Beta・Private Preview（本番向けではない）の黄と分け、GA の緑を 4 割にした色（2026-10-09）
@@ -89,12 +97,13 @@ _COMMON = dict(DARK1="1B3139", LIGHT1="F9F7F4", DARK2="FF5F46", LIGHT2="EEEDE9",
 THEMES = {  # 色を変えたら template.py <テーマ> でテンプレートに入れる
     # このフォルダの色（visual.md の 1。2025 年版の公式パレットから、コントラストを確かめて選んだもの）
     "visual": {**_COMMON, "ACCENT1": "303F47", "ACCENT3": "CC2B17", "ACCENT5": "5A6F77", "ACCENT6": "2272B4"},
-    # 2026 年版の「Databricks Theme」の色。役割のコントラストに届かない ACCENT5（618794、Oat Medium の上で 3.32:1）だけを暗くした
-    "company": {**_COMMON, "ACCENT1": "1B5162", "ACCENT3": "98102A", "ACCENT5": "50707B", "ACCENT6": "4359FF"},
+    # 2026 年の公式テンプレートの色。本文の地は白。小さな赤の文字（Lava 600、白の上で 3.62:1）と
+    # ACCENT5（618794、白の上で 3.89:1）は、色相を保って暗くした（2026-10-13）
+    "company": {**_COMMON, "LIGHT1": "FFFFFF", "ACCENT1": "1B5162", "ACCENT3": "D61400", "ACCENT5": "506F7A", "ACCENT6": "4359FF"},
 }
 THEME_NOTES = {  # 組み込みのテーマの使い分け（slides.py themes が出す）。factory.toml の [slides.themes.<名前>] の description で書き換えられる
     "visual": "既定の配色。濃紺の扉、淡い Oat の本文面、赤のアクセント。会社の色の指定がない資料（勉強会、技術の説明、提案）",
-    "company": "Databricks の 2026 年版の会社の色（Databricks Theme）。Databricks の正式な色にそろえたいとき",
+    "company": "Databricks の 2026 年の公式テンプレートの色。白地の本文、濃紺の表紙と扉、Lava の赤。Databricks の正式な見た目にそろえたいとき",
 }
 
 
@@ -280,6 +289,7 @@ class Deck:
     def __init__(self, name):
         self.name, self.reqs, self.notes, self.slides, self.images, self.n = name, [], {}, [], [], 0
         self.dark = set()   # 濃紺の地のページ（表紙・扉。フッターとページ番号を SUB_ON_NAVY にする）。本文の地が暗いテーマでも、本文のページは入らない
+        self.footc = {}     # 表紙・扉のパターンのページの、フッターとページ番号の色（地の明るさごと。TONES）
         self.links = []     # ページへのリンク（要求, ページ番号）。すべてのページを作ってから付ける
         self.nofoot = set()  # フッターとページ番号を置かないページ（全面に画像を貼るページなど）
         self.round_groups = []  # 角丸・正円の背景と文字の枠を、文字を書き終わってから 1 つにまとめる
@@ -296,19 +306,35 @@ class Deck:
         print("警告:", msg, file=sys.stderr)
 
     # ---- ページ ----
-    def slide(self, bg=BG, foot=True):
-        """ページ番号はテンプレートの枠（自動で振られる。表紙では消す）。foot=False のページには、フッターもページ番号も置かない。"""
+    def slide(self, bg=BG, foot=True, layout="@LAYOUT"):
+        """ページ番号はテンプレートの枠（自動で振られる。表紙では消す）。foot=False のページには、フッターもページ番号も置かない。
+        layout は @LAYOUT（Blank）か、表紙・扉の @COVER・@SECTION（テンプレートになければ Blank。build が置き換える）。"""
         sid = self.oid()
         self.slides.append(sid)
         if bg == NAVY:
             self.dark.add(sid)
         if not foot:
             self.nofoot.add(sid)
-        self.reqs += [{"createSlide": {"objectId": sid, "slideLayoutReference": {"layoutId": "@LAYOUT"},
-                                       "placeholderIdMappings": [{"layoutPlaceholder": {"type": "SLIDE_NUMBER"}, "objectId": sid + "_n"}]}},
-                      {"updatePageProperties": {"objectId": sid, "pageProperties": {"pageBackgroundFill": {"solidFill": {"color": paint(bg)}}},
-                                                "fields": "pageBackgroundFill"}}]
+        self.reqs.append({"createSlide": {"objectId": sid, "slideLayoutReference": {"layoutId": layout},
+                                          "placeholderIdMappings": [{"layoutPlaceholder": {"type": "SLIDE_NUMBER"}, "objectId": sid + "_n"}]}})
+        if bg:  # None は表紙・扉のパターン（レイアウトの地と絵を見せる）
+            self.reqs.append({"updatePageProperties": {"objectId": sid, "pageProperties": {"pageBackgroundFill": {"solidFill": {"color": paint(bg)}}},
+                                                       "fields": "pageBackgroundFill"}})
         return sid
+
+    def variant(self, kind, n):
+        """表紙・扉のパターン n（1 から）のページを作る。戻り: (ページ, 文字の幅, 文字の色 TONES)。テンプレートにパターンがなければ、1 は Blank に濃紺の地。"""
+        vs = VARIANTS.get(kind, {})
+        if n not in (vs or {1: None}):
+            raise ValueError(f"{'表紙' if kind == 'cover' else '扉'}のパターン {n} がない（テンプレートにあるのは {', '.join(map(str, sorted(vs or [1])))}。見本のページで番号を見る）")
+        if not vs:
+            return self.slide(NAVY), W + 2 * INSET, TONES["dark"]
+        w, tone = vs[n]
+        s = self.slide(None, layout=f"@{kind.upper()}{n}")
+        self.footc[s] = TONES[tone][3]
+        if tone == "dark":
+            self.dark.add(s)
+        return s, w or W + 2 * INSET, TONES[tone]
 
     def note(self, sid, text):
         self.notes[sid] = text
@@ -637,25 +663,25 @@ class Deck:
             self.text(sid, X - INSET, Y_LEAD, W + 2 * INSET, 0.34, lead, size=12)
         return sid
 
-    def cover(self, title, kicker, sub=None):
-        """表紙: 小見出し（相手と日付）→ タイトル（2 行まで）→ 副題、左下に社名。"""
-        s = self.slide(NAVY)
-        self.text(s, X - INSET, 2.3, W + 2 * INSET, 0.3, kicker, size=11, color=RED_ON_NAVY, bold=True)
+    def cover(self, title, kicker, sub=None, variant=1):
+        """表紙: 小見出し（相手と日付）→ タイトル（2 行まで）→ 副題、左下に社名。variant はテンプレートの表紙のパターンの番号（見本のページにある）。"""
+        s, tw, (head, accent, _, foot) = self.variant("cover", variant)  # 文字の幅は、元のタイトルの枠の右端まで（図形・写真に重ねない）
+        self.text(s, X - INSET, 2.3, tw, 0.3, kicker, size=11, color=accent, bold=True)
         lines = title.count("\n") + 1  # 2 行にするときは、文節の切れ目に \n を入れる
-        self.text(s, X - INSET, 2.7, W + 2 * INSET, 0.62 * lines, title, size=34, color=WHITE, bold=True, spacing=110)
+        self.text(s, X - INSET, 2.7, tw, 0.62 * lines, title, size=34, color=head, bold=True, spacing=110)
         if sub:
-            self.text(s, X - INSET, 2.7 + 0.62 * lines + 0.23, W + 2 * INSET, 0.4, sub, size=13, color=RED_ON_NAVY, bold=True)
+            self.text(s, X - INSET, 2.7 + 0.62 * lines + 0.23, tw, 0.4, sub, size=13, color=accent, bold=True)
         if COMPANY:
-            self.text(s, X - INSET, 6.7, W + 2 * INSET, 0.3, COMPANY, size=11, color=SUB_ON_NAVY)
+            self.text(s, X - INSET, 6.7, tw, 0.3, COMPANY, size=11, color=foot)
         return s
 
-    def divider(self, num, title, sub=None):
-        """章の扉: 章番号（飾り）→ 章タイトル → 副題。"""
-        s = self.slide(NAVY)
-        self.text(s, X - INSET, 1.9, W + 2 * INSET, 1.4, num, size=88, color=DECOR, bold=True)
-        self.text(s, X - INSET, 3.45, W + 2 * INSET, 0.6, title, size=30, color=WHITE, bold=True)
+    def divider(self, num, title, sub=None, variant=1):
+        """章の扉: 章番号（飾り）→ 章タイトル → 副題。variant はテンプレートの扉のパターンの番号（章ごとに地を変えられる）。"""
+        s, tw, (head, accent, decor, _) = self.variant("section", variant)
+        self.text(s, X - INSET, 1.9, tw, 1.4, num, size=88, color=decor, bold=True)
+        self.text(s, X - INSET, 3.45, tw, 0.6, title, size=30, color=head, bold=True)
         if sub:
-            self.text(s, X - INSET, 4.2, W + 2 * INSET, 0.4, sub, size=12.5, color=RED_ON_NAVY, bold=True)
+            self.text(s, X - INSET, 4.2, tw, 0.4, sub, size=12.5, color=accent, bold=True)
         return s
 
     def band(self, sid, head, sub=None, h=None):
@@ -688,7 +714,7 @@ class Deck:
                 if sid != self.slides[0]:
                     self.reqs.append({"deleteObject": {"objectId": sid + "_n"}})
                 continue
-            c = SUB_ON_NAVY if sid in self.dark else SUB
+            c = self.footc.get(sid) or (SUB_ON_NAVY if sid in self.dark else SUB)
             self.text(sid, X - INSET, Y_FOOT, W - 1.2, 0.28, footer, size=COPYRIGHT_PT, color=c)
             if sid != self.slides[0]:  # 前のテンプレート（ページ番号が 11pt）から作ったデッキも、組み直せばそろう
                 self.reqs += number_style(sid + "_n", c)
@@ -753,6 +779,23 @@ def deck_theme(p):
     """presentations の masters・layouts の代替テキストにある、テーマの名前（THEME_MARK）。なければ None（template.py で合わせ直す前のテンプレートから作ったデッキ）。"""
     return next((m.group(1) for pg in p.get("masters", []) + p.get("layouts", []) for e in pg.get("pageElements", [])
                  if (m := THEME_MARK.search(e.get("description", "")))), None)
+
+
+def layout_marks(p):
+    """presentations の layouts のうち、表紙・扉の目印（LAYOUT_MARK）を持つもの。[(レイアウト, 目印の match)]。"""
+    return [(l, m) for l in p.get("layouts", []) for e in l.get("pageElements", []) if (m := LAYOUT_MARK.search(e.get("description", "")))]
+
+
+def deck_layouts(p):
+    """{("cover"・"section", 番号): レイアウト}。build が @COVER<番号>・@SECTION<番号> を置き換える。"""
+    return {(m.group(1), int(m.group(2))): l for l, m in layout_marks(p)}
+
+
+def use_layouts(p):
+    """表紙・扉のパターン（文字の幅と地の明るさ）を、デッキ（new ならテンプレート）の目印から決める。make_deck の前に呼ぶ。"""
+    VARIANTS.clear()
+    for _, m in layout_marks(p):
+        VARIANTS.setdefault(m.group(1), {})[int(m.group(2))] = (float(m.group(3)) if m.group(3) else None, m.group(4) or "dark")
 
 
 def theme_table(name):
@@ -825,8 +868,10 @@ def need_mark(want, mark):
 
 
 def theme_of(pid):
-    """プレゼン（かテンプレート）pid のテーマの名前（deck_theme）。"""
-    return deck_theme(request("GET", f"{SLIDES}/{pid}?fields=masters(pageElements(description)),layouts(pageElements(description))"))
+    """プレゼン（かテンプレート）pid のテーマの名前（deck_theme）。表紙・扉の文字の幅（use_layouts）も決める。"""
+    p = request("GET", f"{SLIDES}/{pid}?fields=masters(pageElements(description)),layouts(objectId,pageElements(description))")
+    use_layouts(p)
+    return deck_theme(p)
 
 
 def build(pid, deck, force=False):
@@ -834,14 +879,18 @@ def build(pid, deck, force=False):
     need_brand()
     if not force:
         gapi.guard(pid, revision(pid), STAMP, "pages.py")
-    p = request("GET", f"{SLIDES}/{pid}?fields=slides(objectId),layouts(objectId,layoutProperties(displayName),pageElements(shape(placeholder))),"
+    p = request("GET", f"{SLIDES}/{pid}?fields=slides(objectId),layouts(objectId,layoutProperties(displayName),pageElements(description,shape(placeholder))),"
                        "masters(pageElements(shape))")
-    ls = [l for l in p["layouts"] if is_blank(l)]  # 会社のテンプレートから作ったものは、template.py が残した Blank が 1 つだけ（名前は会社のもの）
-    layout = next((l["objectId"] for l in ls if l["layoutProperties"]["displayName"] == BLANK), ls[0]["objectId"] if len(p["layouts"]) == 1 and ls else None)
+    kinds = {l["objectId"]: f"@{k.upper()}{n}" for (k, n), l in deck_layouts(p).items()}  # 表紙・扉のパターンのレイアウト（template.py が残したもの）
+    ls = [l for l in p["layouts"] if is_blank(l) and l["objectId"] not in kinds]  # 会社のテンプレートから作ったものは、template.py が残した Blank が 1 つだけ（名前は会社のもの）
+    layout = next((l["objectId"] for l in ls if l["layoutProperties"]["displayName"] == BLANK), ls[0]["objectId"] if len(p["layouts"]) == len(kinds) + 1 and ls else None)
     if not layout:
         sys.exit(f"レイアウト「{BLANK}」がない。AI Deck Factory のテンプレートから作ったプレゼンではない（slides.py new で作る）")
     font = deck_font(p)
-    reqs = json.dumps(refont(deck.reqs, font)).replace('"@LAYOUT"', json.dumps(layout))
+    lay = {"@LAYOUT": layout} | {k: i for i, k in kinds.items()}
+    if miss := sorted(set(re.findall(r'"(@(?:COVER|SECTION)\d+)"', json.dumps(deck.reqs))) - set(lay)):
+        sys.exit(f"デッキに表紙・扉のパターン {', '.join(miss)} のレイアウトがない（テンプレートを作り直す前に複製したデッキ）。番号を変えるか、slides.py new で作り直す")
+    reqs = re.sub(r'"(@LAYOUT|@COVER\d+|@SECTION\d+)"', lambda m: json.dumps(lay[m.group(1)]), json.dumps(refont(deck.reqs, font)))
     # 新しいページを先に作ってから、前のページを消す。ページが 0 枚になると、使われていないマスターごと消える
     old = [{"deleteObject": {"objectId": s["objectId"]}} for s in p.get("slides", [])]
     carrier = None
@@ -1140,6 +1189,33 @@ def selftest():
     mark = lambda d: {"masters": [{"pageElements": [{"description": d, **ph("SLIDE_NUMBER", FONT)}]}]}
     assert deck_theme(mark("ai-deck-factory theme=plain")) == "plain" and deck_theme({"layouts": [mark("ai-deck-factory theme=a-1")["masters"][0]]}) == "a-1"
     assert deck_theme(mark("")) is None and deck_theme({"masters": [{}]}) is None and theme_table(None) == {}
+    lays = {"layouts": [{"objectId": "c", "pageElements": [{"description": "ai-deck-factory layout=cover:1 w=7.08 tone=light"}]},
+                        {"objectId": "s2", "pageElements": [{"description": "ai-deck-factory layout=section:2 tone=accent"}]},
+                        {"objectId": "s1", "pageElements": [{"description": "ai-deck-factory layout=section:1 w=10.19 tone=dark"}]}]}
+    use_layouts(lays)  # 目印の番号で引く（並びの順でない）。扉の 2 は本文の幅のまま
+    assert {k: l["objectId"] for k, l in deck_layouts(lays).items()} == {("cover", 1): "c", ("section", 2): "s2", ("section", 1): "s1"}
+    assert VARIANTS == {"cover": {1: (7.08, "light")}, "section": {2: (None, "accent"), 1: (10.19, "dark")}}
+    v = Deck("v")
+    c, d2 = v.cover("t", "k"), v.divider("01", "t", variant=2)
+    assert [r["createSlide"]["slideLayoutReference"]["layoutId"] for r in v.reqs if "createSlide" in r] == ["@COVER1", "@SECTION2"]
+    assert not any("updatePageProperties" in r for r in v.reqs) and v.footc == {c: SUB, d2: NAVY} and not v.dark  # レイアウトの地を見せる。白地の表紙のフッターは SUB
+    assert [r["updateTextStyle"]["style"]["foregroundColor"]["opaqueColor"] for r in v.reqs
+            if r.get("updateTextStyle", {}).get("style", {}).get("fontSize", {}).get("magnitude") == 34] == [paint(HEAD)]  # 白地の表紙のタイトルは HEAD
+    try:
+        v.divider("02", "t", variant=3)
+        raise AssertionError
+    except ValueError:
+        pass
+    use_layouts({"layouts": [lays["layouts"][2], {"objectId": "s3", "pageElements": [{"description": "ai-deck-factory layout=section:3 tone=light"}]}]})
+    g = Deck("g")  # 番号が飛んでも（扉の 2 のレイアウトを手で消したデッキ）、3 は 3 の地で組み、2 はないと言う
+    g.divider("03", "t", variant=3)
+    assert g.footc == {g.slides[0]: SUB} and [r["createSlide"]["slideLayoutReference"]["layoutId"] for r in g.reqs if "createSlide" in r] == ["@SECTION3"]
+    try:
+        g.divider("02", "t", variant=2)
+        raise AssertionError
+    except ValueError as e:
+        assert "1, 3" in str(e)
+    use_layouts({})
     use_theme({"TEXT": "#37352f", "DECOR": "3E5159", "copyright": "© 2026 Me. All rights reserved."})  # テーマの値で組む（既定と同じ値は置き換えない）
     assert _SWAP == {TEXT: "37352F"} and paint(TEXT) == paint("303f47") == {"rgbColor": rgb("37352F")} and paint(RULE) == {"rgbColor": rgb(RULE)} and paint(NAVY) == {"themeColor": NAVY}
     t = make_deck(lambda d: d.text(d.page("t"), 0, 0, 1, 1, "本文"), "foot")

@@ -51,8 +51,8 @@ def make(d):
 
 | 部品 | すること |
 |---|---|
-| `d.cover(title, kicker, sub)` | 表紙。2 行のタイトルは、文節の切れ目に `\n` を入れる |
-| `d.divider(num, title, sub)` | 章の扉 |
+| `d.cover(title, kicker, sub, variant=1)` | 表紙。2 行のタイトルは、文節の切れ目に `\n` を入れる。`variant` は会社のテンプレートの表紙のパターンの番号（テンプレートの見本のページにある。`../deck-template/SKILL.md` の template-001） |
+| `d.divider(num, title, sub, variant=1)` | 章の扉。`variant` で扉のパターン（地の色や絵）を章ごとに変えられる |
 | `d.page(title, lead, kicker)` | 本文のページ（キッカー・タイトル・リード）。ページの ID を返す。見出しが 1 行に収まらなければ 18pt まで縮めて警告する（見出しを短くするのが先） |
 | `d.slide(bg, foot)` | 型のないページ。`foot=False` でフッターとページ番号を置かない（全面に画像を貼るページ。reuse.md の段階 1） |
 | `d.text(s, x, y, w, h, parts, size, color, bold, align, valign, spacing, fill, line, bullets, kind, radius, edge, pad, gap, dash, weight)` | 文字の枠。`parts` は文字列か `(文字列, {"bold", "size", "color", "link"})` の並び。`\n` で段落を分け、`\v` は段落の中の改行。塗りがある枠は半径 0.1 in の角丸が既定。`spacing` は行間（%）。`edge=True` で文字の端を `(x, y)`・幅 `w` にそろえる（塗りのない文字。4）。塗りか枠線のある左寄せ・右寄せの文字は、箱の端と文字の間を 1 字分（枠でいちばん小さい文字の大きさ。lint と同じ測り方）空ける（`pad` で変える。4）。`gap` は段落の間の空き（pt）。基準の 2 倍以上の大きさの段落（大きな数字）は、行間を 100% にする（4） |
@@ -73,7 +73,7 @@ def make(d):
 - `d.text` の行間（`spacing`）を省くと、2 行以上の見込みなら 125、1 行なら 100 になる（visual.md の 2）。表のセルは 2 行以上なら 120。
 - フッター（左下の著作権表示）は表紙・扉を含む全ページに自動で入る。文言は `factory.toml` の `[brand] copyright`（デッキのテーマの `copyright` があればそれ。`slides.py` の `COPYRIGHT`）、文字は 9pt（`COPYRIGHT_PT`）、本文のページは `SUB`、表紙・扉（濃紺の地）は `SUB_ON_NAVY`。資料名は表示せず、`NAME` 末尾の `Internal Only`・`Confidential` だけを残す。初公表年は現在年へ自動更新しない。`foot=False` の流用ページには重ねない。ページ番号は表紙以外の右下に著作権表示と同じ 9pt で入り、テンプレートの枠なので、画面でページを並べ替えても合う。
 - [slides-004] **部品は slides.py にあるものを使う。前の資料から写さない**。1 つの資料でだけ要る部品は pages.py に関数で書き、2 つ目の資料で要ったら slides.py に移す。
-- slides.py の部品を足したり直したりしたら、`python3 $K/slides.py --selftest` と `python3 $K/template.py --selftest` を通し、テンプレートの見本を組み直して見る（`python3 $K/template.py visual`。そのあと `gslides.py check <テンプレートの URL>`）。company は使っていないので、組み直さなくてよい（下の 3）。部品を変えると、それを使う資料を組み直したときに見た目も変わる。
+- slides.py の部品を足したり直したりしたら、`python3 $K/slides.py --selftest` と `python3 $K/template.py --selftest` を通し、テンプレートの見本を組み直して見る（`python3 $K/template.py visual`。そのあと `gslides.py check <テンプレートの URL>`）。company を使うなら `python3 $K/template.py company` も組み直す。部品を変えると、それを使う資料を組み直したときに見た目も変わる。
 
 ## 3. テンプレートとテーマ
 
@@ -103,9 +103,9 @@ description = "アクメの会社の色のテーマ。顧客に出す提案・�
 | テーマ | 色 |
 |---|---|
 | [slides-005] `visual`（既定） | このフォルダの色（visual.md の 1）。2025 年版の公式パレットから、コントラストを確かめて選んだもの |
-| [slides-006] `company` | 会社の規定の色を念のため残しているテーマで、見本が古くても組み直さない。2026 年版の Databricks Theme の色のまま。役割のコントラストに届かない ACCENT5 だけを暗くした（`618794` → `50707B`。補助の文字が Oat Medium の上で 3.32:1 → 4.54:1） |
+| [slides-006] `company` | 2026 年の公式テンプレートの色。本文の地は公式どおり白。役割のコントラストに届かない 2 つだけを、色相を保って暗くした（18pt 未満の赤の文字 `FF3621` → `D61400`、補助の文字 `618794` → `506F7A`。2026-10-13） |
 
-- **テンプレートが決めるのは、テーマの色、ページの大きさ（13.33 × 7.5 in）、ページ番号の位置だけ。** 字の大きさと配置は pages.py が文字ごとに書き、ページ番号の大きさと行間は slides.py が組むたびに書く（文字ごとに書いた値がテンプレートより優先される）。
+- **テンプレートが決めるのは、テーマの色、ページの大きさ（13.33 × 7.5 in）、ページ番号の位置と、会社のテンプレートから残した表紙・扉の図形（`../deck-template/SKILL.md` の template-001）だけ。** 字の大きさと配置は pages.py が文字ごとに書き、ページ番号の大きさと行間は slides.py が組むたびに書く（文字ごとに書いた値がテンプレートより優先される）。
 - **作ったデッキは、複製した時点のテンプレートの写し。** テンプレートを直しても、作ったデッキは変わらない。デッキのテーマを替えるときは `new` で作り直す（URL が変わる）。
 - 色を変えるときは、`slides.py` の `THEMES`（会社のテーマは factory.toml の `[slides.themes]`）を直して `template.py <テーマ>` を回す（配色・書体・見本を合わせ直す。ID は変わらない）。コントラストは `gslides.py check <テンプレートの URL>` で見る。
 - 会社のテンプレートが新しくなったら、`factory.toml` の `[slides.themes.<テーマ>]` の `base` を新しい URL にして `template.py <テーマ> --from-base` で作り直す。作ったテンプレートの URL は `template.py` が `factory.toml` の `[slides.themes.<テーマ>]` の `url` に書き込む（手で写さない）。前のテンプレートは消すか、名前に「旧」を付ける。

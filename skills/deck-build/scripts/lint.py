@@ -11,7 +11,7 @@ from collections import Counter, defaultdict
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from slides import BAND_BOTTOM, COPYRIGHT_PT, EMU, FONT, INSET, MONO_DEFAULT, STAGE_FILL, Y_BODY, Y_BODY_NOLEAD, Y_FOOT, Y_LEAD, deck_card, deck_font, deck_mono, em_width  # 版面・書体・字幅の見積もりは、組む側（slides.py）と同じものを使う
+from slides import BAND_BOTTOM, COPYRIGHT_PT, EMU, FONT, INSET, LAYOUT_MARK, MONO_DEFAULT, STAGE_FILL, Y_BODY, Y_BODY_NOLEAD, Y_FOOT, Y_LEAD, deck_card, deck_font, deck_mono, em_width  # 版面・書体・字幅の見積もりは、組む側（slides.py）と同じものを使う
 
 DOC_MIN_PT = 9  # ドキュメントの文字の下限。図表の題・出典・表の中・フッターが 9pt（visual_doc.md の 1）
 MIN_PT = 11  # [lint-001] スライドの文字の下限。社内資料の差し替え用（名前に「差し替え用」）は元の大きさのままなので見ない
@@ -142,7 +142,11 @@ def page_bg(p, s, scheme):  # ページの地
 
 def is_dark(p, s, scheme):
     """表紙・扉のページか。slides.py は表紙・扉の地を NAVY（DARK1）、本文の地を BG（LIGHT1）のテーマの色で塗るので、地の色の値でなく枠で見る
-    （本文の地が暗いテーマでも、本文のページを扉と取り違えない）。RGB で塗ったページ（手で作ったもの）は、DARK1 と同じ値なら扉とみなす。"""
+    （本文の地が暗いテーマでも、本文のページを扉と取り違えない）。RGB で塗ったページ（手で作ったもの）は、DARK1 と同じ値なら扉とみなす。
+    会社のテンプレートの表紙・扉のパターン（白や赤の地もある）は、レイアウトの目印（slides.py の LAYOUT_MARK）で見る。"""
+    lay = next((x for x in p.get("layouts", []) if x["objectId"] == s.get("slideProperties", {}).get("layoutObjectId")), {})
+    if any(LAYOUT_MARK.search(e.get("description", "")) for e in lay.get("pageElements", [])):
+        return True
     c = page_fill(p, s, scheme) or {}
     return c.get("themeColor") == "DARK1" if "themeColor" in c else page_bg(p, s, scheme) == scheme.get("DARK1", "1B3139")
 
@@ -1001,6 +1005,8 @@ def selftest():
     assert len(dk({1, 3, 5, 9}, 13).hits[SHORT_CH]) == 1 and not dk({1, 3, 6, 9}, 13).hits[SHORT_CH]
     assert len(dk(set(), 3).hits[NO_COVER]) == 1 and not dk({1}, 3).hits[NO_COVER]
     assert len(dk({1, 5, 12}, 13).hits[SHORT_CH]) == 1 and len(dk({1, 5, 6}, 9).hits[SHORT_CH]) == 1  # 最後の章が 1 枚、扉が続く
+    marked = {"layouts": [{"objectId": "L", "pageElements": [{"description": "ai-deck-factory layout=cover:2 w=7.08 tone=light"}]}]}
+    assert is_dark(marked, {"slideProperties": {"layoutObjectId": "L"}}, {}) and not is_dark(marked, {"slideProperties": {"layoutObjectId": "B"}}, {})  # 白地の表紙のパターンも表紙
     # 本文の地が暗いテーマ（DARK1 と LIGHT1 が同じ黒）でも、扉は地の色の値でなく枠（NAVY = DARK1）で見分ける
     black = [{"type": k, "color": rgb("000000")} for k in ("DARK1", "LIGHT1")]
     dark_deck = lambda darks, n: (lambda p: (p["masters"][0]["pageProperties"]["colorScheme"].update(colors=black), run(p)[0])[1])(
