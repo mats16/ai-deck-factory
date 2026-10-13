@@ -47,6 +47,7 @@ KEY = re.compile(rf"{ID}|lint:.+")  # レビューの表の「決まり」の列
 RESULTS = ("直した", "残した（誤り）", "残した", "聞く")
 NO_RULE = ("未", "戻さない")  # 決まりにつないでいない戻し先
 TWICE = 2  # 2 本以上の資料・2 社以上の顧客に出たら、たまたまでないとみなす（dreaming の 4c・4i・5）
+PLAN_RULE = "deck-practices-004"  # 構成案の AI レビューの頼み方。これを見直すかの判断待ちに答えたら、構成の見逃しをその答えのあとから数え直す
 OVERRIDE = re.compile(rf"\[(ws-[\w-]+?-\d{{3}})\][^\n\[]*?[（(]([^（）()\n]*?)\s*より優先")  # [ws-visual-003] …（visual-012 より優先）。括弧の中の ID を全部取る
 PLUGIN_ID = re.compile(r"(?<![\w-])(?!ws-)[a-z][\w-]*?-\d{3}")
 
@@ -168,7 +169,8 @@ def state(ws):
         elif k == "question":
             qs[r["id"]] = {**r, "status": "未回答"}
         elif k in ("answered", "withdrawn") and r["ref"] in qs:
-            qs[r["ref"]].update(status="回答済み" if k == "answered" else "取り下げ", **{x: r[x] for x in ("a", "reason") if x in r})
+            qs[r["ref"]].update(status="回答済み" if k == "answered" else "取り下げ", **{x: r[x] for x in ("a", "reason") if x in r},
+                                **({"answered": r["ts"]} if k == "answered" else {}))
         elif k == "review":
             rv[r["key"]] = r  # 同じ行は、あとで取り込んだ結果にする
     first_said = {}
@@ -265,8 +267,14 @@ def summary(ws):
         print("\t".join(map(str, [k, len(x["指摘"]), count(x["再発"]), len(x["decks"] - {""}), x["顧客"],
                                    *(count(x[r]) for r in RESULTS), "あり" if x["決めた"] else ""])))
     weekly(ws)
-    misses = [c for c in state(ws)[0].values() if c.get("plan")]
-    print("\n構成の見逃し: " + "・".join(f"{m} {count([c for c in misses if c['plan'] == m])}" for m in ("AI", "人")))
+    cs, _, qs, _ = state(ws)
+    misses = [c for c in cs.values() if c.get("plan")]
+    by_mode = lambda xs: "・".join(f"{m} {count([c for c in xs if c['plan'] == m])}" for m in ("AI", "人"))
+    print("\n構成の見逃し: " + by_mode(misses))
+    done = [q for q in qs.values() if q["rule"] == PLAN_RULE and q.get("answered")]
+    if done:  # 頼み方を見直すかに答えたあとは、そのあとに言われた見逃しで決める
+        q = max(done, key=lambda q: q["answered"])
+        print(f"  {q['id']} の答え（{q['answered']}）のあと: " + by_mode([c for c in misses if when(c) > q["answered"]]))
     return {k: {**x, "指摘": len(x["指摘"]), **{f: len(x[f]) for f in ("再発", *RESULTS)}} for k, x in rows.items()}
 
 
@@ -462,7 +470,7 @@ def questions(ws, everything=False):
     for q in out:
         tail = ""
         if q.get("a"):
-            tail = f" → 「{q['a']}」"
+            tail = f" → 「{q['a']}」（{q['answered']}）"
         elif q.get("reason"):
             tail = f"（{q['reason']}）"
         print(f"{q['id']} [{q['status']}] {q['q']}（{q['rule'] or '-'}、出典 {','.join(q['src']) or '-'}）{tail}")
@@ -887,6 +895,20 @@ def selftest_candidates(quiet):
                 main(["plan", next(c["id"] for c in state(ws)[0].values() if c["quote"] == "順序を逆に"), "なし"])  # 付け間違いを外す
             assert sum(bool(c.get("plan")) for c in state(ws)[0].values()) == 1
             assert "構成の見逃し: AI" in show(next(c for c in state(ws)[0].values() if c.get("plan")))
+            # 頼み方を見直すかに答えたら、答えのあとの見逃しだけを数える（同じ日の前とあとも分ける）
+            with quiet():
+                main(["ask", "--q", "構成案のレビューの頼み方を見直すか", "--rule", PLAN_RULE])
+            qid = next(q["id"] for q in state(ws)[2].values() if q["rule"] == PLAN_RULE)
+            write(ws, {"ts": "2030-01-01T12:00:00Z", "kind": "answered", "ref": qid, "a": "見直す"})
+            with quiet():
+                main(["add", "--deck", "Customers/b/d2", "--quote", "答えの前", "--to", "戻さない", "--plan", "AI", "--at", "2030-01-01T09:00"])
+                main(["add", "--deck", "Customers/a/d1", "--quote", "答えのあと", "--to", "戻さない", "--plan", "AI", "--at", "2030-01-01T15:00"])
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                summary(ws)
+                questions(ws, True)
+            assert "構成の見逃し: AI 3（資料 3）" in out.getvalue() and f"{qid} の答え（2030-01-01T12:00:00Z）のあと: AI 1（資料 1）・人 0（資料 0）" in out.getvalue()
+            assert "→ 「見直す」（2030-01-01T12:00:00Z）" in out.getvalue()
             assert sum(x["session"] for x in n.values()) == 5 and sum(x["dreaming"] for x in n.values()) == 2 and sum(x["import"] for x in n.values()) == 1
             assert [by(c) for c in ({"date": "2026-10-07"}, {"at": "x"}, {"ts": "x"})] == ["import", "dreaming", "session"]  # by のない前の記録
             with quiet():
