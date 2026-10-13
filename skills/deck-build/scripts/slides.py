@@ -52,7 +52,7 @@ COMPANY = _BRAND.get("company", "")  # 表紙の左下。空なら置かない
 PLACEHOLDER_COPYRIGHT = "© 2026 Example, Inc. All rights reserved."  # [brand] copyright を書いていないときの仮の値。これと空のときは組めない（need_brand）
 COPYRIGHT = _BRAND.get("copyright", PLACEHOLDER_COPYRIGHT)  # 初公表年。既存資料の年を現在年へ自動更新しない
 LOGO = _BRAND.get("logo")  # ドキュメントの表紙のロゴ（assets/ の中のパスか URL）。なければ置かない
-COPYRIGHT_PT = 9  # 著作権表示だけは 11pt 以上の例外。本文を邪魔しない（2026-10-08）
+COPYRIGHT_PT = 9  # 著作権表示と、高さをそろえるページ番号だけは 11pt 以上の例外。本文を邪魔しない（2026-10-08、ページ番号は 2026-10-13）
 # 結論バンドの内側の余白（in）。枠と文字の間は 1 字分より大きめに取る（見た目 1-8。13pt の 1 字は 0.18 in）。左右は pptx 版と同じ 18pt
 BAND_PAD_X, BAND_PAD_Y = 0.25, 0.2
 # [slides_py-001] 正円の番号の直径（in）と数字（pt）。M・L は数字の高さが円の 4 割ほど。S は周りの 11pt の文字に合わせて 11pt（赤に白の 14pt の決まりの例外。visual.md の 1）
@@ -218,6 +218,14 @@ def emu(v):
 
 def pt(v):
     return {"magnitude": v, "unit": "PT"}
+
+
+def number_style(oid, color=SUB):
+    """ページ番号の枠の文字を、著作権表示と同じ大きさ・行間にする（枠の上端は template.py が著作権表示の文字にそろえる。文字の高さがそろう）。"""
+    return [{"updateTextStyle": {"objectId": oid, "textRange": {"type": "ALL"}, "style": {"fontSize": pt(COPYRIGHT_PT), "foregroundColor": {"opaqueColor": paint(color)}},
+                                 "fields": "fontSize,foregroundColor"}},
+            {"updateParagraphStyle": {"objectId": oid, "textRange": {"type": "ALL"}, "style": {"lineSpacing": 100, "spaceAbove": pt(0), "spaceBelow": pt(0)},
+                                      "fields": "lineSpacing,spaceAbove,spaceBelow"}}]
 
 
 def place(sid, x, y, w, h, sx=1, sy=1):
@@ -650,7 +658,7 @@ class Deck:
 
     def finish(self):
         """表紙・扉を含む全ページの左下に著作権表示。資料名は出さず、NAME の秘密区分だけを残す。表紙のページ番号の枠は消す。
-        濃紺の地では、著作権表示とページ番号を罫線の色にする（SUB は届かない）。foot=False の流用ページは元の表示を維持する。
+        ページ番号は著作権表示と同じ大きさにする。濃紺の地では、著作権表示とページ番号を罫線の色にする（SUB は届かない）。foot=False の流用ページは元の表示を維持する。
         ページへのリンクを、ページの ID で付ける（番号で持つと、画面でページを足したり並べ替えたりしたときにずれる）。"""
         classification = re.search(r"(?:^|[｜|])\s*(Internal Only|Confidential)\s*$", self.name, re.I)
         footer = COPYRIGHT + (f"｜{classification.group(1)}" if classification else "")
@@ -661,9 +669,8 @@ class Deck:
                 continue
             c = RULE if sid in self.dark else SUB
             self.text(sid, X - INSET, Y_FOOT, W - 1.2, 0.28, footer, size=COPYRIGHT_PT, color=c)
-            if c != SUB and sid != self.slides[0]:
-                self.reqs.append({"updateTextStyle": {"objectId": sid + "_n", "textRange": {"type": "ALL"},
-                                                      "style": {"foregroundColor": {"opaqueColor": paint(c)}}, "fields": "foregroundColor"}})
+            if sid != self.slides[0]:  # 前のテンプレート（ページ番号が 11pt）から作ったデッキも、組み直せばそろう
+                self.reqs += number_style(sid + "_n", c)
         for req, n in self.links:
             if not 1 <= n <= len(self.slides):
                 raise ValueError(f"リンク先の p.{n} がない（{len(self.slides)} 枚）")
@@ -962,6 +969,8 @@ def selftest():
     d = make_deck(make, "foot")
     assert d.reqs[-1] == {"deleteObject": {"objectId": d.slides[0] + "_n"}} and d.images[0].endswith("x.png")
     assert sum(1 for r in d.reqs if r.get("insertText", {}).get("text") == COPYRIGHT) == 3  # 表紙も含む全ページに著作権表示
+    assert [r["updateTextStyle"]["objectId"] for r in d.reqs if r.get("updateTextStyle", {}).get("style", {}).get("fontSize") == pt(COPYRIGHT_PT)
+            and r["updateTextStyle"]["objectId"].endswith("_n")] == [s + "_n" for s in d.slides[1:]]  # 表紙のほかのページ番号を著作権表示と同じ大きさに
     assert not any(r.get("insertText", {}).get("text") == "foot" for r in d.reqs)  # 資料名は表示しない
     links = [r["updateTextStyle"]["style"]["link"] for r in d.reqs if "link" in r.get("updateTextStyle", {}).get("style", {})]
     assert {"pageObjectId": d.slides[2]} in links and {"url": "https://docs.databricks.com/"} in links  # ページへのリンクは ID で付ける
