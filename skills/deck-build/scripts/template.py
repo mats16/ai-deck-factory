@@ -316,6 +316,9 @@ def pick(p, names=None):
                  "（名前は template.py audit の表のとおりに書く。合わせ直しなら --from-base で作り直す）")
     extras = {k: [l for n in dict.fromkeys(v) for l in ls if l["layoutProperties"]["displayName"] == n] for k, v in names.items()}
     kept = [l for v in extras.values() for l in v]
+    if bad := [l["layoutProperties"]["displayName"] for l in kept if "SLIDE_NUMBER" not in placeholders(l)]:  # 目印はページ番号の枠に書き、slides.py の createSlide もこの枠を対応づける
+        sys.exit(f"テーマの cover・section のレイアウト「{'」「'.join(dict.fromkeys(bad))}」に、ページ番号の枠がない。元のテンプレートを複製し、"
+                 "画面のテーマビルダーでそのレイアウトにスライド番号のプレースホルダーを足して、その URL を base にする")
     cands = sorted((l for l in ls if is_blank(l) and l not in kept),
                    key=lambda l: (l["layoutProperties"]["displayName"] != BLANK, l["layoutProperties"].get("name") != "BLANK"))
     if not cands:
@@ -534,6 +537,11 @@ def main():
              "layouts": [lay("a1", "a", sn), lay(BLANK, "b", sn, {"shape": {"placeholder": {"type": "TITLE"}}}), lay("b1", "b", sn), lay("b2", "b", sn, name="BLANK")]}
         assert [x["objectId"] for x in pick(p)[:2]] == ["b", "b2"]  # ページが使うマスターの、ページ番号の枠だけのレイアウト（名前が BLANK でも枠が多ければ使わない。型が BLANK を先に）
         assert pick(p, {"cover": "b2"})[1:] == (p["layouts"][2], {"cover": [p["layouts"][3]]})  # 表紙に残すレイアウトは Blank に選ばない
+        try:  # ページ番号の枠のない表紙は、書き換える前に止める
+            pick({**p, "layouts": [*p["layouts"], lay("c0", "b", {"shape": {"placeholder": {"type": "TITLE"}}})]}, {"cover": "c0"})
+            raise AssertionError
+        except SystemExit as e:
+            assert "c0" in str(e) and "ページ番号の枠がない" in str(e)
         box = lambda x, y, w, h, **k: {"objectId": f"e{x}{y}", "transform": {"translateX": x * EMU, "translateY": y * EMU, "scaleX": 1, "scaleY": 1},
                                        "size": {"width": {"magnitude": w * EMU}, "height": {"magnitude": h * EMU}}, **k}
         copy = box(0.8, 7.0, 4, 0.2, shape={"text": {"textElements": [{"textRun": {"content": "© 2026"}}]}})
