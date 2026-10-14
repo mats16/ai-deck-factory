@@ -17,7 +17,7 @@
 ```sh
 K=<deck-build のフォルダ>/scripts   # deck-build の SKILL.md のあるフォルダ。ほかのスキルからは、そのスキルのフォルダの ../deck-build/scripts
 cd <フォルダ>/build
-python3 $K/slides.py new <Drive のフォルダの URL> <YYYYMMDD_の名前> [--theme visual|company]   # 初めて組むとき。出た URL を構成案に書く
+python3 $K/slides.py new <Drive のフォルダの URL> <YYYYMMDD_の名前> [--theme visual|company]   # 初めて組むとき。出た URL を構成案に書き、すぐユーザーに伝える（SKILL.md の deck-build-003）
 python3 $K/slides.py build <URL> [--force]          # 2 回目から。同じ URL に組み直す（画面で直されていたら止まる。下）
 python3 $K/slides.py dry [pages_<担当>.py] [<URL>]  # 組まずに make を走らせ、組むときの警告・枚数・ノートのないページを出す（既定は pages.py。下の 2 の「ページを別のファイルに分けて書く」）
 python3 $K/gslides.py check <URL> [--talk]          # lint・テキスト・全ページの画像（/tmp/slides_<ID の頭 8 字>/）・画像で測る箱の下の余白
