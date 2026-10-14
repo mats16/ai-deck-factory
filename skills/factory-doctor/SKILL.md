@@ -17,7 +17,7 @@ python3 <このスキルのフォルダ>/scripts/doctor.py --local  # 手元だ�
 
 | 項目 | 要修正・要確認のとき |
 |---|---|
-| Python 3.11 以上、uv | 入れる。uv がないと、画像での測り（`box_pad.py`・`doc_layout.py`・`sheet.py`）が動かない |
+| Python 3.11 以上、uv | 入れる。uv がないと、画像での測り（`box_pad.py`・`doc_layout.py`・`sheet.py`）と、lint の文節の点検（BudouX）が動かない |
 | `factory.toml`・`AGENTS.md`（`CLAUDE.md`・`references_index.md`） | factory-init で置く |
 | `factory.source` | git の checkout を指しているか。違えばパスを直すか、消す |
 | スキルの重なり | ワークスペースの `.agents/skills/`・`.claude/skills/` に同じ名前のスキルがある。プラグインと二重に読まれるので、どちらを使うかをユーザーに聞く（ワークスペースのものを外すのはユーザーが決める） |
