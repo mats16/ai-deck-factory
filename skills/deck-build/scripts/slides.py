@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """Google Slides を Slides API で直接組む（2026-10-07 に pptx から切り替えた。組み方と落とし穴は ../slides.md）。
-資料ごとの build/pages.py に NAME（資料名・秘密区分）と make(d) だけを書き、部品は Deck のメソッドを使う。
+資料ごとの build/pages.py に NAME（資料名・秘密区分）と、ページの関数・共通の関数と定数・make(d) だけを書き、部品は Deck のメソッドを使う。
 usage（資料の build/ で。pages.py は今いるフォルダのもの）:
   slides.py new <Drive のフォルダの URL か ID> <Drive 上の名前> [--theme <テーマ>]   テンプレートを複製して組む（テーマは factory.toml の [slides.themes.<名前>]。その url のテンプレートを複製する）
   slides.py build <URL か ID> [--force]   組み直す（ページをすべて作り直す。URL は変わらない）。前に組んだあとに画面で直されているか、
                                           未解決のコメントがあれば止まる。直しを pages.py に入れてから --force で組み直す
   slides.py themes   テーマの名前・説明・テンプレートがあるか・既定か。資料ごとに選ぶ（../../deck-practices/SKILL.md の「作業の始め方」の 5）
+  slides.py merge <ファイル>...   子が別のファイルに書いたページの関数を pages.py に合わせる（組まない。../../deck-review/SKILL.md の手順 5）
   slides.py --selftest
 テンプレートの管理は template.py。色は下の「色の役割」の名前で渡す。役割の名前はテーマの色（マスターの配色）を指すので、テンプレートを替えると色が変わる。
 見た目の決まりは ../../deck-practices/visual.md の 1。"""
-import atexit, functools, json, math, os, re, shutil, subprocess, sys, tempfile, time, tomllib, urllib.error, urllib.parse, urllib.request
+import ast, atexit, functools, json, math, os, re, shutil, subprocess, sys, tempfile, time, tomllib, urllib.error, urllib.parse, urllib.request
 from pathlib import Path
 
 sys.dont_write_bytecode = True  # build/ と scripts/ に __pycache__ を残さない
@@ -999,6 +1000,48 @@ def load_pages():
     return make, NAME
 
 
+def merge(pages, fixes):
+    """[slides_py-014] 子が別のファイル（build/fix_<担当>.py）に書いたページの関数を pages.py に合わせる（../../deck-review/SKILL.md の deck-review-011）。
+    子は pages.py を書かず、親がここで合わせて 1 回だけ組む。同じ名前の関数は置き換え、pages.py にない関数は make の前に足す。import と docstring は読み飛ばす
+    （名前は pages.py の import を使う）。make と、関数でない文（定数など）があれば合わせずに止める（共通のものとページの順は親が書く）。2 つのファイルが同じ関数を
+    書いても止める。足した関数を make が呼んでいなければ警告する。前の pages.py は pages.py.bak に残す（直して欠陥が増えたら戻すため。あれば上書きせず pages.py.bak1 …）。
+    戻り: {ファイル: {"replaced": [...], "added": [...]}}。"""
+    src, owner, out = Path(pages).read_text(), {}, {}
+    start = lambda n: (n.decorator_list[0] if n.decorator_list else n).lineno - 1
+    for f in fixes:
+        text = Path(f).read_text()
+        lines, got = text.splitlines(keepends=True), {"replaced": [], "added": []}
+        for i, n in enumerate(ast.parse(text, f).body):
+            if isinstance(n, (ast.Import, ast.ImportFrom)) or i == 0 and isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant):
+                continue
+            if not isinstance(n, ast.FunctionDef) or n.name == "make":
+                sys.exit(f"{f}:{n.lineno} は関数でないか make なので合わせない（共通のものとページの順は親が pages.py に書く）")
+            if n.name in owner:
+                sys.exit(f"{n.name} を {owner[n.name]} と {f} の両方が書いた（同じ関数に当たる行は同じ子に渡す）")
+            owner[n.name] = f
+            body = "".join(lines[start(n):n.end_lineno]).rstrip("\n") + "\n"
+            at = {m.name: m for m in ast.parse(src, pages).body if isinstance(m, ast.FunctionDef)}
+            old = src.splitlines(keepends=True)
+            if n.name in at:
+                old[start(at[n.name]):at[n.name].end_lineno] = [body]
+                got["replaced"].append(n.name)
+            elif "make" in at:
+                old[start(at["make"]):start(at["make"])] = [body, "\n\n"]
+                got["added"].append(n.name)
+            else:
+                sys.exit(f"{pages} に make がない")
+            src = "".join(old)
+        out[f] = got
+    make = next(m for m in ast.parse(src, pages).body if isinstance(m, ast.FunctionDef) and m.name == "make")
+    called = {n.id for n in ast.walk(make) if isinstance(n, ast.Name)}
+    for name in (k for g in out.values() for k in g["added"] if k not in called):
+        print(f"警告: {owner[name]} の {name} を足したが、make から呼ばれていない（名前の誤りか、make に足し忘れ）", file=sys.stderr)
+    bak = next(b for b in (pages + ".bak" + (str(i) if i else "") for i in range(1000)) if not os.path.exists(b))
+    shutil.copy(pages, bak)
+    Path(pages).write_text(src)
+    return out
+
+
 def selftest():
     assert gapi.find_factory.cache_info().currsize == 0  # import で [brand] を読んでも、gapi の覚えた結果を作らない（あとで今いるフォルダを変える factory-doctor のため）
     assert paint(NAVY) == {"themeColor": "DARK1"} and paint("FFFFFF") == {"rgbColor": {"red": 1.0, "green": 1.0, "blue": 1.0}}
@@ -1267,6 +1310,40 @@ def selftest():
         except SystemExit as e:
             assert f"template.py {want}" in str(e)
     globals()["theme_table"] = table
+    # merge: 同じ名前の関数は置き換え（上のコメントは残す）、ない関数は make の前に足す。make・関数でない文・2 つのファイルが同じ関数を書いたら止める
+    with tempfile.TemporaryDirectory() as t:
+        pg, fa, fb = (os.path.join(t, n) for n in ("pages.py", "fix_a.py", "fix_b.py"))
+        Path(pg).write_text("from slides import X\nNAME = 'n'\n# p2 の説明\ndef p2(d):\n    d.page('前')\n\n\ndef make(d):\n    p2(d)\n")
+        Path(fa).write_text('"""直した: p2"""\nfrom slides import X\n\ndef p2(d):\n    d.page(\'後\')\n    d.note(s, \'後\')\n')
+        Path(fb).write_text("def p3(d):\n    d.page('足した')\n")
+        assert merge(pg, [fa, fb]) == {fa: {"replaced": ["p2"], "added": []}, fb: {"replaced": [], "added": ["p3"]}}
+        got = Path(pg).read_text()
+        assert "前" not in got and "# p2 の説明\ndef p2(d):\n    d.page('後')\n    d.note(s, '後')\n" in got and "直した" not in got
+        assert got.index("def p3") < got.index("def make") and "前" in Path(pg + ".bak").read_text()
+        ast.parse(got)
+        Path(fb).write_text("def p2(d):\n    d.page('再')\n")
+        merge(pg, [fb])  # 同じ周に 2 回合わせても、最初の .bak は上書きしない
+        assert "前" in Path(pg + ".bak").read_text() and "後" in Path(pg + ".bak1").read_text()
+        Path(pg).write_text(got)
+        Path(fb).write_text("def p4(d):\n    pass\n\n'''途中の文字列'''\n")  # docstring でない文字列は関数でない文として止める
+        try:
+            merge(pg, [fb])
+            raise AssertionError("途中の文字列を読み飛ばした")
+        except SystemExit as e:
+            assert "親が" in str(e)
+        for bad in ("X = 1\n", "def make(d):\n    pass\n"):
+            Path(fb).write_text(bad)
+            try:
+                merge(pg, [fb])
+                raise AssertionError(f"{bad!r} を合わせた")
+            except SystemExit as e:
+                assert "親が" in str(e)
+        Path(fb).write_text("def p2(d):\n    pass\n")
+        try:
+            merge(pg, [fa, fb])
+            raise AssertionError("2 つのファイルの同じ関数を合わせた")
+        except SystemExit as e:
+            assert "両方" in str(e) and Path(pg).read_text() == got  # 止めたら pages.py を書かない
     print("selftest ok")
 
 
@@ -1276,6 +1353,8 @@ def main():
         return selftest()
     if a == ["themes"]:
         return cmd_themes()
+    if a[:1] == ["merge"] and len(a) >= 2:
+        return print(json.dumps(merge("pages.py", a[1:]), ensure_ascii=False))
     if not (a[:1] == ["build"] and len(a) >= 2 or a[:1] == ["new"] and len(a) >= 3):
         sys.exit(__doc__)
     theme = a[a.index("--theme") + 1] if "--theme" in a else None
