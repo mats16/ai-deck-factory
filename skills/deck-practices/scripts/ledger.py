@@ -503,7 +503,7 @@ def rule_texts(ws):
                     group = l.lstrip().startswith("[")
                     for x in lines[i + 1:]:
                         if RULE_ID.search(x):
-                            if group:
+                            if group and not x.lstrip().startswith("["):  # まとまりの中の箇条書きの決まりは飛ばす。次に行の頭に立つ決まりで終わる
                                 continue
                             break
                         if not (x.startswith((" ", "\t")) or group and x.strip()):
@@ -890,7 +890,7 @@ def selftest():
             (ws / "rules" / "deck-practices" / "quote.md").write_text(
                 "- [ws-q-001] **見出し**は、短い名詞句にする。\n  言い切りは 2〜3 枚。\n"
                 "- 出典の書き方。[ws-q-002] 出典には、[リンク](https://example.com)を付ける。\n本文から指すときは ws-q-003 と書く。\n\n"
-                "[ws-q-004] **話す資料のとき**\n- 1 枚に 1 つ。\n- [ws-q-005] 細部はノートに。\n- 読む資料には当てはめない。\n\n- 空行のあとは別。\n")
+                "[ws-q-004] **話す資料のとき**\n- 1 枚に 1 つ。\n- [ws-q-005] 細部はノートに。\n- 読む資料には当てはめない。\n[ws-q-006] **次のまとまり**\n- 次のまとまりの項。\n\n- 空行のあとは別。\n")
             q = ws / "review_q.md"
             q.write_text("p1 | 画像 | 5 | 直す | 見出しが文 | 名詞句に | 直した | ws-q-001「見出しは、短い名詞句」\n"
                          "p2 | 画像 | 5 | 直す | 言い切りが多い | 減らす | 直した | [ws-q-001]「言い切りは 2〜3 枚」\n"
@@ -902,12 +902,13 @@ def selftest():
                          "p7 | 画像 | 5 | 直す | 二重 | 直す | 直した | ws-q-002「出典の書き方」\n"
                          "p6 | 画像 | 5 | 直す | 出典 | 足す | 直した | ws-q-002「リンクを付ける」、ws-q-001\n"
                          "p8 | 画像 | 5 | 直す | 話す | 直す | 直した | ws-q-004「読む資料には当てはめない」, ws-q-005「1 枚に 1 つ」\n"
-                         "p9 | 画像 | 5 | 直す | 別 | 直す | 直した | ws-q-004「空行のあとは別」\n")
+                         "p9 | 画像 | 5 | 直す | 別 | 直す | 直した | ws-q-004「空行のあとは別」\n"
+                         "p10 | 画像 | 5 | 直す | 次 | 直す | 直した | ws-q-004「次のまとまりの項」, ws-q-006「次のまとまりの項」\n")
             with contextlib.redirect_stdout(io.StringIO()) as out:
-                assert review(ws, ".", q) == 7
-            assert out.getvalue().count("取り込まなかった") == 6 and "語句のない ID が 1 件" in out.getvalue(), out.getvalue()
+                assert review(ws, ".", q) == 8
+            assert out.getvalue().count("取り込まなかった") == 7 and "語句のない ID が 1 件" in out.getvalue(), out.getvalue()
             s = summary(ws)
-            assert (s["ws-q-001"]["直した"], s["ws-q-002"]["直した"], s["lint:あおり"]["直した"]) == (3, 2, 1) and "ws-q-003" not in s and s["ws-q-004"]["直した"] == 1 and "ws-q-005" not in s
+            assert (s["ws-q-001"]["直した"], s["ws-q-002"]["直した"], s["lint:あおり"]["直した"]) == (3, 2, 1) and "ws-q-003" not in s and (s["ws-q-004"]["直した"], s["ws-q-006"]["直した"]) == (1, 1) and "ws-q-005" not in s
             q.write_text("p1 | 画像 | 5 | 直す | 見出しが文 | 名詞句に | 直した | ws-q-001\n"
                          "p2 | 画像 | 5 | 直す | 言い切りが多い | 減らす | 残した（誤り） | ws-q-001「言い切りは 2〜3 枚」\n")
             with quiet():
