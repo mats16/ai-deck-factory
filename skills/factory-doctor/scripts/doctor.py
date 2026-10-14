@@ -132,7 +132,8 @@ def check(ws, local=False):
         desc_warn(bad)
     if dr.get("shared_themes"):  # 全社の共有テーマのフォルダ。探すときだけ読む（使うテーマは [slides.themes.<名前>] の url）
         try:
-            names, new = [f["properties"][slides.THEME_PROP] for f in slides.shared_files()], [n for n, _, _ in slides.unlisted()]
+            files, have = slides.shared_files(), {gapi.file_id(u) for u in temps.values()}  # 自分の Themes は読まない（slides.py themes が出す）
+            names, new = [f["properties"][slides.THEME_PROP] for f in files], [f["properties"][slides.THEME_PROP] for f in files if f["id"] not in have]
         except slides.READ_ERRORS:  # 開けないことは drive.shared_themes に出ている
             return out
         if dup := sorted({n for n in names if names.count(n) > 1}):
