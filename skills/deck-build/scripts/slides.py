@@ -5,12 +5,13 @@ usage（資料の build/ で。pages.py は今いるフォルダのもの）:
   slides.py new <Drive のフォルダの URL か ID> <Drive 上の名前> [--theme <テーマ>]   テンプレートを複製して組む（テーマは factory.toml の [slides.themes.<名前>]。その url のテンプレートを複製する）
   slides.py build <URL か ID> [--force]   組み直す（ページをすべて作り直す。URL は変わらない）。前に組んだあとに画面で直されているか、
                                           未解決のコメントがあれば止まる。直しを pages.py に入れてから --force で組み直す
+  slides.py dry [<ファイル>]   組まずに make を走らせ、組むときの警告・枚数・ノートのないページを出す（既定は pages.py。子が書いた build/pages_<担当>.py を確かめる。../slides.md の 2）
   slides.py themes   テーマの名前・説明・テンプレートがあるか・既定か。資料ごとに選ぶ（../../deck-practices/SKILL.md の「作業の始め方」の 5）
   slides.py merge <ファイル>...   子が別のファイルに書いたページの関数を pages.py に合わせる（組まない。../../deck-review/SKILL.md の手順 5）
   slides.py --selftest
 テンプレートの管理は template.py。色は下の「色の役割」の名前で渡す。役割の名前はテーマの色（マスターの配色）を指すので、テンプレートを替えると色が変わる。
 見た目の決まりは ../../deck-practices/visual.md の 1。"""
-import ast, atexit, functools, json, math, os, re, shutil, subprocess, sys, tempfile, time, tomllib, urllib.error, urllib.parse, urllib.request
+import ast, atexit, functools, importlib, json, math, os, re, shutil, subprocess, sys, tempfile, time, tomllib, urllib.error, urllib.parse, urllib.request
 from pathlib import Path
 
 sys.dont_write_bytecode = True  # build/ と scripts/ に __pycache__ を残さない
@@ -913,9 +914,8 @@ def build(pid, deck, force=False):
                   {"updateTextStyle": {"objectId": spk[sid], "textRange": {"type": "ALL"}, "style": {"fontFamily": font}, "fields": "fontFamily"}}]
     batch(pid, nreqs)
     gapi.stamp(pid, revision(pid), STAMP)
-    missing = [i for i, s in enumerate(deck.slides, 1) if not deck.notes.get(s)]
     print(json.dumps({"presentationId": pid, "url": f"https://docs.google.com/presentation/d/{pid}/edit",
-                      "slides": len(deck.slides), "requests": len(deck.reqs) + len(old) + len(nreqs), "pages_without_notes": missing,
+                      "slides": len(deck.slides), "requests": len(deck.reqs) + len(old) + len(nreqs), "pages_without_notes": missing_notes(deck),
                       "warnings": len(deck.warnings)}, ensure_ascii=False))
 
 
@@ -992,12 +992,28 @@ def new(folder, name, src):
                    {"name": name, "parents": [folder_id(folder)]})["id"]
 
 
-def load_pages():
-    """今いるフォルダの pages.py を読む。pages.py の「from slides import …」には、このモジュールをそのまま渡す（2 つ目を読み込まない）。"""
+def load_pages(name="pages"):
+    """今いるフォルダの pages.py（name を渡すと <name>.py）を読み、モジュールを返す。pages.py の「from slides import …」には、このモジュールを
+    そのまま渡す（2 つ目を読み込まない）。"""
     sys.modules["slides"] = sys.modules[__name__]
     sys.path.insert(0, os.getcwd())
-    from pages import NAME, make
-    return make, NAME
+    return importlib.import_module(name)
+
+
+def missing_notes(deck):
+    """ノートのないページの番号（1 始まり）。"""
+    return [i for i, s in enumerate(deck.slides, 1) if not deck.notes.get(s)]
+
+
+def dry(path="pages.py"):
+    """[slides_py-015] 組まずに path の make(d) を走らせ、組むときの警告・枚数・ノートのないページを出す（Google の API は呼ばない。アイコンの名前だけは確かめる）。
+    子が担当のページを別のファイルに書いたとき、親が組む前に子が自分で確かめる（../slides.md の 2）。番号は担当の中の何枚目。finish は呼ばない（ページへのリンクは、親が組むときに確かめる）。"""
+    if Path(path).parent != Path("."):  # 今いるフォルダから読むので、別のフォルダのファイルを黙って取り違えない
+        sys.exit(f"dry はファイルのあるフォルダ（build/）で、名前だけを渡して回す: {path}")
+    d = Deck("dry")
+    load_pages(Path(path).stem).make(d)
+    print(json.dumps({"file": path, "slides": len(d.slides), "pages_without_notes": missing_notes(d), "warnings": len(d.warnings)}, ensure_ascii=False))
+    return d
 
 
 def merge(pages, fixes):
@@ -1344,6 +1360,28 @@ def selftest():
             raise AssertionError("2 つのファイルの同じ関数を合わせた")
         except SystemExit as e:
             assert "両方" in str(e) and Path(pg).read_text() == got  # 止めたら pages.py を書かない
+    # 子が書いた別のファイル: pages.py の共通の関数を読み込み、1 枚 1 関数で書く。親は make の中で読み込み、ページの関数を並べる（頭で読み込むと、読み込み合って止まる。../slides.md の 2）
+    here = os.getcwd()
+    with tempfile.TemporaryDirectory() as t:
+        Path(t, "pages.py").write_text('from slides import X, W\nNAME = "分け"\ndef common(d, n):\n    s = d.page(f"見出し {n}", "リード")\n    d.note(s, "ノート。")\n'
+                                       'def make(d):\n    import pages_a\n    common(d, 1)\n    pages_a.p02(d)\n    pages_a.p03(d)\n')
+        Path(t, "pages_a.py").write_text('from pages import common\ndef p02(d):\n    common(d, 2)\ndef p03(d):\n    d.page("ノートのないページ", "")\n'
+                                         'def make(d):\n    p02(d)\n    p03(d)\n')
+        os.chdir(t)
+        try:
+            m = load_pages()
+            assert len(make_deck(m.make, m.NAME).slides) == 3
+            assert missing_notes(dry("pages_a.py")) == [2]  # 番号は担当の中の何枚目
+            try:
+                dry("build/pages_a.py")
+                raise AssertionError("別のフォルダのファイルを今いるフォルダから読んだ")
+            except SystemExit as e:
+                assert "名前だけ" in str(e)
+        finally:
+            os.chdir(here)
+            for k in ("pages", "pages_a"):
+                sys.modules.pop(k, None)
+            sys.path[:] = [x for x in sys.path if Path(x).resolve() != Path(t).resolve()]
     print("selftest ok")
 
 
@@ -1355,6 +1393,8 @@ def main():
         return cmd_themes()
     if a[:1] == ["merge"] and len(a) >= 2:
         return print(json.dumps(merge("pages.py", a[1:]), ensure_ascii=False))
+    if a[:1] == ["dry"] and len(a) <= 2:
+        return dry(*a[1:])
     if not (a[:1] == ["build"] and len(a) >= 2 or a[:1] == ["new"] and len(a) >= 3):
         sys.exit(__doc__)
     theme = a[a.index("--theme") + 1] if "--theme" in a else None
@@ -1366,7 +1406,8 @@ def main():
         need_mark(theme or factory().get("slides", {}).get("default_theme", "visual"), mark)
     use_theme(theme_table(mark))
     need_brand()  # 複製する前に止める（build でも止まるが、作った複製をゴミ箱に移すことになる）
-    deck = make_deck(*load_pages())
+    m = load_pages()
+    deck = make_deck(m.make, m.NAME)
     if a[0] == "build":
         return build(src, deck, "--force" in a)
     pid = new(a[1], a[2], src)
