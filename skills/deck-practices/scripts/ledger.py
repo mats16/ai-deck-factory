@@ -44,6 +44,7 @@ PLUGIN = Path(__file__).resolve().parents[2]  # プラグインの skills/
 ID = r"(?:ws-)?[a-z][\w-]*?-\d{3}"  # 決まりの ID（visual-012・ws-visual-003）
 RULE_ID = re.compile(rf"\[({ID})\]")
 KEY = re.compile(rf"{ID}|lint:.+")  # レビューの表の「決まり」の列に書くもの（lint の規則は名前で lint:<名前>）
+CITE = re.compile(rf"\[?({ID})\]?\s*「([^」]*)」")  # 決まりの列の ID に添えた、その決まりの文から写した語句（visual-013「単語や文節の途中で折り返さない」）
 RESULTS = ("直した", "残した（誤り）", "残した", "聞く")
 NO_RULE = ("未", "戻さない")  # 決まりにつないでいない戻し先
 TWICE = 2  # 2 本以上の資料・2 社以上の顧客に出たら、たまたまでないとみなす（dreaming の 4c・4i・5）
@@ -483,28 +484,74 @@ def result_of(cell):
     return next((k for k in ("直した", "聞く", "残した") if cell.startswith(k)), None)
 
 
+def flat(s):
+    return re.sub(r"\]\([^)]*\)|[\s*`「」『』（）()\[\]、。・]", "", s)  # 太字の印や句読点、リンク先の違いで外れないように
+
+
+def rule_texts(ws):
+    """決まりの ID → その決まりの文（同じ行の次の [ID] まで。行の最初の決まりは行の頭から、最後の決まりは続く字下げの行も）を flat にしたもの。
+    行の頭に立つ決まり（[content-001] **どの種類でも**）は、空行までの ID のない行も。箇条書きの決まりには、隣の ID のない項目をつなげない（その項の語句を近くの ID に付けたら止める）。
+    プラグインとワークスペースの決まりと顧客の memory から。[ID] は決まりを書いたところにだけ付け、ほかから指すときは角括弧を付けない（rules.md の決まりの ID）。"""
+    out = {}
+    for t in texts([PLUGIN, ws / "AGENTS.md", ws / "rules", *(ws / "Customers").glob("*/memory.md")], {Path(__file__).resolve()}):
+        lines = t.splitlines()
+        for i, l in enumerate(lines):
+            ms = list(RULE_ID.finditer(l))
+            for j, (m, n) in enumerate(zip(ms, ms[1:] + [None])):
+                body = l[m.end() if j else 0:n.start() if n else None]  # 行の頭から: 1. 話の筋: [ID] …・MID = "…"  # [ID]
+                if not n:
+                    group = l.lstrip().startswith("[")
+                    for x in lines[i + 1:]:
+                        if RULE_ID.search(x):
+                            if group and not x.lstrip().startswith("["):  # まとまりの中の箇条書きの決まりは飛ばす。次に行の頭に立つ決まりで終わる
+                                continue
+                            break
+                        if not (x.startswith((" ", "\t")) or group and x.strip()):
+                            break
+                        body += x
+                out[m.group(1)] = out.get(m.group(1), "") + "\n" + flat(body)
+    return out
+
+
 def review(ws, deck, table):
     """deck-review の指摘の表（1 件 1 行。`p3 | 出所 | 観点 | 重さ | 何が | 案 | 結果 | 決まり`）から、決まりの列のある行を取り込む。
-    資料の文は残さず、同じ行を見分けるハッシュだけにする。周をまたいで同じ行があれば、表の後ろ（あとの周）の結果にする。"""
+    資料の文は残さず、同じ行を見分けるハッシュだけにする。周をまたいで同じ行があれば、表の後ろ（あとの周）の結果にする。
+    決まりの列の ID に「」で添えた語句が、その ID の決まりの文にないときは、その ID だけ取り込まずに知らせる（ID の付け違い）。"""
     deck, last = rel(ws, deck), {r["key"]: r["result"] for r in state(ws)[3]}
-    rows, skip = {}, 0
+    rows, skip, wrong, bare, known = {}, 0, [], set(), rule_texts(ws)
     for line in Path(table).read_text(encoding="utf-8").splitlines():
         cells = [x.strip() for x in re.sub(r"^[-*]\s+", "", line.strip()).strip("|").split("|")]
         if len(cells) < 8 or not re.match(r"p\d|全体", cells[0]):
             continue
         res = result_of(cells[-2])
-        keys = [k for k in (x.strip(" []") for x in re.split(r"[,、]", cells[-1])) if KEY.fullmatch(k)]
-        if not res or not keys:
+        if not res:
+            skip += 1
+            continue
+        cited, bad = CITE.findall(cells[-1]), set()  # 同じ ID に語句を 2 つ添えたら、どちらも確かめる
+        for k, q in cited:
+            if not (flat(q) and flat(q) in known.get(k, "")):
+                bad.add(k)
+                wrong.append(f"{cells[0]} {k}「{q}」は、{'その決まりの文にない' if k in known else 'その ID の決まりが見つからない'}")
+        keys = [k for k in (x.strip(" []") for x in re.split(r"[,、]", CITE.sub(r"\1", cells[-1]))) if KEY.fullmatch(k) and k not in bad]
+        if not keys:
             skip += 1
             continue
         for k in keys:
             key = hashlib.sha1(f"{deck}|{cells[0]}|{cells[4]}|{k}".encode()).hexdigest()[:12]
+            if k.startswith("lint:") or k in dict(cited):  # 周をまたぐ同じ行は、あとの周の書き方で数える
+                bare.discard(key)
+            else:
+                bare.add(key)
             rows.pop(key, None)  # あとの行を後ろに置き直す
             rows[key] = {"kind": "review", "deck": deck, "rule": k, "page": cells[0], "from": cells[1], "result": res, "key": key}
     new = [r for key, r in rows.items() if last.get(key) != r["result"]]
     for r in new:
         write(ws, r)
     print(f"取り込んだ {len(new)} 件（決まりか結果のない行 {skip}、取り込み済み {len(rows) - len(new)}）")
+    for w in wrong:
+        print(f"取り込まなかった: {w}（ID の付け違い。当たる決まりを引き直すか、- にする）")
+    if bare:
+        print(f"決まりの文の語句のない ID が {len(bare)} 件（決まりの列は <ID>「<決まりの文から写した語句>」。deck-review の指摘の表）")
     return len(new)
 
 
@@ -838,6 +885,35 @@ def selftest():
                 assert review(ws, ".", t) == 1
                 s = summary(ws)
             assert (s["ws-visual-002"]["直した"], s["ws-visual-002"]["残した"]) == (1, 1)  # あとで取り込んだ結果に替わる
+            # 決まりの列に添えた語句: その ID の決まりの文（[ID] から次の [ID] まで、行の途中の [ID] も）になければ、その ID だけ取り込まない
+            (ws / "rules" / "deck-practices").mkdir(parents=True, exist_ok=True)
+            (ws / "rules" / "deck-practices" / "quote.md").write_text(
+                "- [ws-q-001] **見出し**は、短い名詞句にする。\n  言い切りは 2〜3 枚。\n"
+                "- 出典の書き方。[ws-q-002] 出典には、[リンク](https://example.com)を付ける。\n本文から指すときは ws-q-003 と書く。\n\n"
+                "[ws-q-004] **話す資料のとき**\n- 1 枚に 1 つ。\n- [ws-q-005] 細部はノートに。\n- 読む資料には当てはめない。\n[ws-q-006] **次のまとまり**\n- 次のまとまりの項。\n\n- 空行のあとは別。\n")
+            q = ws / "review_q.md"
+            q.write_text("p1 | 画像 | 5 | 直す | 見出しが文 | 名詞句に | 直した | ws-q-001「見出しは、短い名詞句」\n"
+                         "p2 | 画像 | 5 | 直す | 言い切りが多い | 減らす | 直した | [ws-q-001]「言い切りは 2〜3 枚」\n"
+                         "p3 | lint | 4 | 直す | 帯が短い | 伸ばす | 直した | ws-q-002「見出しは、短い名詞句」, lint:あおり\n"
+                         "p4 | 画像 | 5 | 直す | 参照 | 直す | 直した | ws-q-003「参照」\n"
+                         "p5 | 画像 | 5 | 直す | 句読点 | 直す | 直した | ws-q-001「、。」\n"
+                         "p6 | 画像 | 5 | 直す | 出典 | 足す | 直した | ws-q-002「リンクを付ける」、ws-q-001\n"
+                         "p7 | 画像 | 5 | 直す | 二重 | 直す | 直した | ws-q-001「出典の書き方」, ws-q-001\n"
+                         "p7 | 画像 | 5 | 直す | 二重 | 直す | 直した | ws-q-002「出典の書き方」\n"
+                         "p6 | 画像 | 5 | 直す | 出典 | 足す | 直した | ws-q-002「リンクを付ける」、ws-q-001\n"
+                         "p8 | 画像 | 5 | 直す | 話す | 直す | 直した | ws-q-004「読む資料には当てはめない」, ws-q-005「1 枚に 1 つ」\n"
+                         "p9 | 画像 | 5 | 直す | 別 | 直す | 直した | ws-q-004「空行のあとは別」\n"
+                         "p10 | 画像 | 5 | 直す | 次 | 直す | 直した | ws-q-004「次のまとまりの項」, ws-q-006「次のまとまりの項」\n")
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                assert review(ws, ".", q) == 8
+            assert out.getvalue().count("取り込まなかった") == 7 and "語句のない ID が 1 件" in out.getvalue(), out.getvalue()
+            s = summary(ws)
+            assert (s["ws-q-001"]["直した"], s["ws-q-002"]["直した"], s["lint:あおり"]["直した"]) == (3, 2, 1) and "ws-q-003" not in s and (s["ws-q-004"]["直した"], s["ws-q-006"]["直した"]) == (1, 1) and "ws-q-005" not in s
+            q.write_text("p1 | 画像 | 5 | 直す | 見出しが文 | 名詞句に | 直した | ws-q-001\n"
+                         "p2 | 画像 | 5 | 直す | 言い切りが多い | 減らす | 残した（誤り） | ws-q-001「言い切りは 2〜3 枚」\n")
+            with quiet():
+                assert review(ws, ".", q) == 1  # 語句の有無では別の行にならず、あとの周の結果に替わる
+            assert (summary(ws)["ws-q-001"]["直した"], summary(ws)["ws-q-001"]["残した（誤り）"]) == (2, 1)
             # 結果ごとに、出た資料の数を数える（1 本の資料の 3 件は、2 本の資料に出たことにならない）
             t.write_text("".join(f"p{i} | 画像 | 5 | 直す | 字 {i} | 直す | 直した | ws-r-001\n" for i in (1, 2, 3)))
             with quiet():
