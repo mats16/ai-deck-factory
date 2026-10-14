@@ -1,6 +1,6 @@
 ---
 name: factory-kaizen
-description: 工場（プラグイン、大元）を改善する。現場（ワークスペース）で育った決まり・点検・スクリプトの直しのうち、ほかの人にも効くものを、過去の資料で確かめてから、プラグインのリポジトリに Issue で出す。元のリポジトリに worktree を作って変更案を書き、変えた版と前の版で lint をかけ比べ、正本から仮に組み直したページの画像を前後で並べ、理由・背景・検証の結果・画像・変更案の差分を入れた Issue を作る。PR は持ち主が Issue から作る。dreaming の「プラグインに上げる」提案を適用するとき、「工場を改善して」「プラグインに Issue を出して」「大元を直して」と頼まれたときに使う。
+description: 工場（プラグイン、大元）を改善する。現場（ワークスペース）で育った決まり・点検・スクリプトの直しのうち、ほかの人にも効くものを、過去の資料で確かめてから、プラグインのリポジトリに Issue で出す。元のリポジトリを clone して変更案を書き、変えた版と前の版で lint をかけ比べ、正本から仮に組み直したページの画像を前後で並べ、理由・背景・検証の結果・画像・変更案の差分を入れた Issue を作る。PR は持ち主が Issue から作る。dreaming の「プラグインに上げる」提案を適用するとき、「工場を改善して」「プラグインに Issue を出して」「大元を直して」と頼まれたときに使う。
 ---
 
 # 工場を改善する（大元に Issue を出す）
@@ -9,21 +9,21 @@ description: 工場（プラグイン、大元）を改善する。現場（ワ�
 
 Issue を読んだプラグインの持ち主が、入れるかを決め、ほかのコードと合わせて書き直して PR にする。だから Issue には、持ち主がワークスペースを見ずに決められるだけの材料（何が起きたか、数、確かめた結果、画像、変更案の差分、迷ったところ）を入れる。変更案は、確かめられる形で動けば足りる。きれいにする・縮める・レビューを回す（simplify・review-loop など）のは持ち主がするので、ここではしない。
 
-前提: `factory.toml` の `[factory] source` に、プラグインのリポジトリの git の checkout があること（持ち主でなければ fork を `gh repo fork --clone` で作る。fork には、元のリポジトリを指す `upstream` のリモートが要る。`--clone` が作り、ないと `start`・`open` が止まる）。`gh` にログインしていること。ワークスペースで回す。
+前提: `gh` にログインしていること。ワークスペースで回す。元のリポジトリ（`.claude-plugin/plugin.json` の `repository`）は `start` が `.factory/kaizen/<名前>/repo` に clone するので、手元に checkout も fork も用意しなくてよい。
 
 ```sh
 P="python3 <このスキルのフォルダ>/scripts/kaizen.py"
-$P start <名前>                                   # .factory/kaizen/<名前>/repo に worktree（ブランチ kaizen/<名前>）
+$P start <名前>                                   # .factory/kaizen/<名前>/repo に clone（ブランチ kaizen/<名前>）
 $P lint <名前> <資料の URL ...>                    # いまの資料に、前の版と変えた版の lint をかけて比べる
 $P rebuild <名前> <資料のフォルダ ...> [--pages 2,5]   # 正本から前後の版で仮に組み、変わったページの画像を並べる（仮の資料はゴミ箱へ）
-$P open <名前> --title <題> --body <本文.md>       # 元のリポジトリ（fork なら親）に Issue。2 回目からは同じ Issue を書き換える
-$P clean <名前>                                   # Issue が閉じられたあと
+$P open <名前> --title <題> --body <本文.md>       # 元のリポジトリに Issue。2 回目からは同じ Issue を書き換える
+$P clean <名前>                                   # Issue が閉じられたあと（clone ごと消す）
 ```
 
 ## 手順
 
-1. **出すものを決める。** 何を変えるか、なぜか（決まりの台帳の `ledger.py why <決まりの ID>` に出る指摘と資料・顧客の数、再発とレビューの結果、`.factory/lint_runs.jsonl` や dreaming の記録の数字）を 1 つにまとめる。原文と資料の名前は Issue に書かず（2 の `start` のあとは `verify/detail.md` にだけ書く）、Issue には数を書く。ワークスペースの `rules/` に写しがあるなら、それを大元に移す形にする。顧客の `memory.md`（`ws-memory`）の好みは、じかに上げない（2 社以上で同じなら、dreaming が先に `rules/` に寄せる。`../deck-practices/rules.md` の「顧客の memory」）。移した決まりには、プラグインの接頭辞の新しい ID を付ける（worktree の中で同じ接頭辞のいちばん大きい番号の次。`ws-` は付けない）。本文には ID と短い理由だけを書き、日付と原文は書かない（`../deck-practices/rules.md` の「修正の指示の戻し方」）。
-2. **`start` して、`.factory/kaizen/<名前>/repo` の中に変更案を書き、commit する。** プラグインの入った場所や、元のリポジトリの checkout そのものは直さない。ブランチは push しない（Issue に差分を載せる）ので、commit の分け方とメッセージは自由でよい。
+1. **出すものを決める。** 何を変えるか、なぜか（決まりの台帳の `ledger.py why <決まりの ID>` に出る指摘と資料・顧客の数、再発とレビューの結果、`.factory/lint_runs.jsonl` や dreaming の記録の数字）を 1 つにまとめる。原文と資料の名前は Issue に書かず（2 の `start` のあとは `verify/detail.md` にだけ書く）、Issue には数を書く。ワークスペースの `rules/` に写しがあるなら、それを大元に移す形にする。顧客の `memory.md`（`ws-memory`）の好みは、じかに上げない（2 社以上で同じなら、dreaming が先に `rules/` に寄せる。`../deck-practices/rules.md` の「顧客の memory」）。移した決まりには、プラグインの接頭辞の新しい ID を付ける（`.factory/kaizen/<名前>/repo` の中で同じ接頭辞のいちばん大きい番号の次。`ws-` は付けない）。本文には ID と短い理由だけを書き、日付と原文は書かない（`../deck-practices/rules.md` の「修正の指示の戻し方」）。
+2. **`start` して、`.factory/kaizen/<名前>/repo` の中に変更案を書き、commit する。** プラグインの入った場所は直さない。ブランチは push しない（Issue に差分を載せる）ので、commit の分け方とメッセージは自由でよい。
 3. **過去の資料で確かめる。** 変えたものに合わせて選ぶ。
    - 決まり・点検（`lint.py`、`checks.py` から移したもの）: `lint` を、その規則が効くはずの資料と、効いてはいけない資料の両方にかける。候補は `.factory/lint_runs.jsonl` の資料（その規則の指摘が出た資料）と `references_index.md` の「作った」。
    - 組み方・見た目（`slides.py`・`docs.py`・`template.py`、`visual.md`・`visual_doc.md`、テンプレート、画像）: `rebuild` を、変わるはずのページがある資料にかける。前後の画像は必須（`open` が止める）。
@@ -34,7 +34,7 @@ $P clean <名前>                                   # Issue が閉じられた�
 5. **ユーザーに確かめてから `open` する。** Issue はリポジトリの外の人も読む。次の 2 つを見せて、よいと言われてから出す。
    - 本文
    - 載せる画像（`verify/img/` と、変えた png。png は差分に中身が出ないので、`open` が変えた版を画像として載せる）。顧客向けの資料（`Customers/`）の画像は、顧客の名前・数字・社外秘が写るので、原則として載せない。社内向けか、公開の内容だけの資料で確かめ直す。
-   `open` は、節がそろっているか、検証があるか、見た目の変更に画像があるかを確かめてから、画像を origin（fork なら自分の fork）の `pr-assets` ブランチに置き、検証の記録（資料は「資料 1」の番号だけ。名前・URL・本文は出さない）と、前の版の commit と、変更案の差分（`git diff <起点>...HEAD`。起点は `origin/main`、fork なら `upstream/main`。`start` も同じ起点から作る）を本文に足して Issue を作る。本文が上限を超えるほど差分が長いときは、差分を載せず行数だけを書く（分けて出す）。
+   `open` は、節がそろっているか、検証があるか、見た目の変更に画像があるかを確かめてから、画像を `pr-assets` ブランチ（元のリポジトリに書けなければ、自分の fork の。fork がなければ `open` が GitHub に作る）に置き、検証の記録（資料は「資料 1」の番号だけ。名前・URL・本文は出さない）と、前の版の commit と、変更案の差分（`git diff origin/main...HEAD`。`start` が clone した元のリポジトリの main が起点）を本文に足して Issue を作る。本文が上限を超えるほど差分が長いときは、差分を載せず行数だけを書く（分けて出す）。
 6. **返す。** Issue の URL を返す。dreaming のプラグインへの提案（P-ID）から出したなら、`ledger.py sent <P-ID> --issue <URL>` で決まりの台帳に残す（変更案で提案と違う ID にしたら `--rule <その ID>` も付ける）（dreaming が同じ提案を出し直さない）。Issue の行方は `gh issue view <URL> --json state,stateReason` で見る。入れずに閉じられたら（`NOT_PLANNED`）、`ledger.py reject <P-ID> --reason <理由>`。直して閉じられたら（`COMPLETED`）、`claude plugin update ai-deck-factory@ai-deck-factory`（pi は入れ方による）で届くことを伝え、`clean` する。届くと、dreaming が `ledger.py candidates` の「写しを消す」で、ワークスペースの `rules/` の写しを消す提案を出す（上げた文が、入っているプラグインにあるかで見る。持ち主が文や ID を変えて入れたら出ないので、dreaming の 4e の重なりで消す）。出典の指摘は `sent` で新しい ID につながっている。出典にしなかった指摘が写しに残っていれば（`ledger.py why <ws-ID>`）、指摘ごとに `ledger.py route <c-ID> <プラグインの ID>` でつなぎ直す。
 
 ## 本文の型

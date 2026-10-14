@@ -8,17 +8,16 @@ README の「会話で入れる」のプロンプトを貼られたエージェ�
 
 - **この会話には、まだスキルがない。** 入れたスキルは次の会話から読み込まれる。この会話では `/ai-deck-factory:factory-init` や `/skill:factory-init` を呼ばずに、入れた場所の `SKILL.md` を開いて従う（4）。
 - **ワークスペースだけに入れる。** `~/.claude/settings.json`・`~/.pi/agent/settings.json` は変えない。ほかのフォルダの会話にはスキルが出ない。
-- **ユーザーが決めることは聞いてから進める。** 場所、プラグインに Issue を出すか、ツールを入れるか、`factory.toml` の値。ブラウザが開くログイン（`gcloud auth application-default login`）は、ユーザーに回してもらう。
+- **ユーザーが決めることは聞いてから進める。** 場所、ツールを入れるか、`factory.toml` の値。ブラウザが開くログイン（`gcloud auth application-default login`）は、ユーザーに回してもらう。
 - **あるファイルは上書きしない。** factory-init の `init.py` も上書きしない。
 - 手順の `<ワークスペース>` と `<プラグイン>` は、1 と 3 で決まったパスに置き換える。スクリプトは今いるフォルダから `factory.toml` を探すので、ワークスペースのコマンドは `cd <ワークスペース> &&` を付けて回す。
 
 ## 1. 聞く
 
-自分が Claude Code か pi かは聞かない（自分で分かる）。次の 3 つを 1 回でまとめて聞く（Claude Code なら AskUserQuestion）。
+自分が Claude Code か pi かは聞かない（自分で分かる）。次の 2 つを 1 回でまとめて聞く（Claude Code なら AskUserQuestion）。
 
 1. **ワークスペースにするフォルダ。** 資料（`Customers/`・`Internal/`・`Research/`）と `factory.toml` を置く。候補に、今の会話のフォルダと `~/Documents` を出す。なければ作る。すでに `factory.toml` か `AGENTS.md` があれば、足りないものだけ置くことを伝える。
-2. **プラグインに直しを出すか（factory-kaizen）。** 使うだけなら「出さない」。出すなら、このリポジトリの checkout（持ち主でなければ `gh repo fork mats16/ai-deck-factory --clone` で作った fork）のパス。
-3. **全社の共有テーマのフォルダ。** 会社でスライドのテーマ（テンプレート）を配っていれば、その Google Drive のフォルダの URL。なければ「ない」。プロンプトに URL が書いてあれば聞かずに使う。4 で `factory.toml` の `[drive] shared_themes` に書く。
+2. **全社の共有テーマのフォルダ。** 会社でスライドのテーマ（テンプレート）を配っていれば、その Google Drive のフォルダの URL。なければ「ない」。プロンプトに URL が書いてあれば聞かずに使う。4 で `factory.toml` の `[drive] shared_themes` に書く。
 
 ## 2. 前提を見る
 
@@ -35,35 +34,33 @@ git --version
 
 ## 3. プラグインを入れる
 
-1 の 2 で checkout を渡されたら、GitHub の代わりにそのパスから入れる（会話は checkout をそのまま読む。README の「入れ方」）。
-
 **Claude Code**
 
 ```sh
 cd <ワークスペース>
 claude plugin marketplace list --json | python3 -c "import json,sys; [print(m) for m in json.load(sys.stdin) if m['name']=='ai-deck-factory']"   # もうあるか
-claude plugin marketplace add https://github.com/mats16/ai-deck-factory.git --scope project   # checkout なら URL の代わりにそのパス
+claude plugin marketplace add https://github.com/mats16/ai-deck-factory.git --scope project
 claude plugin install ai-deck-factory@ai-deck-factory --scope project
 claude plugin list --json | python3 -c "import json,sys; [print(p.get('readFromFolder') or p['installPath']) for p in json.load(sys.stdin) if p['id']=='ai-deck-factory@ai-deck-factory' and p['enabled']]"
 ```
 
-- 1 つめで `ai-deck-factory` が出たら、`add` は飛ばす（名前は 1 つしか持てない。足すと前のものとぶつかる）。出た入れ元（`path`・`url`・`repo`）が、ここで入れるもの（GitHub か、1 の 2 の checkout）と違うときは、そのことと、ほかのワークスペースもその入れ元を読んでいることを伝え、そのまま使うかをユーザーに聞く。入れ元を勝手に替えない。
+- 1 つめで `ai-deck-factory` が出たら、`add` は飛ばす（名前は 1 つしか持てない。足すと前のものとぶつかる）。出た入れ元（`path`・`url`・`repo`）が、ここで入れるもの（GitHub）と違うときは、そのことと、ほかのワークスペースもその入れ元を読んでいることを伝え、そのまま使うかをユーザーに聞く。入れ元を勝手に替えない。
 - 最後に出たパスが `<プラグイン>`。手元のパスから入れたなら checkout（`readFromFolder`）、GitHub から入れたなら写し（`installPath`）。
 
 **pi**
 
 ```sh
 cd <ワークスペース>
-pi install -l git:github.com/mats16/ai-deck-factory   # checkout なら git:… の代わりにそのパス
+pi install -l git:github.com/mats16/ai-deck-factory
 ```
 
-`<プラグイン>` は `<ワークスペース>/.pi/git/github.com/mats16/ai-deck-factory`（checkout から入れたなら、そのパス）。
+`<プラグイン>` は `<ワークスペース>/.pi/git/github.com/mats16/ai-deck-factory`。
 
 どちらも `<プラグイン>/skills/factory-init/SKILL.md` があることを確かめる。
 
 ## 4. ワークスペースを作る
 
-1. `<プラグイン>/skills/factory-init/SKILL.md` を開き、その手順に従う。「このスキルのフォルダ」は `<プラグイン>/skills/factory-init`、ほかのスキルのフォルダは `<プラグイン>/skills/<スキル>`。手順の 1（場所）と 2（元のリポジトリ）は、ここの 1 で聞いたので飛ばす。4 の `[drive] shared_themes` は、ここの 1 の 3 で聞いた値を書く。
+1. `<プラグイン>/skills/factory-init/SKILL.md` を開き、その手順に従う。「このスキルのフォルダ」は `<プラグイン>/skills/factory-init`、ほかのスキルのフォルダは `<プラグイン>/skills/<スキル>`。手順の 1（場所）は、ここの 1 で聞いたので飛ばす。3 の `[drive] shared_themes` は、ここの 1 の 2 で聞いた値を書く。
 2. factory-init の最後の「確かめる」は、`<プラグイン>/skills/factory-doctor/SKILL.md` を開いて従う。要修正が 0 になるまで直す。Google のログインのように、ユーザーが回すものが残ったら、回してもらってから doctor をもう一度回す。
 
 ## 5. 終える

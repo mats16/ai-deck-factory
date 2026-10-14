@@ -40,14 +40,8 @@ def check(ws, local=False):
         warn("顧客の memory", f"前の形の CLAUDE.md がある。Claude Code しか読まない（hook が Claude Code と pi で続けて出すのは memory.md）: {', '.join(map(how, old))}")
     if "人がレビューするかも選んでもらう" in ((root / "AGENTS.md").read_text() if (root / "AGENTS.md").is_file() else ""):  # 2026-10-13 までの雛形
         warn("AGENTS.md の方針のレビュー", "前の雛形の「人がレビューするかも選んでもらう」が残っている。ワークスペースの決まりが優先するので、factory.toml の [review] plan_reviewer が効かず、資料ごとに聞く。factory-init の雛形の今の文（plan_reviewer に従う）に替える")
-    if src := cfg.get("factory", {}).get("source"):
-        p = Path(src).expanduser()
-        if (p / ".git").exists() and (p / "skills").is_dir():
-            ok("factory.source", str(p))
-            gh = shutil.which("gh") and subprocess.run(["gh", "auth", "status"], capture_output=True).returncode == 0
-            (ok if gh else warn)("gh（factory-kaizen で Issue を出す）", "ログイン済み" if gh else "gh がないか、ログインしていない。gh auth login")
-        else:
-            warn("factory.source", f"{p} がプラグインの git の checkout でない（プラグインに上げる提案を入れられない）")
+    if cfg.get("factory", {}).get("source"):  # 2026-10-14 まで、factory-kaizen が worktree を作る checkout
+        warn("factory.source", "使わなくなった（factory-kaizen は .factory/kaizen/ に自分で clone する）。factory.toml から消す")
     names = sorted(p.parent.name for p in SKILLS.glob("*/SKILL.md"))
     found = {}  # 実体ごとに 1 回（.claude/skills は .agents/skills へのリンクのことが多い）
     for d in (".agents/skills", ".claude/skills"):

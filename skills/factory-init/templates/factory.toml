@@ -11,7 +11,6 @@
 
 [factory]
 # private = ["アクメ", "ロードランナー"]  # factory-kaizen が Issue に入れたら止める語（顧客の日本語の名前、顧客の製品名など）。Customers/ の顧客と資料のフォルダの名前は書かなくても見る
-# source = "~/Projects/ai-deck-factory"  # プラグインのリポジトリの git の checkout（持ち主でなければ gh repo fork --clone で作った fork）。factory-kaizen が、ここに worktree を作って変更案を書き、Issue を出す。出さない人は書かない（提案は報告に出るだけ）
 
 [user]
 profile = ""  # 使う人の名前・メール・会社・役割・担当の顧客を書いたファイル（markdown か text）。エージェントが要るときに読む
