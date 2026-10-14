@@ -15,7 +15,7 @@ description: 日本語のドキュメント（提案書・調査レポート・�
 K=<deck-build のフォルダ>/scripts   # このスキルのフォルダの ../deck-build/scripts。スクリプトはスライドと同じ場所（gapi.py・lint.py を共有する）
 cd <フォルダ>/build
 python3 $K/docs.py init <テンプレートの名前>                      # ワークスペースにテンプレートがあり、それから書き始めるとき（doc.md を写す。下の 1.3）
-python3 $K/docs.py new <Drive のフォルダの URL> <YYYYMMDD_の名前>   # 初めて組むとき。出た URL を構成案に書く
+python3 $K/docs.py new <Drive のフォルダの URL> <YYYYMMDD_の名前>   # 初めて組むとき。出た URL を構成案に書き、すぐユーザーに伝える（../deck-build/SKILL.md の deck-build-003）
 python3 $K/docs.py build <URL>                                    # 直したら組み直す（URL は変わらない。画面で直されていたら止まる）
 python3 $K/docs.py check <URL>                                    # 確かめる（下の 2。要修正があれば exit 1）
 python3 $K/docs.py export <URL> /tmp/<資料名>.docx                 # 相手が Word を求めたときだけ（下の 6）

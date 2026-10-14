@@ -18,7 +18,7 @@ description: 日本語のスライドを Slides API で Google Slides に直接�
 K=<deck-build のフォルダ>/scripts   # deck-build の SKILL.md のあるフォルダ。ほかのスキルからは、そのスキルのフォルダの ../deck-build/scripts
 cd <フォルダ>/build
 # スライド
-python3 $K/slides.py new <Drive のフォルダの URL> <YYYYMMDD_の名前>   # 初めて組むとき（下の「Drive に置く」）。--theme company で会社の色
+python3 $K/slides.py new <Drive のフォルダの URL> <YYYYMMDD_の名前>   # 初めて組むとき。出た URL をすぐユーザーに伝える（下の「Drive に置く」）。--theme company で会社の色
 python3 $K/slides.py build <URL>                                    # 直したら組み直す（URL は変わらない。画面で直されていたら止まる。slides.md の 1）
 python3 $K/gslides.py check <URL>                                   # LT など話す資料は末尾に --talk
 ```
@@ -71,7 +71,7 @@ lint の要修正があれば、画像まで取ったうえで exit 1 を返す�
 - **置き場所:** 共有ドライブの `10_Customers`（URL は ワークスペースの `factory.toml` の `drive.customers`）→ 社名の頭文字のフォルダ（`00_ABC`、`01_DEF` など）→ 顧客（英語の社名）→ 事業部などのフォルダ。先に `references_index.md` の「Google Drive の置き場所」を見る。載っていなければ中を見て決め、そこに足す。
 - [deck-build-002] **顧客に紐づかない資料（`Internal/`）:** スライドは My Drive の「AI Deck Factory」の中の「Slides」（URL は `factory.toml` の `drive.internal`）、ドキュメント（Google Docs）は同じ中の「Docs」（`drive.docs`）。どちらも共有ドライブではない → テーマごとのサブフォルダ。合うものがなければテーマの名前で作る。個人の資料（テンプレート・社内向けの成果物）は AI Deck Factory の下にまとめ、My Drive の直下に置かない（画像を貼るときの仮のファイルだけは例外で、slides.md の 6）。
 - **名前:** Drive 上は `YYYYMMDD_` で始める（いつのものか分かるように）。日付は会議や提出の日、決まっていなければ初めて作った日。後ろは資料名（上の「納品物」の資料名から、末尾の日付と拡張子を外したもの）。例: `20261007_Acme様_ご説明資料_SIEMの事例と構成`。
-- [deck-build-003] **スライドを作る:** `slides.py new <フォルダ> <名前>` が、テンプレートをそのフォルダに複製して組む。出た URL を構成案（か社内メモ）に書く。代表の 3 枚や下書きの段階から、決まりの置き場所（顧客のフォルダ）に作ってよい。仕上げる前から社内の人に見えても問題ない。
+- [deck-build-003] **スライドを作る:** `slides.py new <フォルダ> <名前>` が、テンプレートをそのフォルダに複製して組む。出た URL を構成案（か社内メモ）に書き、その場でユーザーに 1 行で伝える（「作業中の資料: <URL>。組み直すたびに同じ URL が新しくなる」）。仕上がる前から画面で見てもらえるようにするため。返事は待たずに進める。ドキュメントの `docs.py new` も同じ。代表の 3 枚や下書きの段階から、決まりの置き場所（顧客のフォルダ）に作ってよい。仕上げる前から社内の人に見えても問題ない。
 - **更新:** スライドは `slides.py build <URL>` で同じプレゼンを組み直す（URL が変わらない）。html・csv は `drive_put.py` で同じファイルに上書きする。名前の日付は変えない。別にコピーを残すのは、指示があったときだけ。
 - [deck-build-004] **名前を変えるとき:** Drive API の `files.update`（PATCH で `{"name": …}`、`supportsAllDrives=true`）で変える。ID・URL は変わらない。`drive_put.py` で上げるファイルは、先に Drive 上の名前を変えてから、新しい名前で `drive_put.py` を回す（名前で上書き先を探すので、先に変えないと別のファイルがもう 1 つできる）。
 - **html・csv などのファイルの上げ方:** `python3 $K/drive_put.py <ファイル> <フォルダの URL か ID> <Drive 上の名前>`（同じ名前があれば上書き、なければ作る）。
