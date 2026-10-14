@@ -11,7 +11,7 @@ usage:
 全社の共有テーマのフォルダ（[drive] shared_themes）に置くと、slides.py themes がほかの人に候補として出す。
   template.py --selftest                    見本のページを、API を呼ばずに組めるかを確かめる
 すでに作ったデッキは変わらない（複製した時点の写し）。"""
-import colorsys, os, re, sys, time, tomllib, urllib.parse, zipfile
+import colorsys, os, re, sys, time, tomllib, zipfile
 from collections import Counter
 
 sys.dont_write_bytecode = True
@@ -20,11 +20,9 @@ from gapi import DRIVE, GSLIDES, PPTX, SLIDES, batch, factory, factory_path, fil
 from lint import JA, cells, contrast, flatten, lum, paras, solid
 from slides import (BG, BLANK, CARD, COPYRIGHT_PT, DECOR, EMU, FONT, GA, HEAD, INSET, NAVY, NAVY_BLOCK, ON_RED, OSS, PAD, PANEL, PREVIEW, RED, RED_ON_NAVY,
                     RED_SOFT, RED_TEXT, RULE, SLOTS, STAGE_TEXT, SUB, SUB_ON_NAVY, TEXT, THEMES, WHITE, W, X, Y_BODY, Y_FOOT, build, cols, make_deck, number_style, rgb)
-from slides import FIXED as FIXED_DEFAULT, JP_FONTS, LAYOUT_MARK, NAMED, PROP, PUBLISHED, THEME_MARK, THEME_PROP, VARIANTS, is_blank, need_brand, placeholders, theme_fixed, theme_font, use_layouts, use_theme
+from slides import FIXED as FIXED_DEFAULT, FOLDER, JP_FONTS, LAYOUT_MARK, NAMED, PROP, PUBLISHED, THEME_MARK, THEME_PROP, THEMES_DIR, VARIANTS, find_themes_folder, is_blank, need_brand, placeholders, theme_fixed, theme_font, use_layouts, use_theme
 
 BLANK_PPTX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "blank.pptx")  # --from-base に元の URL を渡さないときの元。中身は ../assets/README.md
-THEMES_DIR = "Themes"  # テンプレートを作る Drive のフォルダ。[drive] factory の下（なければ作る）。使うテンプレートは [slides.themes.<名前>] の url で 1 つずつ指す
-FOLDER = "application/vnd.google-apps.folder"
 NAMES = {"visual": "テンプレート（visual: このフォルダの色）", "company": "テンプレート（company: 会社の色をコントラストだけ調整）"}
 ROLES = [(NAVY, "NAVY", "表紙・扉の地・結論バンド・表の見出しの行"), (BG, "BG", "本文スライドの地"), (RED_ON_NAVY, "RED_ON_NAVY", "濃紺の上の赤（扉の小見出し）"),
          (PANEL, "PANEL", "パネル・表の 1 行おきの地"), (NAVY_BLOCK, "NAVY_BLOCK", "扉の中のブロック"), (GA, "GA", "GA の札の塗り"),
@@ -444,12 +442,8 @@ def themes_folder():
     """[drive] factory の下の Themes フォルダの ID。なければ作る（フォルダの ID や URL は factory.toml に持たない）。"""
     if not (root := factory().get("drive", {}).get("factory")):
         sys.exit(f"factory.toml の [drive] factory（個人の資料の根元）がない。テンプレートはその下の {THEMES_DIR} に作る")
-    parent = folder_id(root)
-    q = urllib.parse.quote(f"name = '{THEMES_DIR}' and '{parent}' in parents and mimeType = '{FOLDER}' and trashed = false")
-    found = request("GET", f"{DRIVE}/files?q={q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true")["files"]
-    if found:
-        return found[0]["id"]
-    return request("POST", f"{DRIVE}/files?supportsAllDrives=true&fields=id", {"name": THEMES_DIR, "mimeType": FOLDER, "parents": [parent]})["id"]
+    return find_themes_folder(root) or request("POST", f"{DRIVE}/files?supportsAllDrives=true&fields=id",
+                                                {"name": THEMES_DIR, "mimeType": FOLDER, "parents": [folder_id(root)]})["id"]
 
 
 def props(theme):

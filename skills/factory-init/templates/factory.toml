@@ -21,7 +21,7 @@ profile = ""  # 使う人の名前・メール・会社・役割・担当の顧�
 quota_project = ""  # gcloud の既定の OAuth クライアントで取ったトークンは、これがないと Slides・Docs で 403。自分の OAuth クライアントなら空でよい
 
 [slides]
-default_theme = "visual"  # 説明で決まらないときのテーマ。テーマは資料ごとに選ぶ（slides.py themes が名前と説明を出す）
+default_theme = "visual"  # 説明で決まらないときのテーマ。テーマは資料ごとに選ぶ（slides.py themes が名前と説明を出す）。切り替えは deck-template の「既定のテーマを選ぶ」
 
 [brand]  # 表紙の社名と著作権表示（ドキュメントのフッターも）、ドキュメントの表紙のロゴ。copyright は要る（factory-doctor が見る）
 # company = "アクメ・ジャパン株式会社"  # 表紙の左下。書かなければ置かない

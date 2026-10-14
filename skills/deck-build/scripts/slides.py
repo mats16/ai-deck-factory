@@ -8,7 +8,7 @@ usage（資料の build/ で。pages.py は今いるフォルダのもの）:
   slides.py dry [<ファイル>] [<URL か ID>]   組まずに make を走らせ、組むときの警告・枚数・ノートのないページを出す（既定は pages.py。子が書いた build/pages_<担当>.py を確かめる。
                                           URL を渡すと、表紙・扉のパターンとテーマをそのデッキから読む（読むだけ）。../slides.md の 2）
   slides.py themes   テーマの名前・説明・テンプレートがあるか・既定か。資料ごとに選ぶ（../../deck-practices/SKILL.md の「作業の始め方」の 5）。
-                     [drive] shared_themes の、factory.toml にないテンプレートも候補に出す
+                     [drive] shared_themes と [drive] factory の下の Themes の、factory.toml にないテンプレートも候補に出す
   slides.py merge <ファイル>...   子が別のファイルに書いたページの関数を pages.py に合わせる（組まない。../../deck-review/SKILL.md の手順 5）
   slides.py --selftest
 テンプレートの管理は template.py。色は下の「色の役割」の名前で渡す。役割の名前はテーマの色（マスターの配色）を指すので、テンプレートを替えると色が変わる。
@@ -85,6 +85,8 @@ THEME_MARK = re.compile(r"ai-deck-factory theme=([A-Za-z0-9_-]+)")  # template.p
 PROP = "adf."  # template.py がテンプレートの Drive のプロパティ（公開。どの OAuth クライアントでも読める）に書く、テーマの名前と組むときに引く値の頭（template_meta・shared_files）
 THEME_PROP = f"{PROP}theme"  # テーマの名前のプロパティ。共有テーマのフォルダでテンプレートを見分ける
 PUBLISHED = (*FIXED, *NAMED, "copyright", "mono")  # template.py がプロパティに書き、template_meta が読む値（theme_values が引くもの）。役割の色と書体はマスターにある
+THEMES_DIR = "Themes"  # template.py --from-base がテンプレートを作る Drive のフォルダ。[drive] factory の下（なければ作る）。使うテンプレートは [slides.themes.<名前>] の url で 1 つずつ指す
+FOLDER = "application/vnd.google-apps.folder"
 READ_ERRORS = (gapi.ApiError, urllib.error.URLError)  # Drive を読めない（権限・URL・認証・回線）。request は HTTP のエラーだけを ApiError にする
 # 会社のテンプレートから残した表紙・扉のレイアウト（図形・ロゴ・写真付き。パターンごとに番号）。template.py がそのレイアウトのページ番号の枠の
 # 代替テキストに書く。w は元のタイトルの枠の右端までの文字の幅（in）、tone は地の明るさ（文字の色を決める）。なければ表紙・扉も Blank に組む
@@ -845,27 +847,58 @@ def theme_description(name):
     return t.get("description") or THEME_NOTES.get(name, "")
 
 
-@functools.cache
-def shared_files():
-    """[drive] shared_themes（全社の共有テーマのフォルダ）の Google Slides のうち、template.py がテーマの名前（PROP）を書いたもの。新しい順。書いていなければ []。
-    探すときだけ読む（使うテーマは factory.toml の [slides.themes.<名前>] の url で指す）。"""
-    if not (gapi.find_factory() and (f := factory().get("drive", {}).get("shared_themes"))):
-        return []
-    q = urllib.parse.urlencode({"q": f"'{folder_id(f)}' in parents and mimeType = '{GSLIDES}' and trashed = false", "orderBy": "modifiedTime desc", "pageSize": 1000,
+def theme_files(folder):
+    """Drive のフォルダ folder（ID）の Google Slides のうち、template.py がテーマの名前（PROP）を書いたもの。新しい順。"""
+    q = urllib.parse.urlencode({"q": f"'{folder}' in parents and mimeType = '{GSLIDES}' and trashed = false", "orderBy": "modifiedTime desc", "pageSize": 1000,
                                 "fields": "files(id,description,properties)", "supportsAllDrives": "true", "includeItemsFromAllDrives": "true", "corpora": "allDrives"})
     return [f for f in request("GET", f"{DRIVE}/files?{q}")["files"] if (f.get("properties") or {}).get(THEME_PROP)]
 
 
-def unlisted():
-    """共有テーマのフォルダにあって、factory.toml の url が指していないテンプレート。[(テーマの名前, url, 説明)]（新しい順）。
-    探すためだけの設定なので、フォルダを読めなければ知らせて [] にする（themes と new を止めない）。"""
-    have = {file_id(t["url"]) for t in mine().values() if t.get("url")}
-    try:
-        files = shared_files()
-    except READ_ERRORS as e:
-        print(f"[drive] shared_themes を読めない（共有のテーマを候補に出さない）: {str(e).splitlines()[0]}", file=sys.stderr)
+@functools.cache
+def shared_files():
+    """[drive] shared_themes（全社の共有テーマのフォルダ）のテンプレート（theme_files）。書いていなければ []。
+    探すときだけ読む（使うテーマは factory.toml の [slides.themes.<名前>] の url で指す）。"""
+    if not (gapi.find_factory() and (f := factory().get("drive", {}).get("shared_themes"))):
         return []
-    return [(f["properties"][THEME_PROP], f"https://docs.google.com/presentation/d/{f['id']}/edit", f.get("description", "")) for f in files if f["id"] not in have]
+    return theme_files(folder_id(f))
+
+
+def find_themes_folder(root):
+    """[drive] factory（root）の下の Themes の ID。なければ None（作るのは template.py の themes_folder）。2 つあれば古いほう（作るのと探すのとで同じものを選ぶ）。"""
+    q = urllib.parse.quote(f"name = '{THEMES_DIR}' and '{folder_id(root)}' in parents and mimeType = '{FOLDER}' and trashed = false")
+    found = request("GET", f"{DRIVE}/files?q={q}&orderBy=createdTime&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true")["files"]
+    return found[0]["id"] if found else None
+
+
+@functools.cache
+def own_files():
+    """[drive] factory の下の Themes（template.py --from-base がテンプレートを作るフォルダ）のテンプレート（theme_files）。なければ []（作らない）。"""
+    if not (gapi.find_factory() and (root := factory().get("drive", {}).get("factory"))):
+        return []
+    return theme_files(f) if (f := find_themes_folder(root)) else []
+
+
+def unlisted():
+    """共有テーマのフォルダと自分の Themes にあって、factory.toml の url が指していないテンプレート。[(テーマの名前, url, 説明, どこ)]（どこは 共有・個人。新しい順）。
+    自分の Themes は、factory.toml に url のない名前の、いちばん新しいものだけ（--from-base で作り直す前の古いテンプレートを出さない）。同じファイルが両方にあれば共有（管理者が自分の Themes を共有のフォルダにしたとき。名前が同じでも別のファイルなら両方出す）。
+    探すためだけなので、フォルダを読めなければ知らせて飛ばす（themes と new を止めない）。"""
+    seen, rows = {file_id(t["url"]) for t in mine().values() if t.get("url")}, []
+    own_skip = {n for n, t in mine().items() if t.get("url")}  # 自分の Themes で出さない名前（url がある・もう出した）
+    for where, folder, get in (("共有", "[drive] shared_themes", shared_files), ("個人", f"[drive] factory の下の {THEMES_DIR}", own_files)):
+        try:
+            files = get()
+        except READ_ERRORS as e:
+            print(f"{folder} を読めない（そこのテーマを候補に出さない）: {str(e).splitlines()[0]}", file=sys.stderr)
+            continue
+        for f in files:
+            name = f["properties"][THEME_PROP]
+            if f["id"] in seen or where == "個人" and name in own_skip:
+                continue
+            seen.add(f["id"])
+            if where == "個人":
+                own_skip.add(name)
+            rows.append((name, f"https://docs.google.com/presentation/d/{f['id']}/edit", f.get("description", ""), where))
+    return rows
 
 
 def theme_fixed(t):
@@ -1023,11 +1056,11 @@ def cmd_themes():
         print(f"{name}{'（既定）' if default else ''}\t{'テンプレートあり' if has else 'テンプレートなし'}\t"
               + (note or f"（説明がない。factory.toml の [slides.themes.{name}] の description に書く）"))
     if rows := unlisted():
-        for name, url, note in rows:
+        for name, url, note, where in rows:
             t = mine().get(name)
-            where = "factory.toml にない" if t is None else "factory.toml の同じ名前の表は別のテンプレート" if t.get("url") else "factory.toml の同じ名前の表に url がない"
-            print(f"{name}（共有。{where}）\t{url}\t{note or THEME_NOTES.get(name, '')}")
-        print("共有のテーマを使うときは、factory.toml の [slides.themes.<名前>] に url = \"<url>\" を書く（名前は左のとおり。テンプレートが持つ名前と違うと組めない。"
+            state = "factory.toml にない" if t is None else "factory.toml の同じ名前の表は別のテンプレート" if t.get("url") else "factory.toml の同じ名前の表に url がない"
+            print(f"{name}（{where}。{state}）\t{url}\t{note or THEME_NOTES.get(name, '')}")
+        print("共有・個人のテーマを使うときは、factory.toml の [slides.themes.<名前>] に url = \"<url>\" を書く（名前は左のとおり。テンプレートが持つ名前と違うと組めない。"
               "同じ名前の表があれば、表を足さずにその表の url を書く・替える。替えると今のテンプレートの代わりになる）")
 
 
@@ -1357,12 +1390,14 @@ def selftest():
     # テーマは factory.toml の url で指し、そのテンプレートが持つ値（template_meta）に factory.toml の値を重ねる。共有テーマのフォルダは、factory.toml にないものを探すときだけ
     def gone(*_):
         raise gapi.ApiError("404 GET x")
-    req, tm, sf, mn = request, template_meta, shared_files, mine
+    req, tm, sf, of, mn = request, template_meta, shared_files, own_files, mine
     globals()["request"] = lambda m, u: {"description": "共有の説明", "properties": {f"{PROP}TEXT": "111111", f"{PROP}cover": "x", THEME_PROP: "acme", "other": "y"}}
     assert template_meta.__wrapped__("t1") == {"description": "共有の説明", "TEXT": "111111"}  # 読むのは PUBLISHED だけ（名前・知らない値・ほかのアプリの値は読まない）
     meta = {"t1": {"description": "共有の説明", "TEXT": "111111", "RULE": "222222"}}
     files = [{"id": "t1", "properties": {THEME_PROP: "acme"}}, {"id": "t2", "description": "新しい", "properties": {THEME_PROP: "corp"}}]
-    globals().update(request=req, template_meta=lambda fid: gone() if fid == "bad" else meta.get(fid, {}), shared_files=lambda: files,
+    own = [{"id": "t5", "properties": {THEME_PROP: "mine"}}, {"id": "t6", "properties": {THEME_PROP: "mine"}}, {"id": "t7", "properties": {THEME_PROP: "acme"}},
+           {"id": "t2", "properties": {THEME_PROP: "corp"}}]  # 新しい順。mine の古い t6、作り直す前の acme の t7、共有と同じ t2 は出さない
+    globals().update(request=req, template_meta=lambda fid: gone() if fid == "bad" else meta.get(fid, {}), shared_files=lambda: files, own_files=lambda: own,
                      mine=lambda: {"acme": {"url": "https://docs.google.com/presentation/d/t1/edit", "RULE": "333333"}, "own": {"url": "t3", "description": "自分の"},
                                    "draft": {"TEXT": "444444"}, "lost": {"url": "bad"}})
     assert theme_table("acme") == {"description": "共有の説明", "TEXT": "111111", "RULE": "333333", "url": "https://docs.google.com/presentation/d/t1/edit"}  # factory.toml が勝つ
@@ -1373,17 +1408,18 @@ def selftest():
         raise AssertionError("読めないテンプレートのテーマを既定の値で通した")
     except SystemExit as e:
         assert "lost" in str(e) and "404" in str(e)
-    assert unlisted() == [("corp", "https://docs.google.com/presentation/d/t2/edit", "新しい")]  # url が指しているものは出さない
+    assert unlisted() == [("corp", "https://docs.google.com/presentation/d/t2/edit", "新しい", "共有"),
+                          ("mine", "https://docs.google.com/presentation/d/t5/edit", "", "個人")]  # url が指しているものは出さない
     import contextlib, io
     files.append({"id": "t4", "properties": {THEME_PROP: "draft"}})
     tl, globals()["theme_list"] = theme_list, lambda: []  # 共有の行だけを見る（theme_list は factory.toml の [slides] を読む）
     with contextlib.redirect_stdout(out := io.StringIO()):
         cmd_themes()
     globals()["theme_list"] = tl
-    assert "corp（共有。factory.toml にない）" in out.getvalue() and "draft（共有。factory.toml の同じ名前の表に url がない）" in out.getvalue()  # 同じ名前の表に url を書けばよい
-    globals()["shared_files"] = gone
-    assert unlisted() == []  # 共有テーマのフォルダを読めなくても、themes と new は止めない
-    globals().update(template_meta=tm, shared_files=lambda: [], mine=mn)
+    assert "corp（共有。factory.toml にない）" in out.getvalue() and "mine（個人。factory.toml にない）" in out.getvalue() and "draft（共有。factory.toml の同じ名前の表に url がない）" in out.getvalue()  # 同じ名前の表に url を書けばよい
+    globals().update(shared_files=gone, own_files=gone)
+    assert unlisted() == []  # 共有テーマのフォルダと Themes を読めなくても、themes と new は止めない
+    globals().update(template_meta=tm, shared_files=lambda: [], own_files=of, mine=mn)
     for empty in ({}, theme_table("ない")):  # 値がないテーマと、factory.toml にないテーマは、今の値に戻す
         use_theme(empty)
         assert not _SWAP and COPYRIGHT == BRAND_COPYRIGHT and theme_fixed(empty) == FIXED and paint(TEXT) == {"rgbColor": rgb("303F47")} and MONO == MONO_DEFAULT
