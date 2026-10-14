@@ -22,11 +22,13 @@ python3 $K/slides.py build <URL> [--force]          # 2 回目から。同じ UR
 python3 $K/gslides.py check <URL> [--talk]          # lint・テキスト・全ページの画像（/tmp/slides_<ID の頭 8 字>/）・画像で測る箱の下の余白
 python3 $K/gslides.py check <URL> --pages 3,5       # 直したページだけ、画像を取り直す（ページの数が変わったときは、自動で全ページ）
 uv run -q $K/sheet.py /tmp/<名前>.png /tmp/slides_<ID>/p-0{2,3,4}.png   # 何枚かを 1 枚に並べて見る
+python3 $K/slides.py merge fix_a.py fix_b.py          # 子が別のファイルに書いたページの関数を pages.py に合わせる（組まない。下）
 ```
 
 - 置き場所（Drive のフォルダ）と名前は `SKILL.md` の「Drive に置く」。ローカルに pptx は作らない。
 - 部品を分けて組む・試すための一時のデッキは、名前に `tmp` を入れる（`gslides.py check` が lint の記録に数えない。確かめたらゴミ箱へ）。
 - [slides-002] **組み直すと、Google Slides の画面で直したところは消え、コメントは付け先を失う。** 直すのは pages.py と構成案。`build` は、前に組んだあとに画面で直されている（組んだときの版を Drive の appProperties に残して比べる）か、未解決のコメントがあると止まる。止まったら、直しとコメントへの対応を pages.py に入れてから `--force` で組み直す（`../deck-practices/SKILL.md` の「作業の始め方」の 6 の「直すのは pages.py と構成案」）。画面で直していないのに止まることがある（Slides の revisionId が、内容を変えずに変わる）。止まったら、Drive の `files.get` の `modifiedTime` と `revisions` を見て、前に組んだ時刻より後に直されていないことを確かめてから `--force` にする。
+- [slides-029] **`merge` は、子が `build/fix_<担当>.py` に書いた関数を、pages.py の同じ名前の関数と置き換える**（pages.py にない関数は `make` の前に足す）。子は pages.py を書かずに別のファイルに書き、親が合わせて 1 回だけ組む（`../deck-review/SKILL.md` の deck-review-011）。合わせるのは関数だけで、import は pages.py のものを使う（子が使った名前で import にないものは、親が足す）。`make`・定数・2 つのファイルに同じ関数があると止める（共通のものとページの順は親が書く）。前の pages.py は `pages.py.bak` に残る（あれば上書きせず `pages.py.bak1` …）。足した関数を `make` が呼んでいなければ警告する。出た JSON の関数の名前が、渡した担当と合うかを見てから組む。
 - 12 枚で、組むのに 15〜25 秒（batchUpdate は 1,300 件ほど）、`check` に約 10 秒かかる（2026-10-07）。
 - **組むときの警告**（手で改行した行が枠に収まらない、自動で折り返した最終行が 2 字以下、見出しを縮めた、リードが 2 行、表のセルが折り返す）は、標準エラーに出て、最後の行に件数が出る。見込みなので、画像で確かめてから直すか残すかを決める（前の deck.js と同じ）。
 - slides.py は素の `python3`（標準ライブラリ）で動く。手元の画像と、react-icons の名前（`Tb…`）のアイコンを貼るときだけ、グローバルの node（pptxgenjs・react-icons・sharp）を使う（6。URL の画像と Iconify のアイコンには要らない）。
@@ -35,18 +37,24 @@ uv run -q $K/sheet.py /tmp/<名前>.png /tmp/slides_<ID>/p-0{2,3,4}.png   # 何�
 
 ## 2. pages.py の書き方
 
-pages.py には `NAME`（資料名。社内向けは `｜Internal Only`、秘密扱いは `｜Confidential` を末尾に書く）と `make(d)` だけを書く。資料名はフッターに表示せず、秘密区分だけを著作権表示の末尾に残す。部品は `slides.py` の `Deck` のメソッドを使う。
+pages.py には `NAME`（資料名。社内向けは `｜Internal Only`、秘密扱いは `｜Confidential` を末尾に書く）と、ページの関数・ページをまたぐ共通の関数と定数・`make(d)` だけを書く。資料名はフッターに表示せず、秘密区分だけを著作権表示の末尾に残す。部品は `slides.py` の `Deck` のメソッドを使う。[slides-030] ページは 1 枚に 1 つの関数（`p_<内容>(d)`）にし、`make(d)` には呼ぶ順だけを書く。直しをページの担当の子に分けるとき、関数が担当の単位になる（`merge`）。
 
 ```python
 from slides import HEAD, NAVY, SUB, RED_TEXT, TEXT, RULE, X, W, INSET   # 色の役割と本文の左端・幅
 NAME = "〇〇様_ご説明資料"
-def make(d):
+def p_cover(d):
     s = d.cover("タイトル", "〇〇様｜2026-10-07", "副題")
     d.note(s, "表紙のノート。")
+
+def p_summary(d):
     s = d.page("見出し（短い名詞句）", "リード（このページで言えること）", kicker="キッカー（要るページだけ）")
     d.text(s, X, 1.78, W, 1.0, ["本文。", ("強調", {"bold": True}), "。"], spacing=125)
     d.source(s, ["出典: ", ("ブログの名前", {"link": "https://…"})])
     d.note(s, "話すこと。")
+
+def make(d):
+    p_cover(d)
+    p_summary(d)
 ```
 
 | 部品 | すること |
