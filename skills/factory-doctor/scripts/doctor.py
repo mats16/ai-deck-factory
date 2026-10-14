@@ -78,6 +78,8 @@ def check(ws, local=False):
     theme, temps = sl.get("default_theme", "visual"), {k: t["url"] for k, t in mine.items() if t.get("url")}
     if old := {k: v for k, v in sl.get("templates", {}).items() if not mine.get(k, {}).get("url")}:  # 2026-10-12 までの書き方
         ng("slides.templates", f"{', '.join(old)} のテンプレートの URL を [slides.themes.<名前>] の url に移す（[slides.templates] の visual = \"…\" → [slides.themes.visual] の url = \"…\"）")
+    if stale := [f"slides.themes.{k}.base" for k, t in mine.items() if "base" in t] + ["slides.base_template"] * ("base_template" in sl):  # 2026-10-14 までの書き方
+        ng("slides の base", f"{', '.join(stale)} を消す。元のテンプレートは factory.toml に持たず、template.py <テーマ> --from-base <元の URL> で渡す（渡さなければ白紙の pptx から作る）。残っていると template.py が止まる")
     if sl.get("template_folder"):  # 2026-10-12 までの書き方
         warn("slides.template_folder", "プラグインは読まない。新しく作るテンプレートは [drive] factory の下の Themes に作る（前の版のスクリプトで動かさなくなったら消す）")
     if sl.get("templates") and not old:
@@ -118,8 +120,7 @@ def check(ws, local=False):
             desc_warn(no_desc, "。url のテンプレートの Drive の説明にあるかは、Google の認証が通ってから見る")
         return out
     targets = [(f"slides.themes.{k}.url", v) for k, v in temps.items()] + [(f"docs.templates.{k}", v) for k, v in cfg.get("docs", {}).get("templates", {}).items()]
-    targets += [(f"slides.themes.{k}.base", t["base"]) for k, t in mine.items() if t.get("base")]
-    targets += [(f"drive.{k}", v) for k, v in dr.items() if v] + ([("slides.base_template", sl["base_template"])] if sl.get("base_template") else [])
+    targets += [(f"drive.{k}", v) for k, v in dr.items() if v]
     for name, url in targets:
         fid = gapi.folder_id(url) if "/folders/" in url else gapi.file_id(url)
         try:
@@ -197,6 +198,10 @@ def selftest():
         toml.write_text(toml.read_text() + '\n[slides.templates]\nvisual = "x"\n')
         assert kinds()["slides.templates"] == "要修正"  # 古い書き方だけ
         toml.write_text(toml.read_text().replace('[slides.templates]\nvisual = "x"\n', ""))
+        assert "slides の base" not in kinds()  # 雛形には書いていない
+        toml.write_text(toml.read_text().replace("[slides.themes.visual]", '[slides.themes.visual]\nbase = ""', 1))
+        assert kinds()["slides の base"] == "要修正"  # 2026-10-14 までの書き方。空でも消す
+        toml.write_text(toml.read_text().replace('[slides.themes.visual]\nbase = ""', "[slides.themes.visual]", 1))
         toml.write_text(toml.read_text() + '\n[docs]\ndefault_theme = "acme"\n\n[docs.themes.us]\npage = [215.9, 279.4]\n')
         assert kinds()["docs.default_theme"] == "要修正" and kinds()["docs.themes の説明"] == "要確認"  # 既定のテーマがない、説明がない
         toml.write_text(toml.read_text().replace('default_theme = "acme"', 'default_theme = "standard"'))

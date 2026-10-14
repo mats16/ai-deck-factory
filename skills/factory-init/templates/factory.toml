@@ -7,7 +7,7 @@
 # - ここに書くもの: 人や組織で変わる値だけ（会社のテンプレートの書体と色、社名を含む）。見た目の決まり（色の役割・余白・版面）は slides.py と deck-practices/visual.md。
 # - 値の形: Google Slides と Drive のフォルダは URL のまま書く（スクリプトが ID を取り出す）。
 # - テーマ: [slides.themes.<名前>] に、テンプレートの url と、使い分けの description を書く（エージェントが slides.py themes で一覧を見て、資料ごとに選ぶ）。
-#   url は template.py <名前> --from-base が書き込む。
+#   url は template.py <名前> --from-base が書き込む。元のテンプレートの URL はここに持たない（--from-base <元の URL> で渡す。渡さなければ白紙の pptx から作る）。
 
 [factory]
 # private = ["アクメ", "ロードランナー"]  # factory-kaizen が Issue に入れたら止める語（顧客の日本語の名前、顧客の製品名など）。Customers/ の顧客と資料のフォルダの名前は書かなくても見る
@@ -28,17 +28,15 @@ default_theme = "visual"  # 説明で決まらないときのテーマ。テー�
 # copyright = "© 2026 Acme, Inc. All rights reserved."  # 全ページの左下。lint が 9pt を通すのは「© <年> <社名> All rights reserved.」の形だけ
 # logo = "acme/logo.png"  # ドキュメントの表紙のロゴ。ワークスペースの assets/ の中のパスか URL。書かなければ置かない
 
-# [slides.themes.acme]  # 会社のテンプレートから作るテーマ（deck-template）。base は元のテンプレート、font は書体、色は役割の名前（visual.md の 1）。template.py check acme で測る
+# [slides.themes.acme]  # 会社のテンプレートから作るテーマ（deck-template）。font は書体、色は役割の名前（visual.md の 1）。template.py check acme で測る
 # description = "アクメの会社の色。顧客向けの提案と、社外の登壇"  # どの資料・聞き手に使うか。エージェントが資料ごとに選ぶときに読む（slides.py themes）
-# base = ""  # 書かなければ白紙の pptx（deck-build/assets/blank.pptx）から作る
 # font = "Noto Sans JP"
 # NAVY = "002B5C"
 # mono = "Cascadia Mono"  # コードの等幅。どのテーマにも書ける。書かなければ Cascadia Mono（deck-template の「書体」）
 # TEXT = "303F47"  # テーマに入れない色（TEXT・RULE・RED_SOFT・STAGE_TEXT・DECOR）と名前で書く役割（HEAD・CARD・SUB_ON_NAVY・ON_RED）。どのテーマにも書ける。書かなければ visual.md の 1 の値
 # copyright = "© 2026 Acme, Inc. All rights reserved."  # このテーマのデッキだけ [brand] の代わりに使う
 
-[slides.themes.visual]  # 組み込みのテーマ（色は slides.py）。url・description・base と、mono・テーマに入れない色・copyright だけを書ける
-base = ""  # template.py visual --from-base が元にする Google Slides（会社のテンプレート）。空なら白紙の pptx（deck-build/assets/blank.pptx）から作る
+[slides.themes.visual]  # 組み込みのテーマ（色は slides.py）。url・description と、mono・テーマに入れない色・copyright だけを書ける
 # url = ""  # template.py visual --from-base が書き込む
 # description = ""  # 書かなければ組み込みの説明（slides.py themes で見る）
 

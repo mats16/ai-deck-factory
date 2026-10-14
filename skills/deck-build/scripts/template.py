@@ -5,8 +5,8 @@ usage:
   template.py audit <Google Slides の URL>  元にするテンプレートを読み、ページの大きさ・マスターの配色とコントラスト・レイアウト・書体と大きさ・和文の有無を出す（変えない）
   template.py check <テーマ>                テーマの色を役割の組（PAIRS）で測り、届かない色には色相と彩度を保って明るさだけを変えた案を出す（届かない組があれば exit 1）
   template.py <テーマ>                      配色・書体・ページ番号・見本のページをテーマに合わせ直す（ID は変わらない）
-  template.py <テーマ> --from-base          元のテンプレート（テーマの base、なければ factory.toml の base_template、なければ白紙の BLANK_PPTX）を [drive] factory の下の Themes に複製して作り直し、
-                                            URL を [slides.themes.<テーマ>] の url に書き込む
+  template.py <テーマ> --from-base [<元の URL>]  元のテンプレート（渡さなければ白紙の BLANK_PPTX）を [drive] factory の下の Themes に複製して作り直し、
+                                            URL を [slides.themes.<テーマ>] の url に書き込む。元の URL は factory.toml に持たない（会話で渡されたものを使う）
 作ったテンプレートには、Drive の説明に description を、プロパティにテーマの名前と組むときに引く値を書く（slides.py の PROP）。ほかの人は url を書くだけで、同じ値で組める。
 全社の共有テーマのフォルダ（[drive] shared_themes）に置くと、slides.py themes がほかの人に候補として出す。
   template.py --selftest                    見本のページを、API を呼ばずに組めるかを確かめる
@@ -22,7 +22,7 @@ from slides import (BG, BLANK, CARD, COPYRIGHT_PT, DECOR, EMU, FONT, GA, HEAD, I
                     RED_SOFT, RED_TEXT, RULE, SLOTS, STAGE_TEXT, SUB, SUB_ON_NAVY, TEXT, THEMES, WHITE, W, X, Y_BODY, Y_FOOT, build, cols, make_deck, number_style, rgb)
 from slides import FIXED as FIXED_DEFAULT, JP_FONTS, LAYOUT_MARK, NAMED, PROP, PUBLISHED, THEME_MARK, THEME_PROP, VARIANTS, is_blank, need_brand, placeholders, theme_fixed, theme_font, use_layouts, use_theme
 
-BLANK_PPTX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "blank.pptx")  # base がないときの元。中身は ../assets/README.md
+BLANK_PPTX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "blank.pptx")  # --from-base に元の URL を渡さないときの元。中身は ../assets/README.md
 THEMES_DIR = "Themes"  # テンプレートを作る Drive のフォルダ。[drive] factory の下（なければ作る）。使うテンプレートは [slides.themes.<名前>] の url で 1 つずつ指す
 FOLDER = "application/vnd.google-apps.folder"
 NAMES = {"visual": "テンプレート（visual: このフォルダの色）", "company": "テンプレート（company: 会社の色をコントラストだけ調整）"}
@@ -61,16 +61,19 @@ def themes():
 
 def colors(theme):
     """テーマの 12 の枠の色。factory.toml のテーマは役割の名前で書き、書かない役割は visual の値にする。"""
+    if old := [k for k, v in ((f"[slides.themes.{theme}] の base", "base" in themes().get(theme, {})),
+                              ("[slides] の base_template", find_factory() and "base_template" in factory().get("slides", {}))) if v]:
+        sys.exit(f"factory.toml の {'・'.join(old)} は使わなくなった（2026-10-14）。消す。元のテンプレートは template.py {theme} --from-base <元の URL> で渡す（渡さなければ白紙の pptx から作る）")
     if theme in THEMES:
-        if bad := set(themes().get(theme, {})) - {"url", "description", "base", "copyright", "mono", "cover", "section", *FIXED_DEFAULT, *NAMED}:  # 役割の色は組み込みのまま、font だけが効いてしまう
-            sys.exit(f"[slides.themes.{theme}] は組み込みのテーマ（slides.py の THEMES）。url・description・base・copyright・mono・cover・section と固定の色（{', '.join([*FIXED_DEFAULT, *NAMED])}）のほか"
+        if bad := set(themes().get(theme, {})) - {"url", "description", "copyright", "mono", "cover", "section", *FIXED_DEFAULT, *NAMED}:  # 役割の色は組み込みのまま、font だけが効いてしまう
+            sys.exit(f"[slides.themes.{theme}] は組み込みのテーマ（slides.py の THEMES）。url・description・copyright・mono・cover・section と固定の色（{', '.join([*FIXED_DEFAULT, *NAMED])}）のほか"
                      f"（{', '.join(sorted(bad))}）は書けない。会社の色なら別の名前のテーマにする")
         return THEMES[theme]
     if (t := themes().get(theme)) is None:
         sys.exit(f"テーマ {theme} がない（slides.py の THEMES にも、factory.toml の [slides.themes] にもない）")
     if not re.fullmatch(r"[A-Za-z0-9_-]+", theme):  # [slides.themes.<名前>] の表の名前に、引用符なしで書き込む（set_url）
         sys.exit(f"テーマの名前 {theme!r} は英数字と - _ だけにする")
-    if bad := set(t) - set(ROLE) - set(FIXED_DEFAULT) - set(NAMED) - {"base", "font", "mono", "url", "description", "copyright", "cover", "section"}:
+    if bad := set(t) - set(ROLE) - set(FIXED_DEFAULT) - set(NAMED) - {"font", "mono", "url", "description", "copyright", "cover", "section"}:
         sys.exit(f"[slides.themes.{theme}] に知らない名前: {', '.join(sorted(bad))}（色は役割の名前 {', '.join(ROLE)} と固定の色の名前 {', '.join([*FIXED_DEFAULT, *NAMED])} で書く）")
     if bad := [k for k, v in t.items() if k in {*ROLE, *FIXED_DEFAULT, *NAMED} and not re.fullmatch(r"#?[0-9A-Fa-f]{6}", str(v))]:
         sys.exit(f"[slides.themes.{theme}] の {', '.join(bad)} が 6 桁の 16 進の色でない（例: NAVY = \"002B5C\"）")
@@ -205,8 +208,9 @@ def audit(url):
     print("\n".join(out))
 
 
-def specimen(theme):
-    """テンプレートの見本のページ。テーマの色と部品を一通り、決まり（visual.md）どおりの使い方で置く（色の確かめと、部品を直したときの確かめに使う）。"""
+def specimen(theme, origin=()):
+    """テンプレートの見本のページ。テーマの色と部品を一通り、決まり（visual.md）どおりの使い方で置く（色の確かめと、部品を直したときの確かめに使う）。
+    origin は、色の早見表の出典の行に足す元のテンプレートの部品（template() が作る。合わせ直しでは元が分からないので書かない）。"""
     T = palette(theme)
     use_theme(themes().get(theme, {}))  # 固定の色と著作権表示はテーマの値（slides.py build がデッキのテーマから読むのと同じ）
     docs = "https://developers.google.com/workspace/slides"  # 出典の行の見本のリンク。どの会社のテンプレートにも入るので、会社に結びつかない公開のページ
@@ -233,8 +237,7 @@ def specimen(theme):
                    color=on(slot, ON.get(slot)), spacing=115)
         d.text(s, X + 3 * (cw + gap) + PAD, Y_BODY + 2 * (ch + 0.15) + PAD, cw - 2 * PAD, ch - 2 * PAD,
                [("テーマに入れない色（次のページ）\n", {"bold": True}), "pages.py に名前で書く\n値は factory.toml で変えられる"], spacing=115)
-        origin = ("元のテンプレート", {"link": base(theme)}) if base(theme) else "白紙の pptx（deck-build/assets/blank.pptx）"  # 空の URL のリンクは API が断る
-        d.source(s, ["出典: visual.md の 1（色の決まり）。ページの大きさとマスターは ", origin])
+        d.source(s, ["出典: visual.md の 1（色の決まり）。", *origin])
         d.note(s, f"テーマ「{theme}」の 11 の枠です。キッカーは、このページのように役割を示すときだけ置きます。"
                   "BG は地と同じ色なので、見本だけ罫線を付けています。値は factory.toml に書く形（# を付けない 6 桁）です。")
 
@@ -244,7 +247,7 @@ def specimen(theme):
             x, y = X + (i % 5) * (cw + 0.2), Y_BODY + (i // 5) * (ch + 0.15)
             d.box(s, x, y, cw, ch, c, line)
             d.text(s, x + PAD, y + PAD, cw - 2 * PAD, ch - 2 * PAD, [(f"{name}\n", {"bold": True}), f"{tone(T, c)}\n", use], color=on(c, fg), spacing=115)
-        d.source(s, ["出典: visual.md の 1（色の決まり）、deck-template の SKILL.md（暗い本文のテーマ）。ページの大きさとマスターは ", origin])
+        d.source(s, ["出典: visual.md の 1（色の決まり）、deck-template の SKILL.md（暗い本文のテーマ）。", *origin])
         d.note(s, f"テーマ「{theme}」の、テーマに入れない {len(FIXED)} の色です。HEAD・CARD・SUB_ON_NAVY・ON_RED は、書かなければ NAVY・白・RULE・白と同じ色です。"
                   "DECOR は slides.py の章の扉が使い、pages.py には書きません。")
 
@@ -302,12 +305,6 @@ def specimen(theme):
     return make_deck(make_all, f"AI Deck Factory｜テーマ「{theme}」の見本")
 
 
-def base(theme):
-    """元にするテンプレートの URL。テーマの base、なければ factory.toml の [slides] base_template（2026-10-12 までの書き方。組み込みのテーマにも base を書ける）。
-    どちらもなければ ""（--from-base は BLANK_PPTX から作る）。"""
-    return themes().get(theme, {}).get("base") or factory().get("slides", {}).get("base_template", "")
-
-
 def pick(p, names=None):
     """残すマスター（いちばん多くのページが使うもの。同じなら先のもの）と、slides.py が使うレイアウトを選ぶ。レイアウトは、そのマスターの、
     プレースホルダーがページ番号の枠だけのもの（slides.py の is_blank）。名前が BLANK のもの、型が BLANK のものの順に先にする。
@@ -331,12 +328,12 @@ def pick(p, names=None):
         sys.exit(f"テーマの cover・section にない表紙・扉のパターン「{'」「'.join(stale)}」が、テンプレートに残っている。パターンを減らすときは --from-base で作り直す")
     if bad := [l["layoutProperties"]["displayName"] for l in kept if "SLIDE_NUMBER" not in placeholders(l)]:  # 目印はページ番号の枠に書き、slides.py の createSlide もこの枠を対応づける
         sys.exit(f"テーマの cover・section のレイアウト「{'」「'.join(dict.fromkeys(bad))}」に、ページ番号の枠がない。元のテンプレートを複製し、"
-                 "画面のテーマビルダーでそのレイアウトにスライド番号のプレースホルダーを足して、その URL を base にする")
+                 "画面のテーマビルダーでそのレイアウトにスライド番号のプレースホルダーを足して、その URL を --from-base に渡す")
     cands = sorted((l for l in ls if is_blank(l) and l not in kept),
                    key=lambda l: (l["layoutProperties"]["displayName"] != BLANK, l["layoutProperties"].get("name") != "BLANK"))
     if not cands:
         sys.exit(f"マスター「{master['masterProperties']['displayName']}」に、プレースホルダーがページ番号の枠だけのレイアウトがない。元のテンプレートを複製し、"
-                 "画面のテーマビルダーで Blank のレイアウトを作るか、Blank のレイアウトにスライド番号のプレースホルダーを足して、その URL を base にする")
+                 "画面のテーマビルダーで Blank のレイアウトを作るか、Blank のレイアウトにスライド番号のプレースホルダーを足して、その URL を --from-base に渡す")
     return master, cands[0], extras
 
 
@@ -402,7 +399,7 @@ def strip(pid, p, master, blank, extras=None):
     if not any(e.get("shape", {}).get("placeholder", {}).get("type") == "SLIDE_NUMBER" for e in slide.get("pageElements", [])):
         # 元のファイルの「スライド番号」の設定がオフだと、API で足したページにページ番号の枠ができない。API では変えられない（2026-10-13）
         sys.exit("元のテンプレートは、足したページにページ番号の枠ができない（ファイルの「スライド番号」の設定がオフ）。元を複製し、複製の画面の"
-                 "「挿入 → スライド番号」で「オン」にして「すべてに適用」を押し、その URL を base にする")
+                 "「挿入 → スライド番号」で「オン」にして「すべてに適用」を押し、その URL を --from-base に渡す")
     kept = [l for v in extras.values() for l in v]
     keep = {blank["objectId"], *(l["objectId"] for l in kept)}
     dels = ([l["objectId"] for l in now["layouts"] if l["objectId"] not in keep]
@@ -473,8 +470,8 @@ def publish(pid, theme):
                                                                               "properties": {**{k: None for k in old if k.startswith(PROP)}, **props(theme)}})
 
 
-def template(theme, from_base=False):
-    """テンプレートを作る（from_base）か、合わせ直す。Drive に複製する・テンプレートを書き換える前に、要るものを全部確かめる
+def template(theme, from_base=False, base=""):
+    """テンプレートを作る（from_base。元は base の URL、空なら BLANK_PPTX）か、合わせ直す。Drive に複製する・テンプレートを書き換える前に、要るものを全部確かめる
     （テーマの色、[brand] copyright、作るときは factory.toml に url を書けるか）。作るときは、組んだあとに url を factory.toml に書く。
     複製したあとで止まったら（url を書けなかったときも）、複製をゴミ箱に移す。"""
     palette(theme)  # 知らないテーマ・書けない値なら止まる
@@ -482,14 +479,15 @@ def template(theme, from_base=False):
     need_brand()  # 見本のページ（build）に著作権表示（テーマの copyright があればそれ）を書く
     if from_base:
         record(theme)  # factory.toml に url を書けるか（書けないのに複製を残さない）
-    src = file_id(base(theme))
+    src, origin = file_id(base), ()
     if from_base:
         name = NAMES.get(theme, f"テンプレート（{theme}）")
+        origin = ("ページの大きさとマスターは", ("元のテンプレート", {"link": base})) if src else ("ページの大きさとマスターは白紙の pptx（deck-build/assets/blank.pptx）",)
         if not src:  # Google Slides に変換して上げる（変換しないと Office のファイルのままで、Slides API が使えない）
             with open(BLANK_PPTX, "rb") as f:
                 pid = upload(f.read(), PPTX, name, themes_folder(), convert=GSLIDES)["id"]
         elif not page_ok(request("GET", f"{SLIDES}/{src}?fields=pageSize")["pageSize"]):
-            sys.exit(f"元のテンプレートのページが {PAGE[0]:.2f} × {PAGE[1]} in でない。template.py audit {base(theme)} の指示どおりに直す")
+            sys.exit(f"元のテンプレートのページが {PAGE[0]:.2f} × {PAGE[1]} in でない。template.py audit {base} の指示どおりに直す")
         else:
             pid = request("POST", f"{DRIVE}/files/{src}/copy?supportsAllDrives=true&fields=id", {"name": name, "parents": [themes_folder()]})["id"]
     elif url := themes().get(theme, {}).get("url"):
@@ -504,7 +502,7 @@ def template(theme, from_base=False):
             strip(pid, p, master, blank, extras)
         batch(pid, styles(theme, master, blank, extras))
         use_layouts(request("GET", f"{SLIDES}/{pid}?fields=layouts(objectId,pageElements(description))"))  # 見本の表紙・扉を、置き物に重ならない幅で組む
-        build(pid, specimen(theme), force=True)  # 直前に配色を変えているので、版の確かめはしない
+        build(pid, specimen(theme, origin), force=True)  # 直前に配色を変えているので、版の確かめはしない
         publish(pid, theme)
         if from_base:
             record(theme, pid)  # 書けずに止まったときも、下で複製を片付ける
@@ -622,6 +620,11 @@ def main():
                                        "long": {"copyright": "©" * 60}}
         assert props("acme") == {THEME_PROP: "acme", f"{PROP}TEXT": "111111", f"{PROP}copyright": "© 2026 Acme, Inc. All rights reserved."}
         assert props("long") == {THEME_PROP: "long"}  # 124 バイトを超える値は書かない（止めない）
+        try:  # base は factory.toml に持たない（2026-10-14 までの書き方）。黙って白紙から作らないよう止める
+            colors("acme")
+            raise AssertionError("テーマの base で止まらなかった")
+        except SystemExit as e:
+            assert "使わなくなった" in str(e)
         globals()["themes"] = th
         with zipfile.ZipFile(BLANK_PPTX) as z:  # 白紙の pptx: 版面の大きさ、Blank だけ、スライド番号オン、ページ番号の枠のパディング 0（../assets/README.md）
             x = {n: z.read(n).decode() for n in z.namelist() if n.endswith(".xml")}
@@ -652,7 +655,9 @@ def main():
         return sys.exit(0 if check(a[1]) else 1)
     if not a or a[0].startswith("-"):
         sys.exit(__doc__)
-    pid = template(a[0], "--from-base" in a)  # 要るものの確かめは template() の頭、url を書くのは template() の中
+    if a[1:] and a[1] != "--from-base" or len(a) > 3:
+        sys.exit(__doc__)
+    pid = template(a[0], a[1:2] == ["--from-base"], a[2] if len(a) == 3 else "")  # 要るものの確かめは template() の頭、url を書くのは template() の中
     print(f"テンプレート {a[0]}: {pid}" + (f"  （{factory_path()} の [slides.themes.{a[0]}] の url に書いた）" if "--from-base" in a else ""))
 
 
