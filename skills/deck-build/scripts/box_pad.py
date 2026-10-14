@@ -6,7 +6,7 @@
 箱の中の文字と、箱の下端の間を、Google が描いたページの画像（gslides.py check の p-NN.png）で測る。
 1 字分（その枠でいちばん小さい文字の大きさ）より狭いものを出す（visual.md の 4「枠と文字の間は 1 字分」）。
 [box_pad-001] JSON の行の高さの見積もりは ±0.4 in ずれるので、画像で測る。
-見るのは、塗りの箱の中にある、上寄せの 2 行以上の文字の枠。gslides.py check が呼ぶ。
+見るのは、塗りの箱の中にある、上寄せの 2 行以上の文字の枠と、白いカードの下端の真上にある 1 行の文字の枠。gslides.py check が呼ぶ。
 もう 1 つ、1 つだけで置く淡色のパネル（白いカード・濃紺の箱・横に同じ高さの箱が並ぶものを除く）の上寄せの文字で、
 下の空きが上の空きより SLACK_MIN 以上大きいものを出す（visual.md の 4。中央に置くか縮める。2026-10-10）。"""
 import json, os, sys
@@ -119,9 +119,10 @@ def check(p, folder, pages=None):
             head = ptext(paras(sh["text"])[0])[:20]
             gap, first, edge_y = got
             gap, need = gap / px / EMU, sz / 72
-            if lines >= 2 and gap < need - 0.01:
+            in_card = any(c == card and abs(edge_y - (f[1] + f[3]) * px) <= 0.05 * EMU * px for f, c in inside)  # 白いカードの下端の真上の文字
+            if (lines >= 2 or in_card) and gap < need - 0.01:  # 白いカードの下の 1 行の札（「2 回まで」など）も見る（2026-10-14、資料 1 で 0.08 in）
                 out.append(("箱の下端と文字の間が 1 字分より狭い", f"p{i}: {gap:.2f} in（{sz:g}pt の 1 字は {need:.2f} in）「{head}」"))
-            elif lines >= 2 and gap < CARD_MIN and any(c == card and abs(edge_y - (f[1] + f[3]) * px) <= 0.05 * EMU * px for f, c in inside):
+            elif lines >= 2 and gap < CARD_MIN and in_card:  # 0.28 in は見出しと本文のあるカードの決まり。1 行の札は 1 字分だけを見る（1 行にも当てると、小さな入れ子のカードで外れた）
                 out.append((CARD, f"p{i}: {gap:.2f} in（{CARD_MIN} in まで空ける）「{head}」。カードを高くするか、文を短くする"))
             if panel:
                 above = (first - min(f[1] for f in panel) * px) / px / EMU
@@ -192,6 +193,23 @@ def selftest():
         p["slides"] += [slide, slide]
         hits = check(p, d)
         assert len(hits) == 2 and hits[0][1].startswith("p1: 0.07") and hits[1][0] == CARD and hits[1][1].startswith("p4:"), hits
+        # 白いカードの下端の真上の 1 行の札: 最終行の下端 277 px、カードの下端 288 px（間 10 px = 0.08 in で 11pt の 1 字に足りない）。1 行でも見る
+        # p2 は下端 300 px（間 22 px = 0.18 in）で、1 字分は足りるので CARD_MIN（2 行以上だけ）は当てない
+        for n, bottom in ((1, 288), (2, 300)):
+            im = Image.new("L", (1600, 900), 245)
+            dr = ImageDraw.Draw(im)
+            dr.rectangle((100, 100, 700, bottom), fill=255, outline=220)
+            dr.rectangle((130, 262, 300, 277), fill=60)
+            im.save(f"{d}/p-{n:02d}.png")
+        one = json.loads(json.dumps(frame))
+        one["shape"]["text"]["textElements"][1]["textRun"]["content"] = "あ" * 10 + "\n"
+        lows = []
+        for h in (188, 200):
+            low = json.loads(json.dumps(card))
+            low["size"]["height"] = emu(h)
+            lows.append({"pageElements": [low, one], "slideProperties": {"masterObjectId": "m"}})
+        hits = check(dict(p, slides=lows), d)
+        assert [k for k, _ in hits] == ["箱の下端と文字の間が 1 字分より狭い"] and hits[0][1].startswith("p1: 0.08"), hits
         # 淡色のパネルの上寄せの文字: 上の空き 0.42 in（150-100 px）に対して、下が 1.2 in 以上空く（p.7 の形）
         im = Image.new("L", (1600, 900), 245)
         dr = ImageDraw.Draw(im)
