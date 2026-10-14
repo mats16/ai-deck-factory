@@ -19,6 +19,7 @@ K=<deck-build のフォルダ>/scripts   # deck-build の SKILL.md のあるフ�
 cd <フォルダ>/build
 python3 $K/slides.py new <Drive のフォルダの URL> <YYYYMMDD_の名前> [--theme visual|company]   # 初めて組むとき。出た URL を構成案に書く
 python3 $K/slides.py build <URL> [--force]          # 2 回目から。同じ URL に組み直す（画面で直されていたら止まる。下）
+python3 $K/slides.py dry [pages_<担当>.py] [<URL>]  # 組まずに make を走らせ、組むときの警告・枚数・ノートのないページを出す（既定は pages.py。下の 2 の「ページを別のファイルに分けて書く」）
 python3 $K/gslides.py check <URL> [--talk]          # lint・テキスト・全ページの画像（/tmp/slides_<ID の頭 8 字>/）・画像で測る箱の下の余白
 python3 $K/gslides.py check <URL> --pages 3,5       # 直したページだけ、画像を取り直す（ページの数が変わったときは、自動で全ページ）
 uv run -q $K/sheet.py /tmp/<名前>.png /tmp/slides_<ID>/p-0{2,3,4}.png   # 何枚かを 1 枚に並べて見る
@@ -81,6 +82,18 @@ def make(d):
 - `d.text` の行間（`spacing`）を省くと、2 行以上の見込みなら 125、1 行なら 100 になる（visual.md の 2）。表のセルは 2 行以上なら 120。
 - フッター（左下の著作権表示）は表紙・扉を含む全ページに自動で入る。文言は `factory.toml` の `[brand] copyright`（デッキのテーマの `copyright` があればそれ。`slides.py` の `COPYRIGHT`）、文字は 9pt（`COPYRIGHT_PT`）、本文のページは `SUB`、表紙・扉（濃紺の地）は `SUB_ON_NAVY`。資料名は表示せず、`NAME` 末尾の `Internal Only`・`Confidential` だけを残す。初公表年は現在年へ自動更新しない。`foot=False` の流用ページには重ねない。ページ番号は表紙以外の右下に著作権表示と同じ 9pt で入り、テンプレートの枠なので、画面でページを並べ替えても合う。
 - [slides-004] **部品は slides.py にあるものを使う。前の資料から写さない**。1 つの資料でだけ要る部品は pages.py に関数で書き、2 つ目の資料で要ったら slides.py に移す。
+- [slides-031] **ページを別のファイルに分けて書く（子に書かせるとき。`../deck-practices/SKILL.md` の「作業の始め方」の 6 の「残りのページを子に分けて書く」）。** 子は `build/pages_<担当>.py` に、担当のページを 1 枚 1 関数（`p<構成案の番号>(d)`）で書き、それを順に呼ぶ `make(d)` も置く。部品は `from slides import …`、親の共通の関数と定数は `from pages import …` で読み、pages.py は書き換えない。子は組まずに `slides.py dry pages_<担当>.py <URL>` で確かめる（`[p<番号>]` は担当の中の何枚目）。URL は代表の 3 枚を組んだデッキで、`build` と同じく表紙・扉のパターン（`variant`）とテーマをそこから読む（読むだけ。渡さなければパターンは 1 だけで、2 からは止まる）。dry が見るのは止まるかと組むときの警告で、lint（置き換え忘れ・見出しの句点など）と画像は、親が組んだあとの `gslides.py check` で見る。親は pages.py の `make` の中で子のファイルを読み込み、ページの関数を構成案の順に呼んでから 1 回だけ組む（担当のページが続いていれば `make` でよい）。頭で読み込むと、子のファイルが pages.py を読み込み返して止まる。
+
+  ```python
+  def make(d):
+      import pages_a, pages_b   # 子が書いたページ（make の中で読み込む）
+      cover(d)                  # p1（親）
+      pages_a.make(d)           # p2〜p4（子 A の担当が続いている）
+      rep_figure(d)             # p5（代表の 3 枚）
+      pages_b.p06(d)            # 代表の 3 枚と交ざるところは、ページの関数を順に呼ぶ
+      rep_table(d)              # p7（代表の 3 枚）
+      pages_b.p08(d)
+  ```
 - slides.py の部品を足したり直したりしたら、`python3 $K/slides.py --selftest` と `python3 $K/template.py --selftest` を通し、テンプレートの見本を組み直して見る（`python3 $K/template.py visual`。そのあと `gslides.py check <テンプレートの URL>`）。company を使うなら `python3 $K/template.py company` も組み直す。部品を変えると、それを使う資料を組み直したときに見た目も変わる。
 
 ## 3. テンプレートとテーマ

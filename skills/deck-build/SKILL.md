@@ -11,6 +11,7 @@ description: 日本語のスライドを Slides API で Google Slides に直接�
 |---|---|
 | スライド | [slides.md](slides.md)（コマンド、pages.py の書き方、テンプレートとテーマ、図形と文字の組み方、Slides API の落とし穴）と `../deck-practices/visual.md`（このフォルダの見た目の決まり） |
 | ドキュメント | `../doc-build/SKILL.md`（Google Docs） |
+| 残りのページを子に分けて書く | [prompt_pages.md](prompt_pages.md)（子への依頼文。分けるかは `../deck-practices/SKILL.md` の「作業の始め方」の 6） |
 | 社内資料の流用 | `../deck-practices/reuse.md`（`scripts/gslides.py` で Google Slides のページの一覧・画像を取り、`keep`・`jp` で差し替え用のページを作る） |
 
 ```sh
