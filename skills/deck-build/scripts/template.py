@@ -5,7 +5,7 @@ usage:
   template.py audit <Google Slides の URL>  元にするテンプレートを読み、ページの大きさ・マスターの配色とコントラスト・レイアウト・書体と大きさ・和文の有無を出す（変えない）
   template.py check <テーマ>                テーマの色を役割の組（PAIRS）で測り、届かない色には色相と彩度を保って明るさだけを変えた案を出す（届かない組があれば exit 1）
   template.py <テーマ>                      配色・書体・ページ番号・見本のページをテーマに合わせ直す（ID は変わらない）
-  template.py <テーマ> --from-base          元のテンプレート（テーマの base、なければ factory.toml の base_template）を [drive] factory の下の Themes に複製して作り直し、
+  template.py <テーマ> --from-base          元のテンプレート（テーマの base、なければ factory.toml の base_template、なければ公開の白紙 BLANK_BASE）を [drive] factory の下の Themes に複製して作り直し、
                                             URL を [slides.themes.<テーマ>] の url に書き込む
 作ったテンプレートには、Drive の説明に description を、プロパティにテーマの名前と組むときに引く値を書く（slides.py の PROP）。ほかの人は url を書くだけで、同じ値で組める。
 全社の共有テーマのフォルダ（[drive] shared_themes）に置くと、slides.py themes がほかの人に候補として出す。
@@ -22,6 +22,7 @@ from slides import (BG, BLANK, CARD, COPYRIGHT_PT, DECOR, EMU, FONT, GA, HEAD, I
                     RED_SOFT, RED_TEXT, RULE, SLOTS, STAGE_TEXT, SUB, SUB_ON_NAVY, TEXT, THEMES, WHITE, W, X, Y_BODY, Y_FOOT, build, cols, make_deck, number_style, rgb)
 from slides import FIXED as FIXED_DEFAULT, JP_FONTS, LAYOUT_MARK, NAMED, PROP, PUBLISHED, THEME_MARK, THEME_PROP, VARIANTS, is_blank, need_brand, placeholders, theme_fixed, theme_font, use_layouts, use_theme
 
+BLANK_BASE = "https://docs.google.com/presentation/d/1zMjOxMloRjUQnLcuvHiQtlKJTg2PG1Zeilc5SleRVsc/edit"  # 公開の白紙（13.33 × 7.5 in、Simple Light、Blank、スライド番号オン、ページ番号の枠のパディング 0）。誰でも複製できる
 THEMES_DIR = "Themes"  # テンプレートを作る Drive のフォルダ。[drive] factory の下（なければ作る）。使うテンプレートは [slides.themes.<名前>] の url で 1 つずつ指す
 FOLDER = "application/vnd.google-apps.folder"
 NAMES = {"visual": "テンプレート（visual: このフォルダの色）", "company": "テンプレート（company: 会社の色をコントラストだけ調整）"}
@@ -301,8 +302,9 @@ def specimen(theme):
 
 
 def base(theme):
-    """元にするテンプレートの URL。テーマの base、なければ factory.toml の [slides] base_template（2026-10-12 までの書き方。組み込みのテーマにも base を書ける）。"""
-    return themes().get(theme, {}).get("base") or factory().get("slides", {}).get("base_template", "")
+    """元にするテンプレートの URL。テーマの base、なければ factory.toml の [slides] base_template（2026-10-12 までの書き方。組み込みのテーマにも base を書ける）、
+    なければ公開の白紙（BLANK_BASE）。"""
+    return themes().get(theme, {}).get("base") or factory().get("slides", {}).get("base_template") or BLANK_BASE
 
 
 def pick(p, names=None):
@@ -481,8 +483,6 @@ def template(theme, from_base=False):
         record(theme)  # factory.toml に url を書けるか（書けないのに複製を残さない）
     src = file_id(base(theme))
     if from_base:
-        if not src:
-            sys.exit(f"元のテンプレートがない。factory.toml の [slides.themes.{theme}] の base に URL を書く")
         if not page_ok(request("GET", f"{SLIDES}/{src}?fields=pageSize")["pageSize"]):
             sys.exit(f"元のテンプレートのページが {PAGE[0]:.2f} × {PAGE[1]} in でない。template.py audit {base(theme)} の指示どおりに直す")
         pid = request("POST", f"{DRIVE}/files/{src}/copy?supportsAllDrives=true&fields=id",
@@ -617,7 +617,12 @@ def main():
                                        "long": {"copyright": "©" * 60}}
         assert props("acme") == {THEME_PROP: "acme", f"{PROP}TEXT": "111111", f"{PROP}copyright": "© 2026 Acme, Inc. All rights reserved."}
         assert props("long") == {THEME_PROP: "long"}  # 124 バイトを超える値は書かない（止めない）
-        globals()["themes"] = th
+        fa = factory  # 元のテンプレート: テーマの base、なければ base_template、なければ公開の白紙
+        globals()["factory"] = lambda: {"slides": {"base_template": "t"}}
+        assert base("acme") == "b" and base("long") == "t"
+        globals()["factory"] = lambda: {}
+        assert base("long") == BLANK_BASE
+        globals()["themes"], globals()["factory"] = th, fa
         assert page_ok({"width": {"magnitude": 12192000}, "height": {"magnitude": 6858000}}) and not page_ok({"width": {"magnitude": 9144000}, "height": {"magnitude": 5143500}})
         md = "# 設定\n[slides.themes.visual]  # 注\nurl = \"a\"  # 書き込む\ndescription = \"d\"\n\n[slides.themes.acme]\nNAVY = \"002B5C\"\n\n[drive]\nx = 1\n"
         assert set_url(md, "visual", "b") == md.replace('"a"', '"b"')  # url の行を書き換え、ほかは変えない

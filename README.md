@@ -71,7 +71,7 @@ pi install git:github.com/mats16/ai-deck-factory        # git から
 
 資料を置くフォルダ（例: `~/Documents`）。スクリプトは、今いるフォルダから上へたどって最初に見つかった `factory.toml` のフォルダをワークスペースとして扱う。`factory-init` が置くもの:
 
-- `factory.toml`: 人ごとに変わる値（認証、テンプレート、テーマ〔`[slides.themes.<名前>]`: テンプレートの `url` と使い分けの `description`。エージェントが `slides.py themes` の一覧から資料ごとに選ぶ〕と社名、Drive の置き場所、材料を集める道具〔`[sources]`: 社内の検索・チャット・会議の記録・wiki など〕、レビューの進め方〔`[review]`: 構成を決めたあとを誰が見るか、`/deck-review` の周の上限〕）。テンプレートは `deck-build/scripts/template.py visual --from-base`（`company` も）で作ると URL が書き込まれる。会社で配るテーマは全社の共有テーマのフォルダ（`[drive] shared_themes`）に置き、使う人は `slides.py themes` で見つけて `url` を書く（`deck-build/slides.md` の 3）。
+- `factory.toml`: 人ごとに変わる値（認証、テンプレート、テーマ〔`[slides.themes.<名前>]`: テンプレートの `url` と使い分けの `description`。エージェントが `slides.py themes` の一覧から資料ごとに選ぶ〕と社名、Drive の置き場所、材料を集める道具〔`[sources]`: 社内の検索・チャット・会議の記録・wiki など〕、レビューの進め方〔`[review]`: 構成を決めたあとを誰が見るか、`/deck-review` の周の上限〕）。テンプレートは `deck-build/scripts/template.py visual --from-base`（`company` も）で作ると URL が書き込まれる。元のテンプレート（`base`）を書かなければ、公開の白紙（`template.py` の `BLANK_BASE`）から作る。会社で配るテーマは全社の共有テーマのフォルダ（`[drive] shared_themes`）に置き、使う人は `slides.py themes` で見つけて `url` を書く（`deck-build/slides.md` の 3）。
 - `AGENTS.md`（と `@AGENTS.md` を読む `CLAUDE.md`）: どの会話でも要る決まり。
 - `rules/<スキル>/<ファイル>`: 資料を作る場面だけで要る、このワークスペースの決まり。
 - `Customers/<顧客>/memory.md`: その顧客の好みと、資料をまたいで効く相手のこと（顧客の memory）。その顧客の資料の `構成案*.md` などを開くと、hook が続けて出す。
@@ -185,6 +185,7 @@ gcloud の既定の OAuth クライアントで作った認証情報は、`googl
 - 2026-10-14: 全社の共有テーマのフォルダを `[drive] shared_themes` に書けるようにし、会話で入れるときにその URL を聞く。テンプレートを作るのは今までどおり `[drive] factory` の下の Themes で、テーマのフォルダの設定は足さない。テーマは共有のものでも `[slides.themes.<名前>]` の `url` で指すだけで、共有のフォルダは探すとき（`slides.py themes`・factory-doctor）だけ読む。共有のテンプレートを `url` で指すだけで組めるよう、`template.py` がテンプレートの Drive のプロパティにテーマの名前と組むときの値を書く。`factory.toml` の Drive の場所は URL で書く（ID でも読める）（slides-032）（ユーザー「設定上、全社の共有テーマフォルダと、個人のテーマフォルダ（もしくは AI Deck Factory の規定フォルダ）を持てるようにし、セットアップ時に共有テーマフォルダの URL をユーザーに聞くようにしましょう。」「管理者などは（私がそうですが）共有テーマフォルダと個人のテーマフォルダが同一の場合もあるのでそれも想定しながら実装してください。」「`[slides.themes.company]` などの個別のテーマは URL or ID 参照なので、共有かどうかを判断する必要はない認識です。共有のテンプレートフォルダの情報は探索する際に使うだけかなと。」）。
 - 2026-10-14: factory-kaizen に使う元のリポジトリの checkout（`[factory] source`）をなくす。`kaizen.py start` が GitHub の `main` を `.factory/kaizen/<名前>/repo` に clone し、画像は元のリポジトリに書けなければ `open` が作る自分の fork の `pr-assets` に置く。会話で入れるとき（INSTALL.md）と factory-init は、checkout のパスを聞かない。10-13 に Issue に替えたとき、checkout と fork を用意する前提が残っていた（ユーザー「INSTALL.md を介した初期設定で factory-kaizen で修正を出す際の worktree 用にソースを置くディレクトリの指定がありましたが、現在の仕様は Issue だけ送るはずです。」）。
 - 2026-10-14: 資料の URL を、仕上げたあとの報告まで待たず、`slides.py new`・`docs.py new` で作った時点でユーザーに伝える。返事は待たずに進める（deck-build-003）。代表の 3 枚の承認を待たないことは変えない（deck-practices-007）（ユーザー「作成を始めた初期段階で作業してる url を示すようにすることで、作業中にユーザーが確認することができます。」）。
+- 2026-10-14: テーマに `base` も `[slides] base_template` もないとき、`template.py --from-base` は公開の白紙（`template.py` の `BLANK_BASE`。13.33 × 7.5 in、Blank、スライド番号オン、ページ番号の枠のパディング 0。Databricks の名前もアセットも入らない）から作る。今まではベースがないと止まった。deck-template の C（テンプレートがない）も、新しいプレゼンを作る代わりにこの白紙を使い、自分で作るときの注意（ページの大きさ・スライド番号・パディング）を残した。`base_template` を書いたワークスペースの visual・company は今のまま（ユーザー「DO_NOT_DELETE_AI_DECK_FACTORY_BLANK はパブリック公開してるものなので、ai-deck-factory に組み込んで、特に指定がない場合のベースとして使って問題ありません。」）。
 
 ## 入れていないもの
 
