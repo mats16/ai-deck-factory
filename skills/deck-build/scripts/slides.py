@@ -5,7 +5,8 @@ usage（資料の build/ で。pages.py は今いるフォルダのもの）:
   slides.py new <Drive のフォルダの URL か ID> <Drive 上の名前> [--theme <テーマ>]   テンプレートを複製して組む（テーマは factory.toml の [slides.themes.<名前>]。その url のテンプレートを複製する）
   slides.py build <URL か ID> [--force]   組み直す（ページをすべて作り直す。URL は変わらない）。前に組んだあとに画面で直されているか、
                                           未解決のコメントがあれば止まる。直しを pages.py に入れてから --force で組み直す
-  slides.py dry [<ファイル>]   組まずに make を走らせ、組むときの警告・枚数・ノートのないページを出す（既定は pages.py。子が書いた build/pages_<担当>.py を確かめる。../slides.md の 2）
+  slides.py dry [<ファイル>] [<URL か ID>]   組まずに make を走らせ、組むときの警告・枚数・ノートのないページを出す（既定は pages.py。子が書いた build/pages_<担当>.py を確かめる。
+                                          URL を渡すと、表紙・扉のパターンとテーマをそのデッキから読む（読むだけ）。../slides.md の 2）
   slides.py themes   テーマの名前・説明・テンプレートがあるか・既定か。資料ごとに選ぶ（../../deck-practices/SKILL.md の「作業の始め方」の 5）
   slides.py merge <ファイル>...   子が別のファイルに書いたページの関数を pages.py に合わせる（組まない。../../deck-review/SKILL.md の手順 5）
   slides.py --selftest
@@ -1005,11 +1006,14 @@ def missing_notes(deck):
     return [i for i, s in enumerate(deck.slides, 1) if not deck.notes.get(s)]
 
 
-def dry(path="pages.py"):
-    """[slides_py-015] 組まずに path の make(d) を走らせ、組むときの警告・枚数・ノートのないページを出す（Google の API は呼ばない。アイコンの名前だけは確かめる）。
-    子が担当のページを別のファイルに書いたとき、親が組む前に子が自分で確かめる（../slides.md の 2）。番号は担当の中の何枚目。finish は呼ばない（ページへのリンクは、親が組むときに確かめる）。"""
+def dry(path="pages.py", url=None):
+    """[slides_py-015] 組まずに path の make(d) を走らせ、組むときの警告・枚数・ノートのないページを出す（Google には書かない。アイコンの名前だけは確かめる）。
+    子が担当のページを別のファイルに書いたとき、親が組む前に子が自分で確かめる（../slides.md の 2）。番号は担当の中の何枚目。finish は呼ばない（ページへのリンクは、親が組むときに確かめる）。
+    url（組んだデッキ）を渡すと、build と同じく表紙・扉のパターンとテーマをデッキから読む（読むだけ）。渡さなければパターンは 1 だけで、variant=2 などは止まる。"""
     if Path(path).parent != Path("."):  # 今いるフォルダから読むので、別のフォルダのファイルを黙って取り違えない
         sys.exit(f"dry はファイルのあるフォルダ（build/）で、名前だけを渡して回す: {path}")
+    if url:
+        use_theme(theme_table(theme_of(file_id(url))))
     d = Deck("dry")
     load_pages(Path(path).stem).make(d)
     print(json.dumps({"file": path, "slides": len(d.slides), "pages_without_notes": missing_notes(d), "warnings": len(d.warnings)}, ensure_ascii=False))
@@ -1372,6 +1376,22 @@ def selftest():
             m = load_pages()
             assert len(make_deck(m.make, m.NAME).slides) == 3
             assert missing_notes(dry("pages_a.py")) == [2]  # 番号は担当の中の何枚目
+            Path(t, "pages_s.py").write_text('def make(d):\n    d.divider("02", "扉", variant=2)\n')  # テンプレートの扉のパターン 2
+            try:
+                dry("pages_s.py")
+                raise AssertionError("デッキを読まずに扉のパターン 2 を通した")
+            except ValueError:
+                pass
+            seen, real = [], globals()["theme_of"]
+            def fake_theme_of(pid):  # デッキを読む代わりに、扉のパターン 2 を持つレイアウトを渡す
+                seen.append(pid)
+                use_layouts({"layouts": [{"pageElements": [{"description": "ai-deck-factory layout=section:2 tone=accent"}]}]})
+            globals()["theme_of"] = fake_theme_of
+            try:
+                assert len(dry("pages_s.py", "https://docs.google.com/presentation/d/abc/edit").slides) == 1 and seen == ["abc"]  # URL を渡すとデッキのパターンで通る
+            finally:
+                globals()["theme_of"] = real
+                VARIANTS.clear()
             try:
                 dry("build/pages_a.py")
                 raise AssertionError("別のフォルダのファイルを今いるフォルダから読んだ")
@@ -1379,7 +1399,7 @@ def selftest():
                 assert "名前だけ" in str(e)
         finally:
             os.chdir(here)
-            for k in ("pages", "pages_a"):
+            for k in ("pages", "pages_a", "pages_s"):
                 sys.modules.pop(k, None)
             sys.path[:] = [x for x in sys.path if Path(x).resolve() != Path(t).resolve()]
     print("selftest ok")
@@ -1393,8 +1413,8 @@ def main():
         return cmd_themes()
     if a[:1] == ["merge"] and len(a) >= 2:
         return print(json.dumps(merge("pages.py", a[1:]), ensure_ascii=False))
-    if a[:1] == ["dry"] and len(a) <= 2:
-        return dry(*a[1:])
+    if a[:1] == ["dry"] and len(a) <= 3:
+        return dry(next((x for x in a[1:] if x.endswith(".py")), "pages.py"), next((x for x in a[1:] if not x.endswith(".py")), None))
     if not (a[:1] == ["build"] and len(a) >= 2 or a[:1] == ["new"] and len(a) >= 3):
         sys.exit(__doc__)
     theme = a[a.index("--theme") + 1] if "--theme" in a else None
