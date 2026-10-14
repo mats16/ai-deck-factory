@@ -6,7 +6,7 @@
 書いたルールのうち、機械で見られるものを数える。標準ライブラリだけで動く。
 要修正（HARD）が 1 つでもあれば exit 1。要確認（WARN）は 1 件ずつ見て、直すか、残す理由を言えるようにする。
 ルールの出典は ../../deck-practices/ と、ワークスペースの Research/deck_research/log/。pptx を読んでいた版は Archive/pptx_pipeline_20261007/、docx を読んでいた部分は Archive/docx_pipeline_20261010/。"""
-import hashlib, itertools, json, math, os, re, sys, time
+import hashlib, itertools, json, math, os, re, subprocess, sys, time
 from collections import Counter, defaultdict
 
 sys.dont_write_bytecode = True
@@ -79,6 +79,8 @@ EMPTY_BOX = "箱の中の下が空いている"
 EMPTY_HOLE = "本文の中ほどが空いている"  # [lint-005] 要素と要素の間・結論バンドの上・本文の上の大きな空き。中身より大きい箱やページの中の穴を、レビューより先に出す
 PAD_NG = "塗りの箱の端と文字の間が 1 字分より狭い"  # visual.md の 4
 NUM_NO_UNIT = "大きな数字に単位がない"  # [lint-006] visual.md の 2。数字だけの段落は何の数か分からない
+PHRASE_BREAK = "自動の折り返しが文節の途中に入る見込み"  # [lint-024] visual.md の visual-013。Google Slides は和文を 1 字ずつ折り返す。レビューで直した改行でいちばん多かった
+NO_HEAD = "、。，．）」』】〕・ー!?！？：；"  # 行頭に来ない字（禁則で前の行に戻るので、見込みの位置で折れない）
 OPEN_HEAD = "手の改行のあとの行頭に全角の開き括弧"  # [lint-007] visual.md の 2 の「改行」。行頭の「（」「「」は半字下がって見え、左端がそろわない
 COL_SHIFT = "隣り合う列の箱の上端か下端がずれている"  # [lint-008] visual.md の 4。片方の列にだけ小見出しを置くと、箱の上下がそろわない
 BIG_NUM_PT, COL_TOL, COL_MAX, NEST = 28, 0.03 * EMU, 1.0 * EMU, 0.25 * EMU  # 大きな数字の大きさ。列のずれは 0.03〜1.0 in を出す（それより大きいのは中身の量の違いとみなす）
@@ -241,6 +243,58 @@ def est_lines(para, avail):
                 segs.append(0.0)
             segs[-1] += em_width(part) * (size_of(st) or 0)
     return sum(max(1, math.ceil(x / avail - 1e-9)) for x in segs)
+
+
+def wrap_breaks(para, avail):
+    """段落を幅 avail（pt）で自動で折り返したときに、行の頭になる字の位置（段落の文字列の位置）の見込み。数え方は slides.py の wrap_lines と同じ
+    （和文は 1 字ずつ、英数字の語はまとめて次の行へ、1 行より長い語は字で折る）。run ごとの大きさを見る。文字の大きさの分からない run があれば []"""
+    if any(size_of(st) is None for c, st in para[1] if c.strip()):
+        return []
+    ws = [em_width(ch, st.get("fontFamily") == MONO) * (size_of(st) or 0) for c, st in para[1] for ch in c]
+    t, out, cur = "".join(c for c, _ in para[1]), [], 0.0
+    for m in re.finditer(r"[!-~]+| +|\v|.", t):
+        if m.group() == "\v":
+            cur = 0.0
+            continue
+        a, b = m.span()
+        for k, e in ([(k, k + 1) for k in range(a, b)] if sum(ws[a:b]) > avail + 1e-9 else [(a, b)]):
+            w = sum(ws[k:e])
+            if cur + w > avail + 1e-9 and cur > 0:
+                if t[k].isspace():  # 行末の空白は次の行に送らない
+                    cur = 0.0
+                else:
+                    out.append(k)
+                    cur = w
+            else:
+                cur += w
+    return out
+
+
+def segment(texts):
+    """文字列ごとの文節の切れ目の位置の集合。BudouX を uv で別に呼ぶ（lint.py は標準ライブラリだけのまま。box_pad.py の Pillow と同じ）。
+    uv か BudouX が使えないとき・時間切れ・形の合わない結果のときは None（この点検を数えない）"""
+    code = "import sys, json, budoux; p = budoux.load_default_japanese_parser(); print(json.dumps([p.parse(t) for t in json.load(sys.stdin)]))"
+    try:
+        res = subprocess.run(["uv", "run", "-q", "--no-project", "--with", "budoux==0.9.3", "python", "-c", code], input=json.dumps(texts),
+                             capture_output=True, text=True, timeout=60)  # 版を固定して文節の分け方をそろえる。初めてだけ BudouX を取りにネットワークが要る
+        segs = json.loads(res.stdout) if res.returncode == 0 else None
+        if isinstance(segs, list) and len(segs) == len(texts) and all("".join(x) == t for x, t in zip(segs, texts)):
+            return {t: set(itertools.accumulate(map(len, x))) for t, x in zip(texts, segs)}
+    except (OSError, ValueError, TypeError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+
+def mid_phrase(cands):
+    """cands は (場所, 段落の文字列, 折り返しの位置) の並び。文節の切れ目にない折り返しを返す。候補がなければ uv を呼ばない。
+    行頭に来ない字の前と、空白の後（英数字の語の切れ目）は数えない。文節が分からなければ None"""
+    if not cands:
+        return []
+    cuts = segment(sorted({t for _, t, _ in cands}))
+    if cuts is None:
+        return None
+    return [f"{where}: 「{t[max(0, k - 8):k]}／{t[k:k + 6]}」".replace("\v", "⏎") + "。文節の切れ目で手で改行するか、言い換えるか、枠の幅を変える（見込みなので画像で確かめる）"
+            for where, t, bs in cands for k in bs if k not in cuts[t] and t[k] not in NO_HEAD and t[k - 1] not in " 　"]
 
 
 def body_lines(e, b, title=None):
@@ -451,7 +505,7 @@ class Report:
 
 def lint_slides(p, r, reuse=False, talk=False):
     """p は presentations.get の JSON。reuse は社内資料の差し替え用（元の大きさのままなので 11pt の下限と表紙を見ない）。"""
-    titles, sizes, pairs, chars, dark, foot_secret, bands, claims = [], Counter(), defaultdict(list), [], [], [], [], []
+    titles, sizes, pairs, chars, dark, foot_secret, bands, claims, wraps = [], Counter(), defaultdict(list), [], [], [], [], [], []
     global MONO
     font, MONO = deck_font(p), deck_mono(p)  # 会社のテンプレートは会社の書体（deck-template）。等幅はデッキのテーマの mono
     card = deck_card(p)  # カードの地。デッキのテーマの CARD（書かなければ白）
@@ -513,6 +567,10 @@ def lint_slides(p, r, reuse=False, talk=False):
                     mono = all(st.get("fontFamily") == MONO for c, st in para[1] if c.strip())  # コードの行は大文字のラベル・数字の出典の検査から外す
                     r.scan(f"p{i}", t, {k: v for k, v in {**HARD, **WARN, **SLIDE_ONLY}.items() if not (footer and k == "社外秘の表示") and not (mono and k == "英語の大文字ラベル")})
                     raw = "".join(c for c, st in para[1] if st.get("fontFamily") != MONO)
+                    if "shape" in e and not footer and not mono and re.search(f"[{JA}]", t):  # 表のセルは列の幅を見積もりに通していないので見ない
+                        avail = b[2] / EMU * 72 - 2 * INS - para[0].get("indentStart", {}).get("magnitude", 0)
+                        if avail > 0 and (bs := wrap_breaks(para, avail)):
+                            wraps.append((f"p{i}", "".join(c for c, _ in para[1]), bs))
                     if m := re.search(r"\v\s*[（「『]", raw):
                         r.hits[OPEN_HEAD].append(f"p{i}: 「{raw[max(0, m.start() - 12):m.end() + 12].replace(chr(11), '⏎')}」。括弧の前で改行せず、括弧の後か句読点で改行する")
                     if (f or under) == scheme.get("DARK1") and CODE_LINE.match(t) and any(st.get("fontFamily") != MONO and re.search("[A-Za-z]", c) for c, st in para[1]):
@@ -627,6 +685,9 @@ def lint_slides(p, r, reuse=False, talk=False):
         r.hits[MANY_BANDS].append(f"本文 {body_pages} 枚中 {len(bands)} 枚（{', '.join(f'p{k}' for k in bands)}）。見出しかリードで言い切れているページからは外す（visual.md の 1）")
     if len(claims) > CLAIM_MAX:
         r.hits[HEAD_CLAIMS].append(f"{len(claims)} 枚（{', '.join(f'p{k}' for k in claims)}）。名詞句にし、言い切りは判断を頼むページと数字の結論のページの 2〜3 枚に絞る（content.md の 4）")
+    if (mp := mid_phrase(wraps)) is None:
+        print(f"（uv か BudouX が使えないので、「{PHRASE_BREAK}」は数えていない）")
+    r.hits[PHRASE_BREAK] += mp or []
     if foot_secret:
         r.hits["社外秘の表示"].append(f"フッター: {len(foot_secret)} ページ（p{foot_secret[0]}〜p{foot_secret[-1]}）。社内向けなら意図どおり、顧客向けなら外す")
     print("== 見出し（各ページでいちばん大きい文字）とリード（字下げ）。順に読んで話が通るか ==")
@@ -634,7 +695,7 @@ def lint_slides(p, r, reuse=False, talk=False):
     print(f"\n== 本文の字数（見出し・リード・出典・フッターを除く。話す資料は {TALK_MAX} 字まで） ==")
     print(" / ".join(chars))
     hard = r.show(list(HARD) + [f"{MIN_PT}pt 未満の文字", COPYRIGHT_NG, FONT_NG, MONO_NG, HEAD_PERIOD, HEAD_POLITE], "要修正")
-    r.show(list(WARN) + list(SLIDE_ONLY) + list(NOTES_ONLY) + ["数字に出典の行がない", NO_LINK, BODY_LINES, TWO_LINES, HEAD_CLAIMS, BULLET_PERIOD, TALK, NO_NOTES, ARROW_MID, LINE_GRID, EMPTY_BELOW, EMPTY_BOX, EMPTY_HOLE, PAD_NG, NUM_NO_UNIT, OPEN_HEAD, COL_SHIFT, DASH_ROUND, STAGE_NG, CODE_NOT_MONO, BLOCK_ON_NAVY, MANY_BANDS, NO_COVER, NO_DIVIDER, SHORT_CH], "要確認")
+    r.show(list(WARN) + list(SLIDE_ONLY) + list(NOTES_ONLY) + ["数字に出典の行がない", NO_LINK, BODY_LINES, TWO_LINES, HEAD_CLAIMS, BULLET_PERIOD, TALK, NO_NOTES, ARROW_MID, LINE_GRID, EMPTY_BELOW, EMPTY_BOX, EMPTY_HOLE, PAD_NG, NUM_NO_UNIT, OPEN_HEAD, PHRASE_BREAK, COL_SHIFT, DASH_ROUND, STAGE_NG, CODE_NOT_MONO, BLOCK_ON_NAVY, MANY_BANDS, NO_COVER, NO_DIVIDER, SHORT_CH], "要確認")
     hard += workspace_checks("slides", p, r)
     print("\n== 文字サイズ（pt: run の数） ==")
     print(", ".join(f"{k:g}: {v}" for k, v in sorted(sizes.items())))
@@ -921,6 +982,7 @@ def stats(path=None):
 def selftest():
     globals()["theme_pages"] = lambda: []  # 回す場所の factory.toml のテーマ（用紙）に左右されない
     ws_checks, globals()["workspace_checks"] = workspace_checks, lambda *a: 0  # 回す場所のワークスペースの checks.py にも左右されない（最後に戻して試す）
+    real_segment, globals()["segment"] = segment, lambda ts: {t: set(range(len(t) + 1)) for t in ts}  # uv と BudouX を呼ばない（どこでも文節の切れ目とみなす）
     import contextlib, io
     assert abs(contrast("FFFFFF", "000000") - 21) < 0.01
     assert abs(contrast("7D8E95", "F5F7F8") - 3.16) < 0.02
@@ -1051,6 +1113,41 @@ def selftest():
     # 手の改行のあとの行頭の全角の開き括弧（visual.md の 2）。括弧の後で改行したものは出さない
     assert len(run(deck([(NAVY, [title()]), (oat, [title(), shape(1, text=["表と同じ権限\v（Unity Catalog）"])])]))[0].hits[OPEN_HEAD]) == 1
     assert not run(deck([(NAVY, [title()]), (oat, [title(), shape(1, text=["表と同じ権限（Unity\vCatalog）"])])]))[0].hits[OPEN_HEAD]
+    # 自動の折り返しが文節の途中に入る見込み（visual-013）。数え方は slides.py の wrap_lines と同じ。文節は BudouX の結果を差し替えて試す
+    pa = lambda *runs: ({}, [(c, {"fontSize": {"magnitude": sz}} if sz else {}) for c, sz in runs])
+    t = "データを見る人と評価者がいる"
+    assert wrap_breaks(pa((t, 12)), 120) == [10] and wrap_breaks(pa((t, 12)), 200) == []  # 12pt で 10 字の幅。11 字目の「者」が次の行の頭
+    assert wrap_breaks(pa(("あいうえおかきくけ\vこさしすせそたちつてとな", 12)), 120) == [20]  # 手の改行で数え直す
+    assert wrap_breaks(pa(("大きい", 24), ("あいうえおか", 12)), 120) == [7]  # run ごとの大きさ。24pt の 3 字で 6 字分
+    assert wrap_breaks(pa(("あいう Databricks", 12)), 90) == [4] and wrap_breaks(pa(("あ abcdefghijklmnopqrstu", 12)), 60) == [9, 18]  # 英数字の語はまとめて送り、1 行より長い語は字で折る
+    from slides import wrap_lines
+    assert all(len(wrap_breaks(pa((x, 12)), 60)) + 1 == wrap_lines(x, 60 / 72, 12)[0] for x in (t, "あいう Databricks の", "あ abcdefghijklmnopqrstu"))  # 組む側と同じ行の数（行末の空白で折れる文は、空白の後を数えないので除く）
+    assert wrap_breaks(pa((t, None)), 120) == []  # 大きさの分からない run（プレースホルダーの継承）は見ない
+    cuts = {t: {4, 6, 8, 12, 14}, "あいう Databricks": {4, 15}}  # 「データを／見る／人と／評価者が／いる」
+    globals()["segment"] = lambda ts: {x: cuts.get(x, set()) for x in ts}
+    assert len(mid_phrase([("p1", t, [10])])) == 1 and "評価／者がいる" in mid_phrase([("p1", t, [10])])[0]
+    assert mid_phrase([("p1", t, [8])]) == [] and mid_phrase([("p1", "あいう Databricks", [4])]) == []  # 文節の頭と、空白の後
+    assert mid_phrase([("p1", "見込みの位置、で", [6])]) == []  # 行頭に来ない字の前は、禁則で前の行に戻る
+    wrapped = lambda **kw: shape(1, text=[t], **kw)  # 幅は 12pt で 10 字
+    res, _, hard = run(deck([(NAVY, [title()]), (oat, [title(), wrapped()])]))
+    assert len(res.hits[PHRASE_BREAK]) == 1 and hard == 0
+    assert not run(deck([(NAVY, [title()]), (oat, [title(), wrapped(y=7.08)])]))[0].hits[PHRASE_BREAK]  # フッター
+    assert not run(deck([(NAVY, [title()]), (oat, [title(), wrapped(font=MONO_DEFAULT)])]))[0].hits[PHRASE_BREAK]  # 等幅だけの段落
+    cell = {"objectId": "t", **box(0, 2, (120 + 2 * INS) / 72, 2), "table": {"tableRows": [{"tableCells": [{"text": wrapped()["shape"]["text"]}]}]}}
+    assert not run(deck([(NAVY, [title()]), (oat, [title(), cell])]))[0].hits[PHRASE_BREAK]  # 表のセル
+    globals()["segment"] = lambda ts: None
+    res2, out, hard2 = run(deck([(NAVY, [title()]), (oat, [title(), wrapped()])]))
+    assert not res2.hits[PHRASE_BREAK] and "は数えていない" in out and hard2 == hard
+    assert {k: v for k, v in res2.hits.items() if v} == {k: v for k, v in res.hits.items() if v and k != PHRASE_BREAK}  # ほかの指摘は変わらない
+    import types
+    sp_run = subprocess.run
+    try:
+        for got in ([0, json.dumps([["データを", "見る"]])], [1, json.dumps([["データを見る"]])], [0, json.dumps([["データ"]])], [0, "["], [0, json.dumps([[1]])], OSError()):
+            subprocess.run = lambda *a, **k: (_ for _ in ()).throw(got) if isinstance(got, Exception) else types.SimpleNamespace(returncode=got[0], stdout=got[1])
+            assert real_segment(["データを見る"]) == ({"データを見る": {4, 6}} if got == [0, json.dumps([["データを", "見る"]])] else None)  # 起動の失敗・形の合わない結果は数えない
+    finally:
+        subprocess.run = sp_run
+    globals()["segment"] = lambda ts: {t: set(range(len(t) + 1)) for t in ts}
     _, out, _ = run(deck([(NAVY, [title()]), (OAT, [title(), shape(1, color={"themeColor": "ACCENT5"})])]))
     assert "618794 / F9F7F4  3.64" in out
     _, out, _ = run(deck([(OAT, [shape(1, y=2, w=4, fill={"themeColor": "DARK1"}, text=[""]), shape(1, y=2.5, color={"themeColor": "ACCENT5"})])]))
