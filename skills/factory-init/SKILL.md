@@ -22,6 +22,7 @@ description: AI Deck Factory のワークスペース（資料と決まりを置
    - `[user] profile`: 名前・役割・担当の顧客を書いたファイル。
    - `[google]`: トークンの取り方。gcloud を使えるなら、doctor が出す `gcloud auth application-default login --scopes=…` を 1 回だけ回してもらう（ユーザーが自分で回す。ブラウザが開く）。ほかの仕組みでトークンを取るなら、環境変数 `GOOGLE_OAUTH_ACCESS_TOKEN` で渡す。gcloud の既定の OAuth クライアントなら `quota_project` も要る。
    - `[brand]`: `copyright`（全ページの左下の著作権表示。「© <年> <社名> All rights reserved.」の形）は要る。書かないと、スライドもドキュメントもテンプレートも組めない。`company`（表紙の左下の社名）と `logo`（ドキュメントの表紙のロゴ。`assets/` の中のパスか URL）は任意。
+   - `[drive] shared_themes`: 全社の共有テーマのフォルダ（管理者が配っているテンプレートの置き場所）の URL。会社で配っていなければ空のまま。書いたら `[drive] factory` と Google の認証のあとで `python3 <deck-build のフォルダ>/scripts/slides.py themes` を回し、「共有。」と出たテーマから使うものを選んでもらい、`[slides.themes.<名前>]` に `url` を書く（名前は出たとおり。ほかの値はテンプレートが持つ。雛形の `[slides.themes.visual]` のように同じ名前の表があれば、表を足さずに `url` を書き替える）。既定にするものは `[slides] default_theme` に書く。共有のテーマで足りれば、次の `--from-base` は要らない。
    - `[slides.themes.visual]`: テーマの `base`（元にする Google Slides）を書き、`[drive] factory` を埋めたら、`python3 <deck-build のフォルダ>/scripts/template.py visual --from-base`（会社の色なら `company` も）でテンプレートを作る（`[drive] factory` の下の Themes に作る）。URL は `[slides.themes.<テーマ>]` の `url` に書き込まれる。テーマを 2 つ以上使うなら、それぞれに `description`（どの資料・聞き手に使うか）を書いてもらう。会社のテンプレートを使うなら、スキル `deck-template` で作る（`[brand]` と `[slides.themes]`）。
    - `[drive]`: 顧客向け・社内向けのスライドとドキュメントの置き場所の根元。
    - `[review]`: 聞かない。雛形の既定（構成のレビューは AI、`/deck-review` は 3 周まで）のままにする。ユーザーが言ったときだけ変える。

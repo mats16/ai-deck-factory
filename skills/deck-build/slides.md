@@ -116,10 +116,11 @@ description = "アクメの会社の色のテーマ。顧客に出す提案・�
 # 会社のテンプレートから作るときだけ: base（元のテンプレート）、font、役割ごとの色（../deck-template/SKILL.md）
 # どのテーマにも書ける: mono（コードの等幅）、テーマに入れない色（TEXT・RULE・RED_SOFT・STAGE_TEXT・DECOR）と名前で書く役割（HEAD・CARD・SUB_ON_NAVY・ON_RED）、copyright（[brand] の代わり）
 ```
+- [slides-032] **全社の共有テーマ。** テーマは、共有のものでも `[slides.themes.<名前>]` の `url` で指すだけ（共有か自分のものかを分けない）。`template.py` は作ったテンプレートの Drive の説明に `description` を、Drive のプロパティ（公開。どの OAuth クライアントでも読める）にテーマの名前（`adf.theme`）と組むときに引く値（`mono`・テーマに入れない色・`copyright`。名前と値で 124 バイトを超えるもの〔社名の長い `copyright` など〕は書かずに知らせる）を書き、`slides.py` はそれに `factory.toml` の表を重ねて組む（`factory.toml` が勝つ。`factory.toml` から消した値は、`template.py <テーマ>` で合わせ直すまでテンプレートの値が効く）。役割の色と書体はテンプレートのマスターにある。`url` のテンプレートを読めない（権限・URL・認証）ときは、既定の値で黙って組まずに止まる。`[drive] shared_themes`（全社の共有テーマのフォルダ）は探すときだけ読み、`slides.py themes` が `factory.toml` の `url` が指していないテンプレートを「共有。」として URL と一緒に出す。使うときは、出た名前の表に `url` を書く（テンプレートが持つ名前と違う名前で書くと、`new` が止まる。同じ名前の表があれば、表を足さずに `url` を替える）。管理者は、自分の `[drive] factory` の下の Themes を共有テーマのフォルダにしてよい。使う人には見る権限だけを渡す。
 - **テンプレートのあるテーマが 2 つ以上あるのに `--theme` なしで `new` すると、一覧を出して止まる**（選び忘れを防ぐため。kaizen の検証の仮の資料は止めない）。
 - **`description` は選ぶ手がかりのすべて。** エージェントは `slides.py themes`（名前・既定か・テンプレートがあるか・`description` の一覧）だけを見て選ぶ。何のテーマか、どの資料・聞き手に使うか、使わない場面（ほかのどれにするか）を 1〜3 文で書く。資料の種類や聞き手の言葉（「顧客向けの提案」「社内の勉強会」）を入れると選びやすい。
 - 組み込みのテーマ（visual・company）は、コードに既定の説明がある。`[slides.themes.visual]` には `url`・`description`・`base`（元にするテンプレート）と、`mono`・テーマに入れない色・`copyright` だけを書ける（`description` を書けば既定の説明より優先する）。
-- **デッキは自分のテーマの名前を持つ。** `template.py` が、テンプレートのマスターのページ番号の枠の代替テキストに `ai-deck-factory theme=<名前>` を書き、複製したデッキにも残る。`slides.py build`（`new` はテンプレート）はそれを読み、`mono`・テーマに入れない色・`copyright` を `factory.toml` から引いて組む。名前のないデッキ（合わせ直す前のテンプレートから作ったもの）と、`factory.toml` にそのテーマがないデッキは、既定の値で組む。
+- **デッキは自分のテーマの名前を持つ。** `template.py` が、テンプレートのマスターのページ番号の枠の代替テキストに `ai-deck-factory theme=<名前>` を書き、複製したデッキにも残る。`slides.py build`（`new` はテンプレート）はそれを読み、`mono`・テーマに入れない色・`copyright` を `factory.toml`（とその `url` のテンプレートが持つ値。slides-032）から引いて組む。名前のないデッキ（合わせ直す前のテンプレートから作ったもの）と、`factory.toml` にそのテーマがないデッキは、既定の値で組む。
 
 | テーマ | 色 |
 |---|---|
@@ -129,7 +130,7 @@ description = "アクメの会社の色のテーマ。顧客に出す提案・�
 - **テンプレートが決めるのは、テーマの色、ページの大きさ（13.33 × 7.5 in）、ページ番号の位置と、会社のテンプレートから残した表紙・扉の図形（`../deck-template/SKILL.md` の template-001）だけ。** 字の大きさと配置は pages.py が文字ごとに書き、ページ番号の大きさと行間は slides.py が組むたびに書く（文字ごとに書いた値がテンプレートより優先される）。
 - **作ったデッキは、複製した時点のテンプレートの写し。** テンプレートを直しても、作ったデッキは変わらない。デッキのテーマを替えるときは `new` で作り直す（URL が変わる）。
 - 色を変えるときは、`slides.py` の `THEMES`（会社のテーマは factory.toml の `[slides.themes]`）を直して `template.py <テーマ>` を回す（配色・書体・見本を合わせ直す。ID は変わらない）。コントラストは `gslides.py check <テンプレートの URL>` で見る。
-- 会社のテンプレートが新しくなったら、`factory.toml` の `[slides.themes.<テーマ>]` の `base` を新しい URL にして `template.py <テーマ> --from-base` で作り直す。作ったテンプレートの URL は `template.py` が `factory.toml` の `[slides.themes.<テーマ>]` の `url` に書き込む（手で写さない）。前のテンプレートは消すか、名前に「旧」を付ける。
+- 会社のテンプレートが新しくなったら、`factory.toml` の `[slides.themes.<テーマ>]` の `base` を新しい URL にして `template.py <テーマ> --from-base` で作り直す。作ったテンプレートの URL は `template.py` が `factory.toml` の `[slides.themes.<テーマ>]` の `url` に書き込む（手で写さない）。前のテンプレートは消すか、名前に「旧」を付ける。共有テーマのフォルダにあるなら、フォルダから外す（名前を変えても Drive のプロパティは残り、同じ名前のテーマが 2 つ出る。factory-doctor の「共有テーマ」に出る）。
 - [slides-007] **`factory.toml`**（ワークスペースの直下。factory-init が置き、factory-doctor が確かめる）: 人ごとに変わる値だけを置く（テンプレートの URL と置き場所、既定のテーマ、quota project、Drive の置き場所の根元）。見た目の決まり（色・余白・版面）は置かない。スクリプトは今いるフォルダ、次にスクリプトのフォルダから上へたどって探し、なければ止まる。ほかの人がスクリプトを使うときは、`factory.toml` を写して自分の値にし、`template.py visual --from-base`・`template.py company --from-base` で自分のテンプレートを作る（書き方は `factory.toml` の冒頭のコメント）。
 - テンプレートは誰とも共有していない。共有するときも、自動では共有せず、`anyone` にしない。
 

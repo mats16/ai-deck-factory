@@ -5,7 +5,10 @@ usage:
   template.py audit <Google Slides の URL>  元にするテンプレートを読み、ページの大きさ・マスターの配色とコントラスト・レイアウト・書体と大きさ・和文の有無を出す（変えない）
   template.py check <テーマ>                テーマの色を役割の組（PAIRS）で測り、届かない色には色相と彩度を保って明るさだけを変えた案を出す（届かない組があれば exit 1）
   template.py <テーマ>                      配色・書体・ページ番号・見本のページをテーマに合わせ直す（ID は変わらない）
-  template.py <テーマ> --from-base          元のテンプレート（テーマの base、なければ factory.toml の base_template）を [drive] factory の下の Themes に複製して作り直し、URL を [slides.themes.<テーマ>] の url に書き込む
+  template.py <テーマ> --from-base          元のテンプレート（テーマの base、なければ factory.toml の base_template）を [drive] factory の下の Themes に複製して作り直し、
+                                            URL を [slides.themes.<テーマ>] の url に書き込む
+作ったテンプレートには、Drive の説明に description を、プロパティにテーマの名前と組むときに引く値を書く（slides.py の PROP）。ほかの人は url を書くだけで、同じ値で組める。
+全社の共有テーマのフォルダ（[drive] shared_themes）に置くと、slides.py themes がほかの人に候補として出す。
   template.py --selftest                    見本のページを、API を呼ばずに組めるかを確かめる
 すでに作ったデッキは変わらない（複製した時点の写し）。"""
 import colorsys, os, re, sys, time, tomllib, urllib.parse
@@ -17,7 +20,7 @@ from gapi import DRIVE, SLIDES, batch, factory, factory_path, file_id, find_fact
 from lint import JA, cells, contrast, flatten, lum, paras, solid
 from slides import (BG, BLANK, CARD, COPYRIGHT_PT, DECOR, EMU, FONT, GA, HEAD, INSET, NAVY, NAVY_BLOCK, ON_RED, OSS, PAD, PANEL, PREVIEW, RED, RED_ON_NAVY,
                     RED_SOFT, RED_TEXT, RULE, SLOTS, STAGE_TEXT, SUB, SUB_ON_NAVY, TEXT, THEMES, WHITE, W, X, Y_BODY, Y_FOOT, build, cols, make_deck, number_style, rgb)
-from slides import FIXED as FIXED_DEFAULT, JP_FONTS, LAYOUT_MARK, NAMED, THEME_MARK, VARIANTS, is_blank, need_brand, placeholders, theme_fixed, theme_font, use_layouts, use_theme
+from slides import FIXED as FIXED_DEFAULT, JP_FONTS, LAYOUT_MARK, NAMED, PROP, PUBLISHED, THEME_MARK, THEME_PROP, VARIANTS, is_blank, need_brand, placeholders, theme_fixed, theme_font, use_layouts, use_theme
 
 THEMES_DIR = "Themes"  # テンプレートを作る Drive のフォルダ。[drive] factory の下（なければ作る）。使うテンプレートは [slides.themes.<名前>] の url で 1 つずつ指す
 FOLDER = "application/vnd.google-apps.folder"
@@ -449,6 +452,24 @@ def themes_folder():
     return request("POST", f"{DRIVE}/files?supportsAllDrives=true&fields=id", {"name": THEMES_DIR, "mimeType": FOLDER, "parents": [parent]})["id"]
 
 
+def props(theme):
+    """テンプレートの Drive のプロパティ（公開）。テーマの名前と、factory.toml のテーマの表のうち PUBLISHED の値。Drive の上限（名前と値で 124 バイト）を超える値は
+    書かずに知らせる（社名の長い copyright など。url だけを書いた人は、その値を自分の factory.toml の値か既定の値で組む）。"""
+    t = themes().get(theme, {})
+    p = {THEME_PROP: theme, **{PROP + k: str(t[k]) for k in PUBLISHED if k in t}}
+    if long := [k for k, v in p.items() if len((k + v).encode()) > 124]:
+        print(f"[slides.themes.{theme}] の {', '.join(k[len(PROP):] for k in long)} は長すぎて、テンプレートの Drive のプロパティに書けない（名前と値で 124 バイトまで）。"
+              "url だけを書いた人は、自分の factory.toml の値か既定の値で組む", file=sys.stderr)
+    return {k: v for k, v in p.items() if k not in long}
+
+
+def publish(pid, theme):
+    """テンプレートの Drive のプロパティ（props）と説明（[slides.themes.<theme>] の description）を書く。前に書いたプロパティで、今の表にないものは消す。"""
+    old = request("GET", f"{DRIVE}/files/{pid}?supportsAllDrives=true&fields=properties").get("properties") or {}
+    request("PATCH", f"{DRIVE}/files/{pid}?supportsAllDrives=true&fields=id", {"description": themes().get(theme, {}).get("description", ""),
+                                                                              "properties": {**{k: None for k in old if k.startswith(PROP)}, **props(theme)}})
+
+
 def template(theme, from_base=False):
     """テンプレートを作る（from_base）か、合わせ直す。Drive に複製する・テンプレートを書き換える前に、要るものを全部確かめる
     （テーマの色、[brand] copyright、作るときは factory.toml に url を書けるか）。作るときは、組んだあとに url を factory.toml に書く。
@@ -479,6 +500,7 @@ def template(theme, from_base=False):
         batch(pid, styles(theme, master, blank, extras))
         use_layouts(request("GET", f"{SLIDES}/{pid}?fields=layouts(objectId,pageElements(description))"))  # 見本の表紙・扉を、置き物に重ならない幅で組む
         build(pid, specimen(theme), force=True)  # 直前に配色を変えているので、版の確かめはしない
+        publish(pid, theme)
         if from_base:
             record(theme, pid)  # 書けずに止まったときも、下で複製を片付ける
     except BaseException:
@@ -590,6 +612,12 @@ def main():
         num = {**sn, "objectId": "n", "size": {"width": {"magnitude": EMU}, "height": {"magnitude": EMU}}}
         st = [r["updateTextStyle"]["style"] for r in styles("visual", {"objectId": "b"}, {"pageElements": [num]}) if "fontSize" in r.get("updateTextStyle", {}).get("style", {})]
         assert [s["fontSize"]["magnitude"] for s in st] == [COPYRIGHT_PT]  # ページ番号は著作権表示と同じ大きさ（高さをそろえる）
+        th = themes  # Drive のプロパティ: 組むときに引く値だけ（url・元・説明・マスターにある役割の色は書かない）。124 バイトを超える値は書かない
+        globals()["themes"] = lambda: {"acme": {"TEXT": "111111", "copyright": "© 2026 Acme, Inc. All rights reserved.", "url": "u", "base": "b", "NAVY": "002B5C", "description": "d"},
+                                       "long": {"copyright": "©" * 60}}
+        assert props("acme") == {THEME_PROP: "acme", f"{PROP}TEXT": "111111", f"{PROP}copyright": "© 2026 Acme, Inc. All rights reserved."}
+        assert props("long") == {THEME_PROP: "long"}  # 124 バイトを超える値は書かない（止めない）
+        globals()["themes"] = th
         assert page_ok({"width": {"magnitude": 12192000}, "height": {"magnitude": 6858000}}) and not page_ok({"width": {"magnitude": 9144000}, "height": {"magnitude": 5143500}})
         md = "# 設定\n[slides.themes.visual]  # 注\nurl = \"a\"  # 書き込む\ndescription = \"d\"\n\n[slides.themes.acme]\nNAVY = \"002B5C\"\n\n[drive]\nx = 1\n"
         assert set_url(md, "visual", "b") == md.replace('"a"', '"b"')  # url の行を書き換え、ほかは変えない

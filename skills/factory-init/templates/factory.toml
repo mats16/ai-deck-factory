@@ -72,6 +72,8 @@ deck_review_max_rounds = 3  # /deck-review を回す周の上限（1〜3）。�
 
 [drive]
 factory = ""    # 個人の資料の根元（例: My Drive の AI Deck Factory）。template.py --from-base は、この下の Themes にテンプレートを作る（なければ作る）。gslides.py keep の差し替え用の複製は直下に作る
+shared_themes = ""  # 全社の共有テーマのフォルダ（管理者が template.py で作ったテンプレートの置き場所。見る権限でよい）。slides.py themes が、factory.toml にないテンプレートを候補に出す。
+                    # 使うときは [slides.themes.<名前>] に url を書く（ほかの値はテンプレートが持つ）。管理者は自分の factory の下の Themes を指してよい
 customers = ""  # 顧客向けの資料の置き場所の根元（例: 共有ドライブ 10_Customers）
 internal = ""   # 顧客に紐づかないスライドの置き場所（例: AI Deck Factory/Slides）
 docs = ""       # 顧客に紐づかないドキュメントの置き場所（例: AI Deck Factory/Docs）

@@ -7,7 +7,8 @@ usage（資料の build/ で。pages.py は今いるフォルダのもの）:
                                           未解決のコメントがあれば止まる。直しを pages.py に入れてから --force で組み直す
   slides.py dry [<ファイル>] [<URL か ID>]   組まずに make を走らせ、組むときの警告・枚数・ノートのないページを出す（既定は pages.py。子が書いた build/pages_<担当>.py を確かめる。
                                           URL を渡すと、表紙・扉のパターンとテーマをそのデッキから読む（読むだけ）。../slides.md の 2）
-  slides.py themes   テーマの名前・説明・テンプレートがあるか・既定か。資料ごとに選ぶ（../../deck-practices/SKILL.md の「作業の始め方」の 5）
+  slides.py themes   テーマの名前・説明・テンプレートがあるか・既定か。資料ごとに選ぶ（../../deck-practices/SKILL.md の「作業の始め方」の 5）。
+                     [drive] shared_themes の、factory.toml にないテンプレートも候補に出す
   slides.py merge <ファイル>...   子が別のファイルに書いたページの関数を pages.py に合わせる（組まない。../../deck-review/SKILL.md の手順 5）
   slides.py --selftest
 テンプレートの管理は template.py。色は下の「色の役割」の名前で渡す。役割の名前はテーマの色（マスターの配色）を指すので、テンプレートを替えると色が変わる。
@@ -81,6 +82,10 @@ FIXED = {"TEXT": TEXT, "RULE": RULE, "RED_SOFT": RED_SOFT, "STAGE_TEXT": STAGE_T
 NAMED = {"HEAD": NAVY, "CARD": WHITE, "SUB_ON_NAVY": RULE, "ON_RED": WHITE}
 HEAD, CARD, SUB_ON_NAVY, ON_RED = NAMED  # 本文のページの見出しの文字／カードと表のセルの地／濃紺の上の補足の文字とフッター／RED の塗りの上の文字
 THEME_MARK = re.compile(r"ai-deck-factory theme=([A-Za-z0-9_-]+)")  # template.py がマスターのページ番号の枠の代替テキストに書く。Drive の複製でも残る（2026-10-13）
+PROP = "adf."  # template.py がテンプレートの Drive のプロパティ（公開。どの OAuth クライアントでも読める）に書く、テーマの名前と組むときに引く値の頭（template_meta・shared_files）
+THEME_PROP = f"{PROP}theme"  # テーマの名前のプロパティ。共有テーマのフォルダでテンプレートを見分ける
+PUBLISHED = (*FIXED, *NAMED, "copyright", "mono")  # template.py がプロパティに書き、template_meta が読む値（theme_values が引くもの）。役割の色と書体はマスターにある
+READ_ERRORS = (gapi.ApiError, urllib.error.URLError)  # Drive を読めない（権限・URL・認証・回線）。request は HTTP のエラーだけを ApiError にする
 # 会社のテンプレートから残した表紙・扉のレイアウト（図形・ロゴ・写真付き。パターンごとに番号）。template.py がそのレイアウトのページ番号の枠の
 # 代替テキストに書く。w は元のタイトルの枠の右端までの文字の幅（in）、tone は地の明るさ（文字の色を決める）。なければ表紙・扉も Blank に組む
 # （2026-10-13、ユーザー「元の図形が入ったタイトルスライドなどを、維持して欲しい」「セクション区切りで異なる背景の区切りページを使い分けることはよくします」）
@@ -801,9 +806,66 @@ def use_layouts(p):
         VARIANTS.setdefault(m.group(1), {})[int(m.group(2))] = (float(m.group(3)) if m.group(3) else None, m.group(4) or "dark")
 
 
+def mine():
+    """factory.toml の [slides.themes]（テーマの名前 → 表）。"""
+    return factory().get("slides", {}).get("themes", {}) if gapi.find_factory() else {}
+
+
+@functools.cache
+def template_meta(fid):
+    """テンプレート fid が持つテーマの値（template.py が Drive の説明とプロパティに書いた description と PUBLISHED の値。テーマの表の形）。
+    共有のテンプレートを url で指すだけの人は、これで組む。読めなければ READ_ERRORS を上げる。"""
+    f = request("GET", f"{DRIVE}/files/{fid}?supportsAllDrives=true&fields=description,properties")
+    p = f.get("properties") or {}
+    return {**({"description": f["description"]} if f.get("description") else {}), **{k: p[PROP + k] for k in PUBLISHED if PROP + k in p}}
+
+
 def theme_table(name):
-    """factory.toml の [slides.themes.<name>]。name が None か、そのテーマがなければ {}（今の値で組む）。"""
-    return factory().get("slides", {}).get("themes", {}).get(name, {}) if name and gapi.find_factory() else {}
+    """factory.toml の [slides.themes.<name>] を、その url のテンプレートが持つ値（template_meta）に重ねたもの（factory.toml が勝つ）。
+    name が None か、そのテーマがなければ {}（今の値で組む）。テンプレートを読めなければ止める（既定の値で黙って組まない）。"""
+    t = mine().get(name, {}) if name else {}
+    if not t.get("url"):
+        return t
+    try:
+        return {**template_meta(file_id(t["url"])), **t}
+    except READ_ERRORS as e:
+        sys.exit(f"テーマ {name} のテンプレート {t['url']} を読めない（{str(e).splitlines()[0]}）。組むときの値（テーマに入れない色・copyright・mono）を"
+                 f"テンプレートから引くので止める。url を直すか、見る権限をもらう")
+
+
+def theme_description(name):
+    """テーマの説明。factory.toml の description、なければ url のテンプレートの Drive の説明、なければ組み込みの説明（THEME_NOTES）。
+    テンプレートを読めなければ飛ばす（一覧と doctor は止めない）。"""
+    t = mine().get(name, {})
+    if not t.get("description") and t.get("url"):
+        try:
+            return template_meta(file_id(t["url"])).get("description") or THEME_NOTES.get(name, "")
+        except READ_ERRORS:
+            pass
+    return t.get("description") or THEME_NOTES.get(name, "")
+
+
+@functools.cache
+def shared_files():
+    """[drive] shared_themes（全社の共有テーマのフォルダ）の Google Slides のうち、template.py がテーマの名前（PROP）を書いたもの。新しい順。書いていなければ []。
+    探すときだけ読む（使うテーマは factory.toml の [slides.themes.<名前>] の url で指す）。"""
+    if not (gapi.find_factory() and (f := factory().get("drive", {}).get("shared_themes"))):
+        return []
+    q = urllib.parse.urlencode({"q": f"'{folder_id(f)}' in parents and mimeType = '{GSLIDES}' and trashed = false", "orderBy": "modifiedTime desc", "pageSize": 1000,
+                                "fields": "files(id,description,properties)", "supportsAllDrives": "true", "includeItemsFromAllDrives": "true", "corpora": "allDrives"})
+    return [f for f in request("GET", f"{DRIVE}/files?{q}")["files"] if (f.get("properties") or {}).get(THEME_PROP)]
+
+
+def unlisted():
+    """共有テーマのフォルダにあって、factory.toml の url が指していないテンプレート。[(テーマの名前, url, 説明)]（新しい順）。
+    探すためだけの設定なので、フォルダを読めなければ知らせて [] にする（themes と new を止めない）。"""
+    have = {file_id(t["url"]) for t in mine().values() if t.get("url")}
+    try:
+        files = shared_files()
+    except READ_ERRORS as e:
+        print(f"[drive] shared_themes を読めない（共有のテーマを候補に出さない）: {str(e).splitlines()[0]}", file=sys.stderr)
+        return []
+    return [(f["properties"][THEME_PROP], f"https://docs.google.com/presentation/d/{f['id']}/edit", f.get("description", "")) for f in files if f["id"] not in have]
 
 
 def theme_fixed(t):
@@ -951,9 +1013,8 @@ def refont(o, font):
 def theme_list():
     """(名前, 説明, テンプレートがあるか, 既定か) の並び。組み込みのテーマと、factory.toml の [slides.themes] の名前。"""
     cfg = factory().get("slides", {})
-    mine = cfg.get("themes", {})
-    return [(n, mine.get(n, {}).get("description") or THEME_NOTES.get(n, ""), bool(mine.get(n, {}).get("url")), n == cfg.get("default_theme", "visual"))
-            for n in dict.fromkeys([*THEMES, *mine])]
+    return [(n, theme_description(n), bool(mine().get(n, {}).get("url")), n == cfg.get("default_theme", "visual"))
+            for n in dict.fromkeys([*THEMES, *mine()])]
 
 
 def cmd_themes():
@@ -961,6 +1022,13 @@ def cmd_themes():
     for name, note, has, default in theme_list():
         print(f"{name}{'（既定）' if default else ''}\t{'テンプレートあり' if has else 'テンプレートなし'}\t"
               + (note or f"（説明がない。factory.toml の [slides.themes.{name}] の description に書く）"))
+    if rows := unlisted():
+        for name, url, note in rows:
+            t = mine().get(name)
+            where = "factory.toml にない" if t is None else "factory.toml の同じ名前の表は別のテンプレート" if t.get("url") else "factory.toml の同じ名前の表に url がない"
+            print(f"{name}（共有。{where}）\t{url}\t{note or THEME_NOTES.get(name, '')}")
+        print("共有のテーマを使うときは、factory.toml の [slides.themes.<名前>] に url = \"<url>\" を書く（名前は左のとおり。テンプレートが持つ名前と違うと組めない。"
+              "同じ名前の表があれば、表を足さずにその表の url を書く・替える。替えると今のテンプレートの代わりになる）")
 
 
 def need_theme(theme):
@@ -974,7 +1042,7 @@ def need_theme(theme):
 
 def templates():
     """テーマごとのテンプレートの ID（factory.toml の [slides.themes.<名前>] の url。URL のまま書いてある）。"""
-    return {k: file_id(t["url"]) for k, t in factory().get("slides", {}).get("themes", {}).items() if t.get("url")}
+    return {k: file_id(t["url"]) for k, t in mine().items() if t.get("url")}
 
 
 def template_id(theme=None):
@@ -1286,9 +1354,40 @@ def selftest():
     assert {"opaqueColor": {"rgbColor": rgb("37352F")}} in [r["updateTextStyle"]["style"].get("foregroundColor") for r in t.reqs if "updateTextStyle" in r]
     use_theme({"mono": "IBM Plex Mono"})  # テーマの等幅の書体で組む（字の幅の見込みは MONO_EM のまま）
     assert {r["updateTextStyle"]["style"]["fontFamily"] for r in mono_reqs("e", "a あ b")} == {"IBM Plex Mono"}
+    # テーマは factory.toml の url で指し、そのテンプレートが持つ値（template_meta）に factory.toml の値を重ねる。共有テーマのフォルダは、factory.toml にないものを探すときだけ
+    def gone(*_):
+        raise gapi.ApiError("404 GET x")
+    req, tm, sf, mn = request, template_meta, shared_files, mine
+    globals()["request"] = lambda m, u: {"description": "共有の説明", "properties": {f"{PROP}TEXT": "111111", f"{PROP}cover": "x", THEME_PROP: "acme", "other": "y"}}
+    assert template_meta.__wrapped__("t1") == {"description": "共有の説明", "TEXT": "111111"}  # 読むのは PUBLISHED だけ（名前・知らない値・ほかのアプリの値は読まない）
+    meta = {"t1": {"description": "共有の説明", "TEXT": "111111", "RULE": "222222"}}
+    files = [{"id": "t1", "properties": {THEME_PROP: "acme"}}, {"id": "t2", "description": "新しい", "properties": {THEME_PROP: "corp"}}]
+    globals().update(request=req, template_meta=lambda fid: gone() if fid == "bad" else meta.get(fid, {}), shared_files=lambda: files,
+                     mine=lambda: {"acme": {"url": "https://docs.google.com/presentation/d/t1/edit", "RULE": "333333"}, "own": {"url": "t3", "description": "自分の"},
+                                   "draft": {"TEXT": "444444"}, "lost": {"url": "bad"}})
+    assert theme_table("acme") == {"description": "共有の説明", "TEXT": "111111", "RULE": "333333", "url": "https://docs.google.com/presentation/d/t1/edit"}  # factory.toml が勝つ
+    assert theme_table("own") == {"url": "t3", "description": "自分の"} and theme_table("draft") == {"TEXT": "444444"} and templates() == {"acme": "t1", "own": "t3", "lost": "bad"}
+    assert [theme_description(n) for n in ("acme", "own", "lost", "draft")] == ["共有の説明", "自分の", "", ""]  # 読めないテンプレートの説明は飛ばす
+    try:  # 読めないテンプレートのテーマは、既定の値で黙って組まずに止める
+        theme_table("lost")
+        raise AssertionError("読めないテンプレートのテーマを既定の値で通した")
+    except SystemExit as e:
+        assert "lost" in str(e) and "404" in str(e)
+    assert unlisted() == [("corp", "https://docs.google.com/presentation/d/t2/edit", "新しい")]  # url が指しているものは出さない
+    import contextlib, io
+    files.append({"id": "t4", "properties": {THEME_PROP: "draft"}})
+    tl, globals()["theme_list"] = theme_list, lambda: []  # 共有の行だけを見る（theme_list は factory.toml の [slides] を読む）
+    with contextlib.redirect_stdout(out := io.StringIO()):
+        cmd_themes()
+    globals()["theme_list"] = tl
+    assert "corp（共有。factory.toml にない）" in out.getvalue() and "draft（共有。factory.toml の同じ名前の表に url がない）" in out.getvalue()  # 同じ名前の表に url を書けばよい
+    globals()["shared_files"] = gone
+    assert unlisted() == []  # 共有テーマのフォルダを読めなくても、themes と new は止めない
+    globals().update(template_meta=tm, shared_files=lambda: [], mine=mn)
     for empty in ({}, theme_table("ない")):  # 値がないテーマと、factory.toml にないテーマは、今の値に戻す
         use_theme(empty)
         assert not _SWAP and COPYRIGHT == BRAND_COPYRIGHT and theme_fixed(empty) == FIXED and paint(TEXT) == {"rgbColor": rgb("303F47")} and MONO == MONO_DEFAULT
+    globals()["shared_files"] = sf
     # NAMED の役割: 書かなければ今の色（HEAD は NAVY の枠、CARD・ON_RED は白、SUB_ON_NAVY は RULE。RULE を替えたらそれに付いていく）
     use_theme({})
     assert paint(HEAD) == paint(NAVY) == {"themeColor": "DARK1"} and paint(CARD) == paint(ON_RED) == paint(WHITE) == {"rgbColor": rgb("FFFFFF")} and paint(SUB_ON_NAVY) == paint(RULE)
