@@ -14,10 +14,11 @@ README の「会話で入れる」のプロンプトを貼られたエージェ�
 
 ## 1. 聞く
 
-自分が Claude Code か pi かは聞かない（自分で分かる）。次の 2 つを 1 回でまとめて聞く（Claude Code なら AskUserQuestion）。
+自分が Claude Code か pi かは聞かない（自分で分かる）。次の 3 つを 1 回でまとめて聞く（Claude Code なら AskUserQuestion）。
 
 1. **ワークスペースにするフォルダ。** 資料（`Customers/`・`Internal/`・`Research/`）と `factory.toml` を置く。候補に、今の会話のフォルダと `~/Documents` を出す。なければ作る。すでに `factory.toml` か `AGENTS.md` があれば、足りないものだけ置くことを伝える。
 2. **プラグインに直しを出すか（factory-kaizen）。** 使うだけなら「出さない」。出すなら、このリポジトリの checkout（持ち主でなければ `gh repo fork mats16/ai-deck-factory --clone` で作った fork）のパス。
+3. **全社の共有テーマのフォルダ。** 会社でスライドのテーマ（テンプレート）を配っていれば、その Google Drive のフォルダの URL。なければ「ない」。プロンプトに URL が書いてあれば聞かずに使う。4 で `factory.toml` の `[drive] shared_themes` に書く。
 
 ## 2. 前提を見る
 
@@ -62,7 +63,7 @@ pi install -l git:github.com/mats16/ai-deck-factory   # checkout なら git:… 
 
 ## 4. ワークスペースを作る
 
-1. `<プラグイン>/skills/factory-init/SKILL.md` を開き、その手順に従う。「このスキルのフォルダ」は `<プラグイン>/skills/factory-init`、ほかのスキルのフォルダは `<プラグイン>/skills/<スキル>`。手順の 1（場所）と 2（元のリポジトリ）は、ここの 1 で聞いたので飛ばす。
+1. `<プラグイン>/skills/factory-init/SKILL.md` を開き、その手順に従う。「このスキルのフォルダ」は `<プラグイン>/skills/factory-init`、ほかのスキルのフォルダは `<プラグイン>/skills/<スキル>`。手順の 1（場所）と 2（元のリポジトリ）は、ここの 1 で聞いたので飛ばす。4 の `[drive] shared_themes` は、ここの 1 の 3 で聞いた値を書く。
 2. factory-init の最後の「確かめる」は、`<プラグイン>/skills/factory-doctor/SKILL.md` を開いて従う。要修正が 0 になるまで直す。Google のログインのように、ユーザーが回すものが残ったら、回してもらってから doctor をもう一度回す。
 
 ## 5. 終える

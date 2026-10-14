@@ -88,9 +88,13 @@ def check(ws, local=False):
         warn("slides.template_folder", "プラグインは読まない。新しく作るテンプレートは [drive] factory の下の Themes に作る（前の版のスクリプトで動かさなくなったら消す）")
     if sl.get("templates") and not old:
         warn("slides.templates", "プラグインは読まない（[slides.themes.<名前>] の url を読む）。前の版のスクリプト（.agents/skills/）で動かさなくなったら消す")
-    (ok if temps.get(theme) else warn)("slides.themes の url", ", ".join(temps) if temps.get(theme) else f"既定のテーマ {theme} のテンプレートがない。template.py {theme} --from-base で作る")
-    if bad := [n for n in temps if not mine.get(n, {}).get("description") and n not in slides.THEME_NOTES]:
-        warn("slides.themes の説明", f"{', '.join(bad)} に description がない。エージェントが資料ごとにテーマを選べない（[slides.themes.<名前>] の description に、どの資料・聞き手に使うかを書く）")
+    (ok if temps.get(theme) else warn)("slides.themes の url", ", ".join(temps) if temps.get(theme) else
+                                       f"既定のテーマ {theme} のテンプレートがない。template.py {theme} --from-base で作るか、共有のテーマ（slides.py themes）の url を書く")
+    no_desc = [n for n in temps if not mine.get(n, {}).get("description") and n not in slides.THEME_NOTES]  # テンプレートの Drive の説明にあるかは、Google を見るところで
+    desc_warn = lambda bad, note="": warn("slides.themes の説明", f"{', '.join(bad)} に description がない。エージェントが資料ごとにテーマを選べない"
+                                                             f"（[slides.themes.<名前>] の description に、どの資料・聞き手に使うかを書く）{note}")
+    if no_desc and local:
+        desc_warn(no_desc, "。url のテンプレートの Drive の説明にあるかは --local なしで見る")
     if bad := [n for n, t in docs.get("themes", {}).items() if not t.get("description")]:
         warn("docs.themes の説明", f"{', '.join(bad)} に description がない。エージェントが資料ごとにテーマを選べない")
     if (d := docs.get("default_theme")) and d not in docs.get("themes", {}) and d != "standard":  # standard は組み込み（docs.py の STANDARD）
@@ -116,6 +120,8 @@ def check(ws, local=False):
         first = str(e).splitlines()[0]
         fix = "google.quota_project を書く（空だと gcloud の既定の OAuth クライアントのトークンは 403）" if first.startswith("403") and not g.get("quota_project") else f"作り直す: {gapi.LOGIN}"
         ng("Google の認証", f"{how} で通らない: {first}。{fix}")
+        if no_desc:  # テンプレートの Drive の説明を見られないので、--local と同じに出す
+            desc_warn(no_desc, "。url のテンプレートの Drive の説明にあるかは、Google の認証が通ってから見る")
         return out
     targets = [(f"slides.themes.{k}.url", v) for k, v in temps.items()] + [(f"docs.templates.{k}", v) for k, v in cfg.get("docs", {}).get("templates", {}).items()]
     targets += [(f"slides.themes.{k}.base", t["base"]) for k, t in mine.items() if t.get("base")]
@@ -127,6 +133,19 @@ def check(ws, local=False):
             (warn if f.get("trashed") else ok)(name, f"{f['name']}{'（ゴミ箱にある）' if f.get('trashed') else ''}")
         except gapi.ApiError as e:
             ng(name, f"開けない（{str(e).split()[0]}）: {url}")
+    if bad := [n for n in no_desc if not slides.theme_description(n)]:  # url だけを書いたテーマは、テンプレートの Drive の説明を使う
+        desc_warn(bad)
+    if dr.get("shared_themes"):  # 全社の共有テーマのフォルダ。探すときだけ読む（使うテーマは [slides.themes.<名前>] の url）
+        try:
+            names, new = [f["properties"][slides.THEME_PROP] for f in slides.shared_files()], [n for n, _, _ in slides.unlisted()]
+        except slides.READ_ERRORS:  # 開けないことは drive.shared_themes に出ている
+            return out
+        if dup := sorted({n for n in names if names.count(n) > 1}):
+            warn("共有テーマ", f"同じ名前のテーマが 2 つ以上ある（どれを url で指すか迷う。古いほうをフォルダから外す）: {', '.join(dup)}")
+        elif not names:
+            warn("共有テーマ", "テーマがない。管理者が template.py で作ったテンプレートを置く（ほかのファイルは読まない）")
+        else:
+            ok("共有テーマ", ", ".join(names) + (f"（factory.toml にない: {', '.join(new)}。使うなら slides.py themes の url を書く）" if new else ""))
     return out
 
 
