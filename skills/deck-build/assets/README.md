@@ -34,5 +34,6 @@
 
 | フォルダ | 中身 | 元 | 取った日 | 使ってよい範囲・社外に出せるか |
 |---|---|---|---|---|
+| `blank.pptx` | `template.py --from-base` の元がないときに使う白紙（`../slides.md` の 3）。13.33 × 7.5 in（12188952 × 6858000 EMU）、レイアウトは Blank だけ（ページ番号の枠だけ）、マスターに `<p:hf hdr="0" ftr="0" dt="0"/>`（スライド番号を出す設定）、スライド 1 枚にページ番号の枠（ないと Google Slides でスライド番号がオフになり、足したページに枠ができない）、マスター・Blank・スライドのページ番号の枠の `a:bodyPr` の `lIns`・`tIns`・`rIns`・`bIns` が 0（`template.py` は内側の余白を 0 と見込む）。`template.py --selftest` がこの 5 つを見る | python-pptx の既定の pptx から、ほかのレイアウトと日付・フッターの枠を消して作り、作成者・プリンター設定・サムネイルを抜いた。変換したあとのマスターの名前は「Office Theme」 | 2026-10-14 | 社外に出せる（中身は空） |
 | `gcp/` | Google Cloud の主な製品のアイコン（4 色、512 px の PNG と SVG）。`bigquery`・`cloud-storage`・`vertex-ai`・`looker`・`gke`・`cloud-run` など 22 個 | [Google Cloud icons](https://cloud.google.com/icons) の Core product icons（https://services.google.com/fh/files/misc/core-products-icons.zip） | 2026-10-08 | 構成図・技術文書に使ってよい。Google の後援に見せない（[Brand Resource Center](https://about.google/brand-resource-center/guidance/)）。社外に出せる |
 | `gcp/category/` | 主な製品以外に使う分類のアイコン（2 色）。`data-analytics`・`databases`・`ai-machine-learning`・`storage` など 27 個 | 同じページの Product category icons（https://services.google.com/fh/files/misc/category-icons.zip）。製品とアイコンの対応は https://services.google.com/fh/files/misc/google-cloud-product-icons.pdf | 2026-10-08 | 同上 |

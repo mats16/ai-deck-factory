@@ -30,7 +30,7 @@ default_theme = "visual"  # 説明で決まらないときのテーマ。テー�
 
 # [slides.themes.acme]  # 会社のテンプレートから作るテーマ（deck-template）。base は元のテンプレート、font は書体、色は役割の名前（visual.md の 1）。template.py check acme で測る
 # description = "アクメの会社の色。顧客向けの提案と、社外の登壇"  # どの資料・聞き手に使うか。エージェントが資料ごとに選ぶときに読む（slides.py themes）
-# base = ""  # 書かなければ公開の白紙（template.py の BLANK_BASE）
+# base = ""  # 書かなければ白紙の pptx（deck-build/assets/blank.pptx）から作る
 # font = "Noto Sans JP"
 # NAVY = "002B5C"
 # mono = "Cascadia Mono"  # コードの等幅。どのテーマにも書ける。書かなければ Cascadia Mono（deck-template の「書体」）
@@ -38,7 +38,7 @@ default_theme = "visual"  # 説明で決まらないときのテーマ。テー�
 # copyright = "© 2026 Acme, Inc. All rights reserved."  # このテーマのデッキだけ [brand] の代わりに使う
 
 [slides.themes.visual]  # 組み込みのテーマ（色は slides.py）。url・description・base と、mono・テーマに入れない色・copyright だけを書ける
-base = ""  # template.py visual --from-base が元にする Google Slides（会社のテンプレート）。空なら公開の白紙（template.py の BLANK_BASE）
+base = ""  # template.py visual --from-base が元にする Google Slides（会社のテンプレート）。空なら白紙の pptx（deck-build/assets/blank.pptx）から作る
 # url = ""  # template.py visual --from-base が書き込む
 # description = ""  # 書かなければ組み込みの説明（slides.py themes で見る）
 

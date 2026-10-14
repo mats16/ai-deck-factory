@@ -98,7 +98,7 @@ def make(d):
 
 ## 3. テンプレートとテーマ
 
-テンプレートは `template.py <テーマ> --from-base` が `[drive] factory`（個人の資料の根元）の下の「Themes」フォルダに作る（なければ作る。フォルダの ID や URL は持たない）。使うテンプレートは、ワークスペースの `factory.toml` の `[slides.themes.<名前>]` の `url` で 1 つずつ指し、元にしたテンプレートは `base`（書かなければ `[slides] base_template`、それもなければ公開の白紙 `BLANK_BASE`〔13.33 × 7.5 in、Blank、スライド番号オン。誰でも複製できる〕）。スクリプトはここを読む（この持ち主の visual・company は、前に作った「Templates」フォルダにある）。Databricks の 2026 年版の社内テンプレートを複製し、次を変えたもの（`template.py`）。
+テンプレートは `template.py <テーマ> --from-base` が `[drive] factory`（個人の資料の根元）の下の「Themes」フォルダに作る（なければ作る。フォルダの ID や URL は持たない）。使うテンプレートは、ワークスペースの `factory.toml` の `[slides.themes.<名前>]` の `url` で 1 つずつ指し、元にしたテンプレートは `base`（書かなければ `[slides] base_template`、それもなければ白紙の pptx `assets/blank.pptx` を Google Slides に変換して上げたもの〔中身は `assets/README.md`〕）。スクリプトはここを読む（この持ち主の visual・company は、前に作った「Templates」フォルダにある）。Databricks の 2026 年版の社内テンプレートを複製し、次を変えたもの（`template.py`）。
 
 - マスター「Databricks Theme」と、レイアウト「Content E - Blank」だけを残した（見本のページ 98 枚、ほかのレイアウト 38 個、マスター「Simple Light」を消した）。
 - マスターの著作権の行（©2021）とロゴ、Blank の全面の四角（ページの地を覆ってしまう）を消した。フッターは slides.py が書く。
