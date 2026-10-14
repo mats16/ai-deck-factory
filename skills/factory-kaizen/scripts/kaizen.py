@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """プラグインの改善を、過去の資料で確かめてから Issue にする（手順は ../SKILL.md）。ワークスペース（factory.toml のあるフォルダ）で回す。
 usage:
-  kaizen.py start   <名前>                          元のリポジトリ（[factory] source）に kaizen/<名前> の worktree を作る。前の版（main）も写す
+  kaizen.py start   <名前>                          元のリポジトリ（plugin.json の repository）を clone して kaizen/<名前> のブランチを作る。前の版（main）も写す
   kaizen.py lint    <名前> <資料の URL ...>          いまの資料の JSON に、前の版と変えた版の lint をかけて比べる
   kaizen.py rebuild <名前> <資料のフォルダ ...> [--pages 2,5] [--keep]   build/ の正本（pages.py・doc.md）を前の版と変えた版で仮に組み、ページの画像を並べて比べる
   kaizen.py open    <名前> --title <題> --body <本文.md>   本文と検証の記録と変更案の差分をまとめて、プラグインのリポジトリに Issue を作る（commit は先に済ませる。Issue があれば本文を書き換える）
-  kaizen.py clean   <名前>                          worktree と検証の記録を消す（Issue が閉じられたあと）
+  kaizen.py clean   <名前>                          clone と検証の記録を消す（Issue が閉じられたあと）
   kaizen.py --selftest
 置き場所は <ワークスペース>/.factory/kaizen/<名前>/（repo/ 変える版、base/ 前の版、verify/ 検証の記録）。資料の名前・URL・本文は verify/detail.md にだけ書き、
 Issue には「資料 1」のような番号と、規則ごとの数の変化と、選んだ画像と、変更案の差分だけを出す。ブランチは push しない。"""
@@ -23,10 +23,16 @@ DESIGN = re.compile(r"skills/(deck-practices/visual(_doc)?\.md|deck-build/(scrip
 URL_ID = re.compile(r"https://docs\.google\.com/(?:presentation|document)/d/([\w-]+)")
 COUNT = re.compile(r"^== (要修正|要確認)[^:]*: (\d+) ==$", re.M)
 HIT = re.compile(r"^\[(.+?)\] (.*)$", re.M)
+REPO = json.loads((Path(__file__).resolve().parents[3] / ".claude-plugin" / "plugin.json").read_text())["repository"].removeprefix("https://github.com/")  # Issue を出すリポジトリ
+MAIN = "origin/main"  # 差分の起点（start が REPO から clone する）
+AUTH = ("-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential")  # git に設定がなくても、gh のログインで push する
 
 
 def sh(*cmd, cwd=None, env=None, check=True):
-    r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env={**os.environ, **(env or {})})
+    try:
+        r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env={**os.environ, **(env or {})})
+    except FileNotFoundError:
+        sys.exit(f"{cmd[0]} がない。入れてから回す（gh なら入れて gh auth login）")
     if check and r.returncode:
         sys.exit(f"止まった（exit {r.returncode}）: {' '.join(map(str, cmd))}\n{r.stderr.strip()[-1500:]}")
     return r
@@ -38,27 +44,25 @@ class Work:
         self.name, self.branch = name, f"kaizen/{name}"
         self.dir = self.ws / ".factory" / "kaizen" / name
         self.repo, self.base, self.verify = self.dir / "repo", self.dir / "base", self.dir / "verify"
-        src = gapi.factory().get("factory", {}).get("source")
-        self.src = Path(src).expanduser() if src else None
 
     @cached_property
-    def github(self):
-        """(画像を置くリポジトリ, Issue を出すリポジトリ, 差分の起点) を、origin の URL から 1 回で決める。
-        fork なら、画像は自分の fork（origin の pr-assets）、Issue と差分の起点は元のリポジトリ（upstream のリモート）。"""
-        self.src or sys.exit("factory.toml の [factory] source に、プラグインのリポジトリの git の checkout（持ち主でなければ fork）を書く")
-        view = lambda url: json.loads(sh("gh", "repo", "view", url, "--json", "nameWithOwner,parent").stdout)
-        me = view(sh("git", "-C", self.src, "remote", "get-url", "origin").stdout.strip())
-        if not me.get("parent"):
-            return me["nameWithOwner"], me["nameWithOwner"], "origin/main"
-        parent = f"{me['parent']['owner']['login']}/{me['parent']['name']}"
-        up = sh("git", "-C", self.src, "remote", "get-url", "upstream", check=False).stdout.strip()
-        if not up or view(up)["nameWithOwner"] != parent:  # fork の main は古いか、自分の commit があるかもしれない
-            sys.exit(f"origin は {parent} の fork なのに、upstream のリモートが {parent} を指していない。git -C {self.src} remote add upstream https://github.com/{parent}.git（あれば set-url）")
-        return me["nameWithOwner"], parent, "upstream/main"
+    def assets(self):
+        """画像を置くリポジトリ。REPO に書けるなら REPO、書けなければ自分の fork（なければ GitHub に作る。あれば同じものが返る）。"""
+        perm = sh("gh", "repo", "view", REPO, "--json", "viewerPermission", "-q", ".viewerPermission").stdout.strip()
+        if perm in ("ADMIN", "MAINTAIN", "WRITE"):
+            return REPO
+        fork = sh("gh", "api", "-X", "POST", f"repos/{REPO}/forks", "-q", ".full_name").stdout.strip()
+        for _ in range(30):  # 作ったばかりの fork は、GitHub が写し終えるまで見えない
+            if (r := sh("git", *AUTH, "ls-remote", f"https://github.com/{fork}.git", "HEAD", check=False)).returncode == 0:
+                return fork
+            time.sleep(2)
+        sys.exit(f"fork の {fork} が見えない: {r.stderr.strip()[-500:]}")
 
     def need(self):
         if not self.repo.is_dir():
             sys.exit(f"{self.repo} がない。先に kaizen.py start {self.name}")
+        if (self.repo / ".git").is_file():  # 2026-10-14 までの start が、[factory] source の checkout に作った worktree（origin が fork のことがあり、差分の起点がずれる）
+            sys.exit(f"{self.repo} は前の版の start で作った worktree。kaizen.py clean {self.name} のあと start し直す（元の checkout では git worktree prune）")
 
     def label(self, key):
         """資料の番号（Issue には資料の名前を出さない）。"""
@@ -97,17 +101,15 @@ def report(label, kind, cb, ca, delta, gone, new, title=""):
 
 
 def start(w):
-    if not w.src or not (w.src / ".git").exists():
-        sys.exit("factory.toml の [factory] source に、プラグインのリポジトリの git の checkout（持ち主でなければ fork）を書く")
-    if w.dir.exists():
-        sys.exit(f"{w.dir} がもうある（続けるならそのまま使う。やり直すなら kaizen.py clean {w.name}）")
-    main = w.github[2]
-    sh("git", "-C", w.src, "fetch", "-q", main.split("/")[0])
-    sh("git", "-C", w.src, "worktree", "add", "-q", "-b", w.branch, w.repo, main)
+    if w.repo.exists() or w.base.exists():  # clone に失敗すると、git は repo/ を消して親のフォルダだけ残す（それならやり直せる）
+        sys.exit(f"{w.dir} に前の start が残っている（続けるならそのまま使う。やり直すなら kaizen.py clean {w.name}）")
+    sh("gh", "auth", "status", "--hostname", "github.com")  # ログインしていないと open で止まるので、確かめる作業の前に見る（github.com だけ。ほかのホストのログインが切れていても止めない）
+    sh("git", "clone", "-q", "--single-branch", "-b", "main", f"https://github.com/{REPO}.git", w.repo)
+    sh("git", "-C", w.repo, "switch", "-q", "-c", w.branch)
     w.base.mkdir(parents=True)
-    arch = subprocess.run(["git", "-C", str(w.src), "archive", main], capture_output=True, check=True).stdout
+    arch = subprocess.run(["git", "-C", str(w.repo), "archive", MAIN], capture_output=True, check=True).stdout
     subprocess.run(["tar", "-x", "-C", str(w.base)], input=arch, check=True)
-    print(f"変える版: {w.repo}（ブランチ {w.branch}）\n前の版: {w.base}（{main}）\n変えたら commit し、kaizen.py lint・rebuild で確かめる")
+    print(f"変える版: {w.repo}（ブランチ {w.branch}）\n前の版: {w.base}（{REPO} の main）\n変えたら commit し、kaizen.py lint・rebuild で確かめる")
 
 
 def lint_cmd(w, urls):
@@ -164,21 +166,21 @@ def rebuild(w, folders, pages=None, keep=False):
 
 
 def upload_images(w, files):
-    """画像を origin（fork）の pr-assets ブランチ（main とは別の、画像だけのブランチ）に置き、Issue から見える URL を返す。"""
-    repo = str(w.repo)
-    sh("git", "-C", repo, "fetch", "-q", "origin", "pr-assets", check=False)
-    parent = sh("git", "-C", repo, "rev-parse", "-q", "--verify", "origin/pr-assets", check=False).stdout.strip()
+    """画像を w.assets（書けなければ自分の fork）の pr-assets ブランチ（main とは別の、画像だけのブランチ）に置き、Issue から見える URL を返す。"""
+    repo, url = str(w.repo), f"https://github.com/{w.assets}.git"
+    r = sh("git", *AUTH, "ls-remote", url, "refs/heads/pr-assets")
     env = {"GIT_INDEX_FILE": str(w.dir / "assets.index")}
     Path(env["GIT_INDEX_FILE"]).unlink(missing_ok=True)
-    if parent:
+    if parent := r.stdout.split("\t")[0].strip():  # 前に置いた画像を残して足す
+        sh("git", "-C", repo, *AUTH, "fetch", "-q", url, "pr-assets")
         sh("git", "-C", repo, "read-tree", parent, env=env)
     for f in files:
         blob = sh("git", "-C", repo, "hash-object", "-w", f).stdout.strip()
         sh("git", "-C", repo, "update-index", "--add", "--cacheinfo", f"100644,{blob},{w.branch}/{f.name}", env=env)
     tree = sh("git", "-C", repo, "write-tree", env=env).stdout.strip()
     commit = sh("git", "-C", repo, "commit-tree", tree, *(["-p", parent] if parent else []), "-m", f"{w.branch} の画像").stdout.strip()
-    sh("git", "-C", repo, "push", "-q", "origin", f"{commit}:refs/heads/pr-assets")
-    return {f.name: f"https://github.com/{w.github[0]}/blob/pr-assets/{w.branch}/{f.name}?raw=true" for f in files}
+    sh("git", "-C", repo, *AUTH, "push", "-q", url, f"{commit}:refs/heads/pr-assets")
+    return {f.name: f"https://github.com/{w.assets}/blob/pr-assets/{w.branch}/{f.name}?raw=true" for f in files}
 
 
 def private_words(ws, extra=()):
@@ -199,7 +201,7 @@ def leaks(text, words):
 def outgoing(title, body, branch, patch, changed):
     """Issue と pr-assets で外に出る文字。open が leaks で確かめる。ブランチは push しないので、コミットメッセージと途中のコミットは出ない:
     題、本文、ブランチの名前（pr-assets の置き場所とコミット）、本文の「変えたファイル」に入る名前、Issue に載せる差分のすべて
-    （消した行と前後の行も。fork の main から作ったときは、元のリポジトリで公開されているとは限らない）。"""
+    （消した行と前後の行も）。"""
     return "\n".join([title, body, branch, *changed, patch])
 
 
@@ -242,10 +244,9 @@ def open_issue(w, title, body_file):
     if sh("git", "-C", w.repo, "status", "--porcelain").stdout.strip():
         sys.exit("変える版に commit していない変更がある。commit してから open する")
     git = lambda *a: sh("git", "-c", "core.quotepath=false", "-C", w.repo, *a).stdout  # 日本語のファイルの名前を \343… に書き換えさせない（確かめで見えなくなる）
-    _, repo, main = w.github
-    changed = git("diff", "--name-only", f"{main}...HEAD").splitlines()
+    changed = git("diff", "--name-only", f"{MAIN}...HEAD").splitlines()
     if not changed:
-        sys.exit(f"{main} からの変更がない")
+        sys.exit(f"{MAIN} からの変更がない")
     body = Path(body_file).read_text()
     pr_md = w.verify / "pr.md"
     verify_text = pr_md.read_text() if pr_md.is_file() else ""
@@ -253,16 +254,16 @@ def open_issue(w, title, body_file):
     if miss := check_body(body, changed, verify_text, images):
         sys.exit("Issue にできない:\n" + "\n".join(f"- {m}" for m in miss))
     # 差分に中身の出ないバイナリ（assets/ の png）は、画像と同じく pr-assets に上げて載せる。消したものは差分の「Binary files … /dev/null」で分かる
-    binaries = [w.repo / f for f in binary_files(git("diff", "--numstat", "--no-renames", f"{main}...HEAD")) if (w.repo / f).is_file()]
+    binaries = [w.repo / f for f in binary_files(git("diff", "--numstat", "--no-renames", f"{MAIN}...HEAD")) if (w.repo / f).is_file()]
     if binaries:
         verify_text += "\n\n### 変えたバイナリのファイル（変えた版）\n\n" + "".join(f"`{f.relative_to(w.repo)}`\n\n<!-- img:{f.name} -->\n\n" for f in binaries)
     # 外に出す前に（画像を上げる前に）、外に出るものを全部確かめる。本文は、足す検証の記録（ワークスペースの点検の規則の名前も入る）と画像の名前まで含める
-    patch = git("diff", f"{main}...HEAD")
+    patch = git("diff", f"{MAIN}...HEAD")
     text = outgoing(title, "\n".join([body, verify_text, *(f.name for f in images)]), w.branch, patch, changed)
     if hit := leaks(text, private_words(w.ws, gapi.factory().get("factory", {}).get("private", []))):
         sys.exit("Issue にできない: 題・本文（検証の記録を含む）・ファイルの名前・差分に、顧客や社内の資料の名前がある: " + "、".join(hit)
                  + "。「顧客向けの資料」「（顧客）」のような一般の形にして commit し直す")
-    base = git("rev-parse", "--short", git("merge-base", main, "HEAD").strip()).strip()  # 差分の起点（main はあとの fetch で進む）
+    base = git("rev-parse", "--short", git("merge-base", MAIN, "HEAD").strip()).strip()  # 差分の起点の commit
     files = images + binaries
     names = [f.name for f in files]  # pr-assets の置き場所と、本文の目印は名前で決まる
     len(set(names)) == len(names) or sys.exit("Issue にできない: 載せる画像の名前が重なる（verify/img/ と、変えた png）。verify/img/ の画像の名前を変える")
@@ -278,15 +279,13 @@ def open_issue(w, title, body_file):
     if url:
         sh("gh", "issue", "edit", url, "--title", title, "--body-file", w.dir / "issue_body.md", cwd=w.repo)
     else:
-        url = (sh("gh", "issue", "create", "-R", repo, "--title", title, "--body-file", w.dir / "issue_body.md", cwd=w.repo).stdout.split() or [""])[-1]
-        url.startswith("https://") or sys.exit(f"gh issue create が URL を返さなかった。{repo} に Issue ができていれば、その URL を {saved} に書いてから open し直す")
+        url = (sh("gh", "issue", "create", "-R", REPO, "--title", title, "--body-file", w.dir / "issue_body.md", cwd=w.repo).stdout.split() or [""])[-1]
+        url.startswith("https://") or sys.exit(f"gh issue create が URL を返さなかった。{REPO} に Issue ができていれば、その URL を {saved} に書いてから open し直す")
         saved.write_text(url)
     print(url)
 
 
 def clean(w):
-    if w.repo.is_dir() and w.src:
-        sh("git", "-C", w.src, "worktree", "remove", "--force", w.repo, check=False)
     shutil.rmtree(w.dir, ignore_errors=True)
     print(f"消した: {w.dir}")
 
@@ -315,30 +314,35 @@ def selftest():
     assert "載せていない" in long and "+x" not in long  # 長い差分は載せない
     fenced = issue_body(body, [], "abc1234", "", " ````` 前からある行\n+x\n")
     assert "\n``````diff\n" in fenced and fenced.rstrip().endswith("``````\n\n</details>")  # 差分の中の ````` より長い囲い
-    def github(remotes):  # remotes: リモートの名前 → (nameWithOwner, 親)。gh と git の代わりに答える
+    assert re.fullmatch(r"[\w.-]+/[\w.-]+", REPO), REPO  # plugin.json の repository から <持ち主>/<名前> が取れる
+    def assets(perm):  # gh の代わりに答える。(画像を置くリポジトリ, gh を呼んだ回数)
         global sh
-        repos = {f"u/{k}": v for k, v in remotes.items()}
+        calls = []
         def fake(*cmd, cwd=None, env=None, check=True):
-            if cmd[:2] == ("gh", "repo"):
-                name, parent = repos[cmd[3]]
-                out = json.dumps({"nameWithOwner": name, "parent": parent and {"owner": {"login": parent.split("/")[0]}, "name": parent.split("/")[1]}})
-            else:
-                out = f"u/{cmd[-1]}" if cmd[-1] in remotes else ""
-            return subprocess.CompletedProcess(cmd, 0, out, "")
-        real, sh, w = sh, fake, object.__new__(Work)
-        w.src = Path("src")
+            calls.append(cmd)
+            return subprocess.CompletedProcess(cmd, 0, perm if cmd[:2] == ("gh", "repo") else "me/ai-deck-factory", "")
+        real, sh = sh, fake
         try:
-            return w.github
+            return object.__new__(Work).assets, len(calls)
         finally:
             sh = real
-    assert github({"origin": ("o/r", None)}) == ("o/r", "o/r", "origin/main")  # 持ち主
-    assert github({"origin": ("me/r", "o/r"), "upstream": ("o/r", None)}) == ("me/r", "o/r", "upstream/main")  # 画像は fork、Issue と起点は元
-    for remotes in ({"origin": ("me/r", "o/r")}, {"origin": ("me/r", "o/r"), "upstream": ("x/r", None)}):  # upstream がないか、ほかを指す
+    assert assets("ADMIN") == (REPO, 1) and assets("WRITE") == (REPO, 1)  # 書けるなら、fork を作らない
+    assert assets("READ") == ("me/ai-deck-factory", 3)  # 書けないなら、自分の fork（作って、見えるのを待つ）
+    def stops(f, word):
         try:
-            github(remotes)
-            raise AssertionError(remotes)
+            f()
         except SystemExit as e:
-            assert "upstream" in str(e)
+            return word in str(e)
+    assert stops(lambda: sh("kaizen-no-such-command"), "がない")  # 入っていないコマンドは traceback にしない
+    with tempfile.TemporaryDirectory() as d:  # 前の版の start が作った worktree（.git がファイル）では、lint・rebuild・open を止める
+        w = object.__new__(Work)
+        w.name, w.repo = "x", Path(d) / "repo"
+        w.repo.mkdir()
+        (w.repo / ".git").write_text("gitdir: /src/.git/worktrees/x\n")
+        assert stops(w.need, "worktree")
+        (w.repo / ".git").unlink()
+        (w.repo / ".git").mkdir()
+        w.need()  # start が clone したもの（.git がフォルダ）は通す
     with tempfile.TemporaryDirectory() as d:  # 顧客と資料のフォルダの名前、[factory] private の語が Issue に入ったら止める
         for x in ("Customers/Acme/sample_briefing_202610", "Customers/Acme/review_2026q3", "Customers/Acme/assets", "Internal/grok_study_202610", "Internal/drafts"):
             (Path(d) / x).mkdir(parents=True)
