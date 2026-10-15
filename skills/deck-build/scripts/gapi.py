@@ -27,7 +27,10 @@ def window_end(body, now=None):
         return None
     v = m.group(1).strip()
     try:
-        t = float(v) / (1000 if float(v) > 1e11 else 1) if re.fullmatch(r"[\d.]+", v) else datetime.datetime.fromisoformat(v.replace("Z", "+00:00")).timestamp()
+        if re.fullmatch(r"[\d.]+", v):  # epoch。ミリ秒なら秒にする
+            t = float(v) / 1000 if float(v) > 1e11 else float(v)
+        else:
+            t = datetime.datetime.fromisoformat(v.replace("Z", "+00:00")).timestamp()
     except ValueError:
         return None
     end = t + 60 + 1  # 1 秒の余裕（時計のずれ）
@@ -215,8 +218,8 @@ PACED = []  # 上限を見越して待った秒（pace が足す）
 
 
 def pace(path=THUMB_LOG, limit=THUMB_PER_MIN, window=61):
-    """ページの画像を取る前に呼ぶ。この機械で直前の window 秒に limit 回取っていたら、空くまで待つ（超えると 429 で 5・15・30 秒待つことになる。
-    2026-10-15 に 53 枚で測ると、最後の 6 枚が 52 秒ずつ待った）。ponytail: ほかの機械（CI など）で同じ人が取った分は数えない（429 の取り直しが拾う）"""
+    """ページの画像を取る前に呼ぶ。この機械で直前の window 秒に limit 回取っていたら、空くまで待つ（超えると 429 で、分の枠が明けるまで止まる。
+    前の版の 5・15・30 秒の取り直しでは、2026-10-15 に 53 枚で測ると、最後の 6 枚が 52 秒ずつ待った）。ponytail: ほかの機械（CI など）で同じ人が取った分は数えない（429 の取り直しが拾う）"""
     import fcntl
     while True:
         with open(path, "a+") as f:

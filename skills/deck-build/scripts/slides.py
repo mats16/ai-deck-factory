@@ -1383,9 +1383,10 @@ def lint_local(path="pages.py", url=None, talk=False, pages=None):
     r = lint.Report()
     hard = lint.lint_slides(q, r, "差し替え用" in q["title"], talk, pages)
     bad = {lint.hit_page(h) for k in lint.HARD_NAMES for h in r.hits.get(k, [])}
-    state.write_text(json.dumps(sorted({digest[s] for i, s in enumerate(deck.slides, 1) if i in pages and i not in bad} | (clean & set(digest.values())))))
-    print(f"\n{LOCAL_ONLY}\n" + json.dumps({"file": path, "slides": len(deck.slides), "pages": sorted(pages), "warnings": sum(int(w[2:].split("]")[0]) in pages for w in deck.warnings)},
-                                        ensure_ascii=False))
+    seen_clean = {digest[s] for i, s in enumerate(deck.slides, 1) if i in pages and i not in bad}  # 今回見て、要修正のなかったページ
+    state.write_text(json.dumps(sorted(seen_clean | (clean & set(digest.values())))))  # 見なかったページは、前の記録を残す（今のデッキにあるものだけ）
+    warnings = sum(int(re.match(r"\[p(\d+)\]", w).group(1)) in pages for w in deck.warnings)
+    print(f"\n{LOCAL_ONLY}\n" + json.dumps({"file": path, "slides": len(deck.slides), "pages": sorted(pages), "warnings": warnings}, ensure_ascii=False))
     if hard:
         sys.exit("lint の要修正が残っている（上の出力を直す）")
 
