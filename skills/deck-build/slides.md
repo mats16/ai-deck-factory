@@ -18,10 +18,12 @@
 K=<deck-build のフォルダ>/scripts   # deck-build の SKILL.md のあるフォルダ。ほかのスキルからは、そのスキルのフォルダの ../deck-build/scripts
 cd <フォルダ>/build
 python3 $K/slides.py new <Drive のフォルダの URL> <YYYYMMDD_の名前> [--theme visual|company]   # 初めて組むとき。出た URL を構成案に書き、すぐユーザーに伝える（SKILL.md の deck-build-003）
-python3 $K/slides.py build <URL> [--force]          # 2 回目から。同じ URL に組み直す（画面で直されていたら止まる。下）
+python3 $K/slides.py lint [pages_<担当>.py] <URL> [--pages 3,5 | --all] [--talk]   # 直すたびに。組まずに、組む要求を手元で JSON にして lint（unit。SKILL.md の deck-build-005）
+python3 $K/slides.py build <URL> [--force]          # 区切りで。同じ URL に、中身の変わったページだけを作り直す（画面で直されていたら止まる。下）
 python3 $K/slides.py dry [pages_<担当>.py] [<URL>]  # 組まずに make を走らせ、組むときの警告・枚数・ノートのないページを出す（既定は pages.py。下の 2 の「ページを別のファイルに分けて書く」）
-python3 $K/gslides.py check <URL> [--talk]          # lint・テキスト・全ページの画像（/tmp/slides_<ID の頭 8 字>/）・画像で測る箱の下の余白
-python3 $K/gslides.py check <URL> --pages 3,5       # 直したページだけ、画像を取り直す（ページの数が変わったときは、自動で全ページ）
+python3 $K/gslides.py check <URL> [--talk]          # 組んだら。lint・テキスト・変えたページの画像（/tmp/slides_<ID の頭 8 字>/）・画像で測る箱の下の余白・changed.json（e2e）
+python3 $K/gslides.py check <URL> --all             # 全ページの画像を取り直す（区切りに 1 回。/deck-review の前、ページをまたいで見るとき）
+python3 $K/gslides.py check <URL> --pages 3,5       # そのページだけ画像を取り直す（ページの数が変わったときは、自動で全ページ）
 uv run -q $K/sheet.py /tmp/<名前>.png /tmp/slides_<ID>/p-0{2,3,4}.png   # 何枚かを 1 枚に並べて見る
 python3 $K/slides.py merge fix_a.py fix_b.py          # 子が別のファイルに書いたページの関数を pages.py に合わせる（組まない。下）
 ```
@@ -30,7 +32,8 @@ python3 $K/slides.py merge fix_a.py fix_b.py          # 子が別のファイル
 - 部品を分けて組む・試すための一時のデッキは、名前に `tmp` を入れる（`gslides.py check` が lint の記録に数えない。確かめたらゴミ箱へ）。
 - [slides-002] **組み直すと、Google Slides の画面で直したところは消え、コメントは付け先を失う。** 直すのは pages.py と構成案。`build` は、前に組んだあとに画面で直されている（組んだときの版を Drive の appProperties に残して比べる）か、未解決のコメントがあると止まる。止まったら、直しとコメントへの対応を pages.py に入れてから `--force` で組み直す（`../deck-practices/SKILL.md` の「作業の始め方」の 6 の「直すのは pages.py と構成案」）。画面で直していないのに止まることがある（Slides の revisionId が、内容を変えずに変わる）。止まったら、Drive の `files.get` の `modifiedTime` と `revisions` を見て、前に組んだ時刻より後に直されていないことを確かめてから `--force` にする。
 - [slides-029] **`merge` は、子が `build/fix_<担当>.py` に書いた関数を、pages.py の同じ名前の関数と置き換える**（pages.py にない関数は `make` の前に足す）。子は pages.py を書かずに別のファイルに書き、親が合わせて 1 回だけ組む（`../deck-review/SKILL.md` の deck-review-011）。合わせるのは関数だけで、import は pages.py のものを使う（子が使った名前で import にないものは、親が足す）。`make`・定数・2 つのファイルに同じ関数があると止める（共通のものとページの順は親が書く）。前の pages.py は `pages.py.bak` に残る（あれば上書きせず `pages.py.bak1` …）。足した関数を `make` が呼んでいなければ警告する。出た JSON の関数の名前が、渡した担当と合うかを見てから組む。
-- 12 枚で、組むのに 15〜25 秒（batchUpdate は 1,300 件ほど）、`check` に約 10 秒かかる（2026-10-07）。
+- [slides-033] **`build` は、中身の変わったページだけを作り直す。** ページの ID の末尾に、そのページの要求の中身のハッシュを付け、デッキに同じハッシュのページがあれば残して並べ替えるだけにする（ページの増減・並べ替え・重複も同じ）。ノート、手元の画像の中身、表紙かどうか（1 枚目はページ番号を消す）、リンク先のページのハッシュもハッシュに入る。ページへのリンクを持つページは、リンク先を作り直すと一緒に作り直す（中身の同じページが 2 枚以上あるときも）。前の版の `build` で組んだデッキは、最初の 1 回だけ全ページを作り直す。`--force` は全ページを作り直す。作り直したページを `/tmp/slides_<ID の頭 8 字>/changed.json` に書き、`check` はその画像だけを取る。
+- 53 枚で 1 ページだけ直したとき、`build` は 23 → 8 秒、`check` は 23 → 8 秒（中央値。前の版で 429 の待ちが入った回の `check` は 67 秒。全ページを作り直す・取るときは今も 21 秒・20 秒。2026-10-15）。`slides.py lint` は 2〜7 秒。工程ごとの秒は、`build`・`check` が標準エラーに 1 行で出す。
 - **組むときの警告**（手で改行した行が枠に収まらない、自動で折り返した最終行が 2 字以下、見出しを縮めた、リードが 2 行、表のセルが折り返す）は、標準エラーに出て、最後の行に件数が出る。見込みなので、画像で確かめてから直すか残すかを決める（前の deck.js と同じ）。
 - slides.py は素の `python3`（標準ライブラリ）で動く。手元の画像と、react-icons の名前（`Tb…`）のアイコンを貼るときだけ、グローバルの node（pptxgenjs・react-icons・sharp）を使う（6。URL の画像と Iconify のアイコンには要らない）。
 - [slides-003] 素の `python3` には Pillow・python-pptx・markitdown がなく、ImageMagick もない。ライブラリの要るものは uv で動かし、道具は `scripts/` に置く（`sheet.py` と同じ）。画像の切り取りは `sips -c <高さ> <幅> --cropOffset <上> <左> <入力> --out <出力>`（px）。
@@ -82,7 +85,7 @@ def make(d):
 - `d.text` の行間（`spacing`）を省くと、2 行以上の見込みなら 125、1 行なら 100 になる（visual.md の 2）。表のセルは 2 行以上なら 120。
 - フッター（左下の著作権表示）は表紙・扉を含む全ページに自動で入る。文言は `factory.toml` の `[brand] copyright`（デッキのテーマの `copyright` があればそれ。`slides.py` の `COPYRIGHT`）、文字は 9pt（`COPYRIGHT_PT`）、本文のページは `SUB`、表紙・扉（濃紺の地）は `SUB_ON_NAVY`。資料名は表示せず、`NAME` 末尾の `Internal Only`・`Confidential` だけを残す。初公表年は現在年へ自動更新しない。`foot=False` の流用ページには重ねない。ページ番号は表紙以外の右下に著作権表示と同じ 9pt で入り、テンプレートの枠なので、画面でページを並べ替えても合う。
 - [slides-004] **部品は slides.py にあるものを使う。前の資料から写さない**。1 つの資料でだけ要る部品は pages.py に関数で書き、2 つ目の資料で要ったら slides.py に移す。
-- [slides-031] **ページを別のファイルに分けて書く（子に書かせるとき。`../deck-practices/SKILL.md` の「作業の始め方」の 6 の「残りのページを子に分けて書く」）。** 子は `build/pages_<担当>.py` に、担当のページを 1 枚 1 関数（`p<構成案の番号>(d)`）で書き、それを順に呼ぶ `make(d)` も置く。部品は `from slides import …`、親の共通の関数と定数は `from pages import …` で読み、pages.py は書き換えない。子は組まずに `slides.py dry pages_<担当>.py <URL>` で確かめる（`[p<番号>]` は担当の中の何枚目）。URL は代表の 3 枚を組んだデッキで、`build` と同じく表紙・扉のパターン（`variant`）とテーマをそこから読む（読むだけ。渡さなければパターンは 1 だけで、2 からは止まる）。dry が見るのは止まるかと組むときの警告で、lint（置き換え忘れ・見出しの句点など）と画像は、親が組んだあとの `gslides.py check` で見る。親は pages.py の `make` の中で子のファイルを読み込み、ページの関数を構成案の順に呼んでから 1 回だけ組む（担当のページが続いていれば `make` でよい）。頭で読み込むと、子のファイルが pages.py を読み込み返して止まる。
+- [slides-031] **ページを別のファイルに分けて書く（子に書かせるとき。`../deck-practices/SKILL.md` の「作業の始め方」の 6 の「残りのページを子に分けて書く」）。** 子は `build/pages_<担当>.py` に、担当のページを 1 枚 1 関数（`p<構成案の番号>(d)`）で書き、それを順に呼ぶ `make(d)` も置く。部品は `from slides import …`、親の共通の関数と定数は `from pages import …` で読み、pages.py は書き換えない。子は組まずに `slides.py lint pages_<担当>.py <URL>` で確かめる（`[p<番号>]` は担当の中の何枚目。`dry` は lint をかけずに、止まるかと組むときの警告だけを見る）。URL は代表の 3 枚を組んだデッキで、`build` と同じく表紙・扉のパターン（`variant`）とテーマをそこから読む（読むだけ。渡さなければパターンは 1 だけで、2 からは止まる）。画像と、ページへのリンクと、ページをまたぐ lint（扉・結論バンドの数など）は、親が組んだあとの `gslides.py check` で見る。親は pages.py の `make` の中で子のファイルを読み込み、ページの関数を構成案の順に呼んでから 1 回だけ組む（担当のページが続いていれば `make` でよい）。頭で読み込むと、子のファイルが pages.py を読み込み返して止まる。
 
   ```python
   def make(d):

@@ -96,6 +96,8 @@ THIN = 0.05 * EMU  # これより細い四角は線として数える（四角�
 MONO = MONO_DEFAULT  # 見ている資料の等幅の書体。lint_slides がデッキのテーマから入れ直す（is_mono などが読む。ponytail: 1 つずつ見る前提の大域の値）
 FONT_NG = f"書体が {FONT} でない"  # スライドはテンプレートの書体（deck_font）と比べる。Google Fonts にない書体は、API が受け付けても黙って別の書体で描かれる（slides.md の 5）。英数字だけの MONO（コード）は通す
 MONO_NG = f"等幅の {MONO_DEFAULT} に和文"  # 名前は既定の書体のまま（台帳と lint_runs.jsonl が名前で数える）。テーマの mono なら指摘にその名前を出す。MONO に和文の字形はなく、Google が別の書体で描く。和文は FONT にする（slides.py の mono_reqs。visual.md の 2）
+DECK_WIDE = {NO_COVER, NO_DIVIDER, SHORT_CH, MANY_BANDS, HEAD_CLAIMS}  # デッキ全体を見て出す規則。lint_slides の only で絞らない（ページの番号が付いていても、ほかのページで決まる）
+ESTIMATE = {TWO_LINES, BODY_LINES, PHRASE_BREAK, EMPTY_BELOW, EMPTY_BOX, EMPTY_HOLE}  # 字幅と行の高さの見積もりから出す指摘。Google が描いた画像で確定する（ほかは JSON で決まる）
 HARD_NAMES = set(HARD) | {HEAD_PERIOD, HEAD_POLITE, f"{MIN_PT}pt 未満の文字", f"{DOC_MIN_PT}pt 未満の文字", COPYRIGHT_NG, FONT_NG, MONO_NG, "用紙が A4 でない", "追跡の印の付いたリンク"}
 INS = INSET * 72  # 文字の枠の内側の余白（pt）。Slides API の既定は 0.1 in で、変えられない
 BODY_TOP, BODY_BOTTOM = Y_BODY_NOLEAD * EMU, BAND_BOTTOM * EMU  # 本文の領域（visual.md の 1 の配置）
@@ -481,9 +483,16 @@ def line_grid(lines):  # [lint-017] 上端と長さが同じ縦線が 3 本以�
     return [n for n in seen.values() if n >= 3]
 
 
+def hit_page(h):
+    """指摘の頭のページの番号（「p3: …」「p3 の見出し: …」）。頭が p<番号> でない指摘（デッキ全体のもの）は None。"""
+    m = re.match(r"p(\d+)", h)
+    return int(m.group(1)) if m else None
+
+
 class Report:
     def __init__(self):
         self.hits = defaultdict(list)
+        self.extra_hard = set()  # ワークスペースの点検（checks.py の HARD）の要修正の名前（workspace_checks が足す）
 
     def scan(self, where, text, rules):
         text = URL.sub("", text).strip()
@@ -493,18 +502,20 @@ class Report:
                 self.hits[name].append(f"{where}: 「{text[max(0, m.start() - 12):m.end() + 12].strip()}」")
 
     def show(self, names, title):
-        n = sum(len(self.hits[k]) for k in names)
-        print(f"\n== {title}: {n} ==")
+        n, est = sum(len(self.hits[k]) for k in names), sum(len(self.hits[k]) for k in names if k in ESTIMATE)
+        print(f"\n== {title}: {n}" + (f"（うち見積もり {est}。画像で確定する）" if est else "") + " ==")
         for k in names:
             for line in self.hits[k][:6]:
-                print(f"[{k}] {line}")
+                print(f"[{k}] {line}" + ("（見積もり）" if k in ESTIMATE else ""))
             if len(self.hits[k]) > 6:
                 print(f"[{k}] ほか {len(self.hits[k]) - 6} 件")
         return n
 
 
-def lint_slides(p, r, reuse=False, talk=False):
-    """p は presentations.get の JSON。reuse は社内資料の差し替え用（元の大きさのままなので 11pt の下限と表紙を見ない）。"""
+def lint_slides(p, r, reuse=False, talk=False, only=None):
+    """p は presentations.get の JSON。reuse は社内資料の差し替え用（元の大きさのままなので 11pt の下限と表紙を見ない）。
+    only（ページの番号の集合）を渡すと、そのページの指摘・見出し・字数だけを出す（slides.py lint --pages）。デッキ全体の規則（DECK_WIDE）と、
+    ワークスペースの点検（ページをまたいで見るものがありうる）は絞らない。"""
     titles, sizes, pairs, chars, dark, foot_secret, bands, claims, wraps = [], Counter(), defaultdict(list), [], [], [], [], [], []
     global MONO
     font, MONO = deck_font(p), deck_mono(p)  # 会社のテンプレートは会社の書体（deck-template）。等幅はデッキのテーマの mono
@@ -686,6 +697,20 @@ def lint_slides(p, r, reuse=False, talk=False):
         r.hits[MANY_BANDS].append(f"本文 {body_pages} 枚中 {len(bands)} 枚（{', '.join(f'p{k}' for k in bands)}）。見出しかリードで言い切れているページからは外す（visual.md の 1）")
     if len(claims) > CLAIM_MAX:
         r.hits[HEAD_CLAIMS].append(f"{len(claims)} 枚（{', '.join(f'p{k}' for k in claims)}）。名詞句にし、言い切りは判断を頼むページと数字の結論のページの 2〜3 枚に絞る（content.md の 4）")
+    if only is not None:  # 選んだページの指摘だけを残す（デッキ全体の規則 DECK_WIDE と、p<番号> で始まらない指摘は残す）。文節の点検（uv を呼ぶ）も、そのページだけにする
+        on = lambda h: hit_page(h) is None or hit_page(h) in only
+        wraps = [w for w in wraps if on(w[0])]
+        for k in r.hits:
+            if k not in DECK_WIDE:
+                r.hits[k] = [h for h in r.hits[k] if on(h)]
+        kept, cur = [], False
+        for t in titles:  # リード（字下げの行）は、上の見出しのページについていく
+            if t.startswith("p"):
+                cur = on(t)
+            if cur:
+                kept.append(t)
+        titles = kept
+        chars = [c for c in chars if on(c)]
     if (mp := mid_phrase(wraps)) is None:
         print(f"（uv か BudouX が使えないので、「{PHRASE_BREAK}」は数えていない）")
     r.hits[PHRASE_BREAK] += mp or []
@@ -935,6 +960,7 @@ def workspace_checks(kind, data, r):
     fn(data, r)
     new = [k for k, v in r.hits.items() if v and k not in before]
     hard = [k for k in new if k in getattr(mod, "HARD", ())]
+    r.extra_hard |= set(hard)
     n = r.show(hard, f"要修正（ワークスペースの点検 {path}）")
     r.show([k for k in new if k not in hard], "要確認（ワークスペースの点検）")
     return n
