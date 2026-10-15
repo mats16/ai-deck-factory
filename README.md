@@ -16,6 +16,7 @@
 | `deck-build` | Google Slides を組む（`slides.py`）・確かめる（`gslides.py check`・`lint.py`）。Drive への置き方。スクリプトはドキュメントと共有。使い回す画像は `assets/` |
 | `doc-build` | Google Docs を `build/doc.md` から組む・確かめる（`docs.py`）。テンプレートはワークスペースの `rules/doc-build/templates/` |
 | `deck-review` | 返す前の全体のレビュー。会話を渡さない新しいサブエージェント（メインと同じモデル）に頼む |
+| `customer-profile` | 顧客の profile（`Customers/<顧客>/profile.md`。事業、組織、技術の構成、エンジニアの好みと文化、いまの取り組み）を `[sources]` と公開の情報から作る・取り直す・書き足す。ユーザーが言った行は残す |
 | `deck-research` | ベストプラクティスの調べ直し。調べた記録（`state.md`・`log/`）はワークスペースの `Research/deck_research/` |
 | `dreaming` | 会話の記録から、決まりを定期的に整理する |
 
@@ -24,7 +25,7 @@ INSTALL.md                        会話で入れるときに、エージェン�
 .claude-plugin/plugin.json        Claude Code のプラグイン
 .claude-plugin/marketplace.json   このリポジトリをそのままマーケットプレイスにする
 package.json                      pi のパッケージ（pi.skills: ./skills）
-skills/                           上の 10 個（Claude Code と pi で共通）
+skills/                           上の 11 個（Claude Code と pi で共通）
 hooks/hooks.json                  Claude Code の hook（プラグインのファイルを読んだら rules/ を、顧客の資料を読んだら memory.md を続けて出す）
 hooks/rules_overlay.py            その中身（Claude Code と pi で共有）
 extensions/rules.ts               pi の拡張（同じことを pi の read・bash で）
@@ -74,9 +75,10 @@ pi install git:github.com/mats16/ai-deck-factory        # git から
 - `factory.toml`: 人ごとに変わる値（認証、テンプレート、テーマ〔`[slides.themes.<名前>]`: テンプレートの `url` と使い分けの `description`。エージェントが `slides.py themes` の一覧から資料ごとに選ぶ〕と社名、Drive の置き場所、材料を集める道具〔`[sources]`: 社内の検索・チャット・会議の記録・wiki など〕、レビューの進め方〔`[review]`: 構成を決めたあとを誰が見るか、`/deck-review` の周の上限〕）。テンプレートは `deck-build/scripts/template.py visual --from-base`（`company` も）で作ると URL が書き込まれる。元にするテンプレートは `factory.toml` に持たず、`--from-base <元の URL>` で渡す。渡さなければ、白紙の pptx（`deck-build/assets/blank.pptx`）を Google Slides に変換して上げ、そこから作る。会社で配るテーマは全社の共有テーマのフォルダ（`[drive] shared_themes`）に置き、使う人は `slides.py themes` で見つけて `url` を書く（`deck-build/slides.md` の 3）。
 - `AGENTS.md`（と `@AGENTS.md` を読む `CLAUDE.md`）: どの会話でも要る決まり。
 - `rules/<スキル>/<ファイル>`: 資料を作る場面だけで要る、このワークスペースの決まり。
-- `Customers/<顧客>/memory.md`: その顧客の好みと、資料をまたいで効く相手のこと（顧客の memory）。その顧客の資料の `構成案*.md` などを開くと、hook が続けて出す。
+- `Customers/<顧客>/memory.md`: その顧客の資料への好み（どう作るか。相手が何者かは `profile.md`）（顧客の memory）。その顧客の資料の `構成案*.md` などを開くと、hook が続けて出す。
+- `Customers/<顧客>/profile.md`: その顧客の事業・組織・技術の構成・エンジニアの好み（顧客の profile。行ごとに出典と日付）。`customer-profile` が作り、顧客向けの資料の作り始めに読む。30 日より古ければ取り直す。
 - `Customers/`・`Internal/`・`Research/`、`references_index.md`: 資料と台帳。`Research/deck_research/` は `deck-research` の調べ直しの記録（`state.md`・`log/`。代表の 3 枚の選び方の記録も）。
-- `.factory/`: スクリプトが書く記録。`ledger.jsonl`（決まりの台帳。修正の指示、決まりの ID ごとの出典と再発、dreaming の提案・適用・却下とプラグインへの提案の Issue、判断待ちと答え、deck-review の指摘の結果。`deck-practices/scripts/ledger.py` が読み書きする）、`lint_runs.jsonl`（`lint.py --stats` が読む）、`dreaming/last_run`・`dreaming/log/`・`dreaming/backup/`。
+- `.factory/`: スクリプトが書く記録。`ledger.jsonl`（決まりの台帳。修正の指示、決まりの ID ごとの出典と再発、dreaming の提案・適用・却下とプラグインへの提案の Issue、判断待ちと答え、deck-review の指摘の結果。`deck-practices/scripts/ledger.py` が読み書きする）、`lint_runs.jsonl`（`lint.py --stats` が読む）、`dreaming/last_run`・`dreaming/log/`・`dreaming/backup/`、`profile/`（`customer-profile` が取り直す前の顧客の profile）。
 
 自分だけの画像は `assets/` に置く。`slides.asset()` はここを先に探し、なければ `deck-build/assets/` を使う。
 
@@ -120,7 +122,7 @@ pi install git:github.com/mats16/ai-deck-factory        # git から
 
 | 層 | 置き場所 | 中身 | 誰が変えるか |
 |---|---|---|---|
-| 顧客の memory（その顧客の資料で、いちばん優先） | `Customers/<顧客>/memory.md` | その顧客の好みと、資料をまたいで効く相手のこと | 作る会話がその場で書く。dreaming は提案する。2 社以上で同じ趣旨なら `rules/` に寄せる |
+| 顧客の memory（その顧客の資料で、いちばん優先） | `Customers/<顧客>/memory.md` | その顧客の資料への好み（どう作るか。相手が何者かは `profile.md`） | 作る会話がその場で書く。dreaming は提案する。2 社以上で同じ趣旨なら `rules/` に寄せる |
 | ワークスペース（優先） | `AGENTS.md`、`rules/<スキル>/<ファイル>`、`rules/deck-build/checks.py` | その人・その組織の決まりと点検、修正の指示で育つもの | 作る会話がその場で戻す。dreaming は提案し、「適用」で当てる。経緯は決まりの台帳（`.factory/ledger.jsonl`）に残す（git は前提にしない） |
 | プラグイン | `skills/`（入った場所は読むだけ） | 誰が使っても同じ決まり、点検、スクリプト、テンプレート | `factory-kaizen` で Issue。持ち主が直してマージしたら `update` で届く |
 
@@ -188,6 +190,7 @@ gcloud の既定の OAuth クライアントで作った認証情報は、`googl
 - 2026-10-14: テンプレートの元（`[slides.themes.<名前>] base`・`[slides] base_template`）を `factory.toml` に持たない。`template.py <テーマ> --from-base <元の URL>` で、会話で言われたものを渡す。渡さなければ、白紙の pptx（`deck-build/assets/blank.pptx`。13.33 × 7.5 in、レイアウトは Blank だけ、スライド番号オン、ページ番号の枠のパディング 0。中身は `deck-build/assets/README.md`）を Google Slides に変換して Themes に上げ、そのままテンプレートにする。`base`・`base_template` が残っていれば、黙って白紙から作らないよう `template.py` が止まり、factory-doctor が要修正に出す。元を持たないので、合わせ直し（`--from-base` なし）の見本のページには元のテンプレートへのリンクを書かない。初めはユーザーが一般公開した白紙の Google Slides を既定の元にするつもりだったが、pptx なら個人のアカウントのファイルに頼らず、画面での作業（ページの大きさ、スライド番号、パディング）も要らないので、こちらにした。Slides API の `presentations.create` は `pageSize` を無視し（10 × 5.625 in になる）、変換せずに上げた pptx は Slides API で読めない。deck-template の C（テンプレートがない）も、新しいプレゼンを作る代わりにこの白紙を使い、自分で作るときの注意を残した（ユーザー「DO_NOT_DELETE_AI_DECK_FACTORY_BLANK はパブリック公開してるものなので、ai-deck-factory に組み込んで、特に指定がない場合のベースとして使って問題ありません。」、pptx から作る方法を聞いて「なるほど。ではそにらの方が都合が良いです」「ほぼ空でよければ、白紙の pptx ファイルをリポジトリに上げても良いかと」「…pptx を用いる方法に切り替えてください。」、「では factory.toml から base を消して欲しいです。設定で持たずに、チャット内で依頼された場合はそれを使う、指定されてない場合は blank.pptx から作る。でいいと思います」）。
 - 2026-10-15: 既定のテーマ（`[slides] default_theme`）を、テンプレートの一覧から選択式で選んで切り替えられるようにする。deck-template を何をするか言わずに呼んだときと、会話で入れるとき（テンプレートがそろったあと）に聞く。一覧（`slides.py themes`）には、共有テーマのフォルダに加え、`[drive] factory` の下の Themes にあって `factory.toml` に `url` のないテンプレートも「個人。」として出す（ユーザー「deck-template 直接呼び出し時などで、データフォルダ配下にあるテーマを一覧で表示し、選択式でデフォルトのテンプレートを選べるようにしたいです。（factory.toml の設定を切り替える）」「INSTALL.md を介した初期セットアップ時にも既定のテンプレートをなににするか聞きたいです」）。
 - 2026-10-15: 会話で入れるとき（INSTALL.md）に、定期の整理（dreaming）を回すかと時刻を聞き、今の環境のスケジューラーに登録する。スケジューラーごとに分けて書かず、エージェントが自分の道具から、会話を閉じても残り、この PC のワークスペースで、権限の確認で止まらずに回るものを選ぶ（T3 Code・Claude Code Desktop・Omnigent は schedule.md に値を書いた）。2 つ以上あれば、会話を動かしているアプリのもの（T3 Code の中なら T3 Code）にする。なければ（Claude Code の CLI・pi。`/loop` は会話を閉じると止まる）、launchd か cron の入れ方を示し、ユーザーが手で入れる（ユーザー「INSTALL.md を介した初期セットアップで dreaming のスケジュール設定についても聞くようにしてください。」「私は T3 Code 経由で Pi も Claude Code も使っているので T3 が好ましいですが、直接 Claude Code を利用しているユーザーには Claude Code 上で設定されるようにしたいです。」「Pi のようなスケジュール設定を持たないハーネスを直接使っている場合は、マニュアルで設定するように案内してください。」「T3 同様に Omnigent もサポートしてください。もしくは明示的にサポートしていなくても勝手にツール判断して使うようにしてください（こちらのほうが望ましい）」）。
+- 2026-10-15: 顧客の profile（`Customers/<顧客>/profile.md`。事業、組織、技術の構成、エンジニアの好みと文化、いまの取り組み）を持ち、スキル `customer-profile` で作る・取り直す・書き足す。memory（資料をどう作るか。修正の指示から育つ）とは分け、相手が何者かを行ごとに出典と日付つきで持つ。迷ったら文の形で分け、「〜である」（事実）は profile、「〜にする・しない」（指示）は memory にする。聞き手の立場と関心は、hook が毎回出す memory に残す。取り直すときは、ユーザーが言った行と届かなかった道具の行を残す。顧客向けの資料の作り始めに読み、30 日より古ければ取り直す（ユーザー「顧客ごとにカスタマイズしたスライドを定期作成したりするのに参考情報として使う顧客情報、事業の性質やエンジニアの嗜好などを profile として持てるようにしたいです。」「既に memory や rule など記せる場所はありますが、`~/.vibe/profile` のように持てる機構・更新できる機構を追加したいです。」、文の形で分ける案に「OKです。それで進めて動作確認してください。」）。
 
 ## 入れていないもの
 
@@ -197,6 +200,7 @@ gcloud の既定の OAuth クライアントで作った認証情報は、`googl
 
 - **hooks の残り（後回し）:** 前の検討の corrections・guard・review_gate。corrections（コンパクションの前に指摘を拾う）は、dreaming の報告の「取りこぼし」の数が続けて多ければ入れる（Claude Code と pi の両方に要る。pi にきっかけがあるかは確かめていない）。入れたのは `rules/` と顧客の memory を続けて出すものだけ。pi の `/skill:<名前>`（読むツールを通らない）では出ない。
 - **継続改善の残り:** コンパクションの前に拾う hook は、`ledger.py rules` の週ごとの取りこぼしの割合を見てから決める。顧客の memory の古さ（担当が変わった）は、食い違う発言が出たときに直すだけで、日付から外すことはしていない。ワークスペースの決まりの上書きは、ワークスペースの中でしか数えていない（ほかの人のワークスペースの上書きは、プラグインに上げる提案で届いたものだけ見える）。構成案のレビューは、見逃しの数だけを見ている。分母（その間に作った資料の数）は台帳になく、dreaming が報告で資料を仕上げた会話の数と並べるだけで、割合にはしていない。代表の 3 枚と `/deck-review` の見逃しには印を付けていない。
+- **顧客の profile の残り:** hook は profile を続けて出さない（作り始めに 1 回読む。memory と違って長いので、`構成案*.md` を開くたびに出すと文脈が膨らむ）。dreaming は、会話でユーザーが言った顧客のこと（事業・構成・好み）を profile に拾わない。作る会話がその場で書き足すだけ。取り直しは、作り始めに 30 日より古いときだけで、定期には回していない。書き足しの取りこぼしが多いか、作り始めに読み忘れが続いたら、dreaming の提案か hook に足す。
 - **スキルの中の経緯:** 2026-10-12 に、スキルの本文の持ち主の決めたこと（「ユーザーが決めた」と日付、ユーザーの言葉）を、決まりの ID に置き換えた。移した経緯は、持ち主のワークスペースの決まりの台帳に入れる（`git show <この直しの前>:skills/...` からも見られる）。測った日・調べた日・その日より前のファイルを指す日付は、意味が変わるので残した。Issue に顧客の名前が入らないかは、`kaizen.py open` が見て止める（`Customers/` の顧客と資料のフォルダの名前、`[factory] private` の語）。
 - **外部に出すとき:** 2026-10-12 に会社ごとの値をワークスペースに分けた。材料を集める道具は `factory.toml` の `[sources]`、社名・著作権表示・表紙のロゴは `[brand]`（`copyright` がないか仮の値なら組めない。factory-doctor が要修正）、テーマは `[slides.themes.<名前>]`・`[docs.themes.<名前>]`（`url`・`description`）、会社の素材はワークスペースの `assets/`、ドキュメントのテンプレートは `rules/doc-build/templates/`、会社の道具の使い方は `rules/`。プラグインに残る会社の前提は、組み込みのテーマ visual・company の色（Databricks のブランドの色）だけ。
 - **Documents を移す:** 顧客フォルダの `CLAUDE.md` は `memory.md` に名前を変える（factory-doctor が「顧客の memory」で出す）。`~/Documents` は今も自分の `.agents/skills/` で動いている（factory-doctor が「スキルの重なり」を出す）。移すときは、Documents の AGENTS.md の表を雛形の形（スキルの名前で指す。`rules/` も開く）にし、`.agents/skills/` の中核の 6 つを外し、`.agents/skills/dreaming/log/` を `.factory/dreaming/log/` に、`.agents/skills/deck-build/log/lint_runs.jsonl` を `.factory/lint_runs.jsonl` に移す。`deck-research` の記録は 2026-10-12 に `Research/deck_research/` へ移した。旧い場所の `.agents/skills/deck-research/log` は、移したときに進んでいた会話のための symlink なので、`.agents/skills/` と一緒に消す。ワークスペースの AGENTS.md の「方針を決めたあとを AI のレビューでそのまま作るか、人がレビューするかも選んでもらう」は、雛形の今の文（`[review] plan_reviewer` に従う）に替える（ワークスペースの決まりが優先するので、残すと毎回聞く。factory-doctor が「AGENTS.md の方針のレビュー」に出す）。

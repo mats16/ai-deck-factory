@@ -45,7 +45,7 @@ for d in <ワークスペース> /tmp; do
   (cd $d && claude plugin list --json) | python3 -c "import json,sys; [print(p['id'], p['scope'], p['enabled']) for p in json.load(sys.stdin) if 'deck' in p['id']]"
 done
 
-# 会話に読み込まれるスキル: ワークスペースでは ai-deck-factory:* の 10 個、ほかのフォルダでは 0
+# 会話に読み込まれるスキル: ワークスペースでは ai-deck-factory:* の 11 個、ほかのフォルダでは 0
 cd <ワークスペース> && claude -p ok --model haiku --max-turns 1 --output-format stream-json --verbose \
   | python3 -c "import json,sys; e=next(e for e in map(json.loads, sys.stdin) if e.get('subtype')=='init'); print(sorted(s for s in e['skills'] if s.startswith('ai-deck-factory:')))"
 ```
@@ -54,7 +54,7 @@ cd <ワークスペース> && claude -p ok --model haiku --max-turns 1 --output-
 
 | フォルダ | `plugin list` の enabled | 読み込まれたスキル |
 |---|---|---|
-| `~/adf-plugin-test`（入れたフォルダ） | true | `ai-deck-factory:` の 10 個（deck-build、deck-practices、deck-research、deck-review、deck-template、doc-build、dreaming、factory-doctor、factory-init、factory-kaizen） |
+| `~/adf-plugin-test`（入れたフォルダ） | true | `ai-deck-factory:` の 11 個（customer-profile、deck-build、deck-practices、deck-research、deck-review、deck-template、doc-build、dreaming、factory-doctor、factory-init、factory-kaizen） |
 | `~/Documents` | false | `.agents/skills` の 6 つ（`ai-deck-factory:` が付かない。プラグインのものではない） |
 | `/tmp` | false | なし |
 | `~/adf-plugin-test/Internal`（入れたフォルダのサブフォルダ） | false | なし |
