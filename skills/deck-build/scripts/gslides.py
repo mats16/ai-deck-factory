@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 sys.dont_write_bytecode = True  # scripts/ に __pycache__ を残さない
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gapi, lint
-from slides import STAMP
+from slides import STAMP, page_numbers
 from gapi import DRIVE, PPTX, SLIDES, batch, file_id, folder_id, request, run, slide_ids, thumbnail, trash
 
 THREADS = 6  # サムネイルを並べて取る数。12 枚で約 5 秒（2026-10-07 に測った。PDF に書き出して画像にするのと同じ）
@@ -46,6 +46,13 @@ def text_of(p):
                     out.append(t)
         out += ["", "### Notes:", lint.note_text(s).strip(), ""]
     return "\n".join(out)
+
+
+def write_json(path, obj):
+    """書きかけで止まっても、前の中身か新しい中身のどちらかが残るように書く（別の名前に書いてから置き換える）。"""
+    with open(path + ".tmp", "w") as f:
+        json.dump(obj, f)
+    os.replace(path + ".tmp", path)
 
 
 def reuse_shots(d, ids, prev):
@@ -89,23 +96,30 @@ def cmd_check(src, *opts):
     gapi.CLOCK.lap("lint")
     ids = [s["objectId"] for s in p["slides"]]
     shots = f"{d}/shots.json"  # p-NN.png ごとの、取ったときのページの objectId
-    prev = json.load(open(shots)) if os.path.exists(shots) else []
+    try:
+        prev = json.load(open(shots))
+    except (OSError, ValueError):  # ない、か書きかけで切れた（止まったときなど）。記録がないものとして全ページを取る
+        prev = []
     old = glob.glob(f"{d}/p-*.png")
+    moved, why = 0, None
     if "--pages" in opts and len(old) != len(ids):  # ページが増えたり減ったりしたあとは、番号がずれるので全部を取り直す
         print(f"ページの数が変わった（画像 {len(old)} 枚 → {len(ids)} 枚）ので、--pages を使わずに全ページを取り直す")
-        opts = [o for o in opts if o != "--pages"]
-    moved, why = 0, None
+        opts, why = [o for o in opts if o != "--pages"], "ページの数が変わった"
+    if os.path.exists(shots):  # 画像を動かす・取るあいだに止まっても、次の check が古い記録で別のページの画像を使わないように、先に消す
+        os.remove(shots)
     if "--pages" in opts:
-        want = sorted({int(n) for n in opts[opts.index("--pages") + 1].split(",")})
+        want = sorted(page_numbers(opts))
+        if over := [n for n in want if n > len(ids)]:
+            sys.exit(f"--pages の {', '.join(map(str, over))} がない（{len(ids)} 枚）")
         man = [o if n in want else prev[n - 1] if len(prev) == len(ids) else None for n, o in enumerate(ids, 1)]
     else:
-        stamp = request("GET", f"{DRIVE}/files/{pid}?supportsAllDrives=true&fields=appProperties").get("appProperties", {}).get(STAMP)
-        if "--all" in opts:
-            why = "--all"
-        elif not prev:
-            why = "前に取った画像の記録がない"
-        elif p.get("revisionId") != stamp:
-            why = "slides.py build で組んだ版でない（画面で直されたか、ほかの道具で変えた）"
+        if not why:  # ページの数が変わったとき（上）は、もう全ページ
+            if "--all" in opts:
+                why = "--all"
+            elif not prev:
+                why = "前に取った画像の記録がない"
+            elif p.get("revisionId") != request("GET", f"{DRIVE}/files/{pid}?supportsAllDrives=true&fields=appProperties").get("appProperties", {}).get(STAMP):
+                why = "slides.py build で組んだ版でない（画面で直されたか、ほかの道具で変えた）"
         if why:
             want = list(range(1, len(ids) + 1))
             for f in old:  # ページが減ったときに古い画像を残さない
@@ -113,11 +127,12 @@ def cmd_check(src, *opts):
         else:
             want, moved = reuse_shots(d, ids, prev)
         man = ids
+    write_json(shots, [None if n in want else o for n, o in enumerate(man, 1)])  # 取り終えるまで、取るページの画像は記録に入れない
     gapi.CLOCK.lap("版の確かめ")
     with ThreadPoolExecutor(THREADS) as ex:
         list(ex.map(lambda n: save_thumb(pid, ids[n - 1], f"{d}/p-{n:02d}.png"), want))
     gapi.CLOCK.lap(f"画像 {len(want)} 枚")
-    json.dump(man, open(shots, "w"))
+    write_json(shots, man)
     pad = subprocess.run(["uv", "run", "-q", os.path.join(os.path.dirname(os.path.abspath(__file__)), "box_pad.py"), f"{d}/deck.json", d, *map(str, want)],
                          capture_output=True, text=True) if want else None  # 箱の下端と文字の間は、JSON では見積もれないので画像で測る（Pillow が要るので uv）
     gapi.CLOCK.lap("box_pad")
@@ -206,9 +221,52 @@ def selftest():
         want, moved = reuse_shots(d, ["c", "x", "a"], ["a", "b", "c"])  # c を先頭に、b を消して x を足した
         assert want == [2] and moved == 2 and sorted(os.listdir(d)) == ["p-01.png", "p-03.png"]
         assert open(f"{d}/p-01.png").read() == "c" and open(f"{d}/p-03.png").read() == "a"
+    check_selftest()
     hits = by_page([(lint.TWO_LINES, "p3 の見出し: 「x」"), ("絵文字", "p12: 「✅」"), ("扉", "13 枚。…")])
     assert hits == {3: [f"[{lint.TWO_LINES}] p3 の見出し: 「x」（見積もり）"], 12: ["[絵文字] p12: 「✅」"]}
     print("selftest ok")
+
+
+def check_selftest():
+    """cmd_check の画像と記録（shots.json）: 取る途中で止まっても、次の check が別のページの画像を使わない。Google は呼ばない。"""
+    import contextlib, io, shutil
+    pid, deck, fail = "zzselftest", {"ids": ["a", "b", "c"]}, set()
+    d = f"/tmp/slides_{pid[:8]}"
+    real = {k: globals()[k] for k in ("request", "save_thumb")}, lint.lint_slides, subprocess.run
+
+    def thumb(_, obj, out):
+        if obj in fail:
+            raise gapi.ApiError("429")
+        open(out, "w").write(obj)
+
+    globals().update(request=lambda m, u, *a, **k: {"appProperties": {STAMP: "rev"}} if "/files/" in u else
+                     {"title": "tmp", "revisionId": "rev", "slides": [{"objectId": o} for o in deck["ids"]]}, save_thumb=thumb)
+    lint.lint_slides, subprocess.run = lambda *a, **k: 0, lambda *a, **k: subprocess.CompletedProcess(a, 0, "", "")
+    shutil.rmtree(d, ignore_errors=True)
+    page = lambda n: open(f"{d}/p-{n:02d}.png").read()
+    try:
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            cmd_check(pid)
+            assert [page(n) for n in (1, 2, 3)] == ["a", "b", "c"]
+            deck["ids"], fail = ["c", "x", "a"], {"x"}  # 並べ替えて 1 枚足し、その画像を取るところで止まる
+            try:
+                cmd_check(pid)
+                raise AssertionError("止まらなかった")
+            except gapi.ApiError:
+                pass
+            fail.clear()
+            cmd_check(pid)
+            assert json.load(open(f"{d}/changed.json"))["pages"][0]["page"] == 2 and [page(n) for n in (1, 2, 3)] == ["c", "x", "a"]
+            open(f"{d}/shots.json", "w").write("[")  # 書きかけで切れた記録でも止まらず、全ページを取る
+            cmd_check(pid)
+            assert len(json.load(open(f"{d}/changed.json"))["pages"]) == 3
+            deck["ids"] = ["c", "x"]
+            cmd_check(pid, "--pages", "1")  # ページの数が変わったら、--pages でも全ページ
+            assert [x["page"] for x in json.load(open(f"{d}/changed.json"))["pages"]] == [1, 2]
+    finally:
+        globals().update(real[0])
+        lint.lint_slides, subprocess.run = real[1], real[2]
+        shutil.rmtree(d, ignore_errors=True)
 
 
 def main():

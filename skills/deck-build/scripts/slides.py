@@ -7,7 +7,7 @@ usage（資料の build/ で。pages.py は今いるフォルダのもの）:
                                           未解決のコメントがあれば止まる。直しを pages.py に入れてから --force で組み直す（--force は全ページを作り直す）。
                                           作り直したページを /tmp/slides_<ID の頭 8 字>/changed.json に、工程ごとの秒を標準エラーに出す
   slides.py lint [<ファイル>] [<URL か ID>] [--pages 3,5 | --all] [--talk]   組まずに、組む要求を手元で presentations.get の形にして lint をかける（テストの unit。
-                                          直すたびに回す）。既定は前に回したときから変わったページ（と要修正が残ったページ）。URL を省くと既定のテーマのテンプレートで見る
+                                          直すたびに回す）。既定は前に回したときから変わったページ（と要修正が残ったページ。デッキか規則が変わったら全ページ）。URL を省くと既定のテーマのテンプレートで見る
   slides.py dry [<ファイル>] [<URL か ID>]   組まずに make を走らせ、組むときの警告・枚数・ノートのないページを出す（既定は pages.py。子が書いた build/pages_<担当>.py を確かめる。
                                           URL を渡すと、表紙・扉のパターンとテーマをそのデッキから読む（読むだけ）。../slides.md の 2）
   slides.py themes   テーマの名前・説明・テンプレートがあるか・既定か。資料ごとに選ぶ（../../deck-practices/SKILL.md の「作業の始め方」の 5）。
@@ -17,7 +17,7 @@ usage（資料の build/ で。pages.py は今いるフォルダのもの）:
 テンプレートの管理は template.py。色は下の「色の役割」の名前で渡す。役割の名前はテーマの色（マスターの配色）を指すので、テンプレートを替えると色が変わる。
 見た目の決まりは ../../deck-practices/visual.md の 1。"""
 import ast, atexit, contextlib, functools, hashlib, importlib, io, itertools, json, math, os, re, shutil, subprocess, sys, tempfile, time, tomllib, urllib.error, urllib.parse, urllib.request
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 sys.dont_write_bytecode = True  # build/ と scripts/ に __pycache__ を残さない
@@ -237,8 +237,12 @@ def iconify(name, color=TEXT, w=512):
         return png(f"{svg}?color=%23{color}", w)
     try:  # 名前の間違いは、組むときに Slides API の「画像を取れない」としか出ないので、先に確かめる。既定の User-Agent は 403 になる
         urllib.request.urlopen(urllib.request.Request(svg, method="HEAD", headers={"User-Agent": "slides.py"}), timeout=15)
-        with open(ICONS_OK, "a") as f:
-            f.write(name + "\n")
+        icons_ok().add(name)  # 同じ名前を別の色で使っても、もう問い合わせない
+        try:
+            with open(ICONS_OK, "a") as f:
+                f.write(name + "\n")
+        except OSError:  # 書けなければ、次の回も問い合わせるだけ
+            pass
     except urllib.error.HTTPError as e:
         if e.code == 404:
             sys.exit(f"アイコンがない: {name}。名前は https://icon-sets.iconify.design/ で探す")
@@ -246,12 +250,15 @@ def iconify(name, color=TEXT, w=512):
     return png(f"{svg}?color=%23{color}", w)
 
 
-ICONS_OK = Path(tempfile.gettempdir()) / "slides_iconify_ok"  # あると確かめたアイコンの名前。組み直すたび・lint のたびに問い合わせない（53 枚で 35 個、2.5 秒かかった）
+ICONS_OK = Path(tempfile.gettempdir()) / f"slides_iconify_ok_{gapi.user()}"  # あると確かめたアイコンの名前。組み直すたび・lint のたびに問い合わせない（53 枚で 35 個、2.5 秒かかった）。人ごと（Linux の /tmp は人で共有する）
 
 
 @functools.cache
 def icons_ok():
-    return set(ICONS_OK.read_text().split()) if ICONS_OK.is_file() else set()
+    try:
+        return set(ICONS_OK.read_text().split())
+    except OSError:
+        return set()
 
 
 def asset(path):
@@ -324,6 +331,16 @@ def thumb_url(src, page):
     return thumbnail(pid, slide_ids(pid)[int(page) - 1])["contentUrl"]
 
 
+_RUN = [0]
+
+
+def new_run():
+    """Deck の ID の頭。ミリ秒の時刻で、同じプロセスの中でも繰り返さない。build は前に組んだページを残すので、その ID とぶつけない
+    （前の秒の下 5 けたは 27.8 時間ごとに同じ値になり、残したページの ID と同じ ID を作ると batchUpdate が止まる）。"""
+    _RUN[0] = max(time.time_ns() // 1_000_000, _RUN[0] + 1)
+    return f"r{_RUN[0]}"
+
+
 class Deck:
     """ページを組む要求（batchUpdate）を貯める。Google の API は build まで呼ばない。"""
 
@@ -335,7 +352,7 @@ class Deck:
         self.nofoot = set()  # フッターとページ番号を置かないページ（全面に画像を貼るページなど）
         self.round_groups = []  # 角丸・正円の背景と文字の枠を、文字を書き終わってから 1 つにまとめる
         self.warnings = []   # 組むときの見込みの警告（折り返し、見出しを縮めた、など）
-        self.run = f"r{int(time.time()) % 100000}"  # 組み直すときに前の ID とぶつけない
+        self.run = new_run()  # 組み直すときに、前の ID（残したページのものも）とぶつけない
 
     def oid(self):
         self.n += 1
@@ -1023,8 +1040,8 @@ PAGE_HASH = re.compile(r"h([0-9a-f]{16})$")  # build がページの ID の末�
 
 def pages_of(deck, reqs):
     """(要求ごとの持ち主のページ, ページごとの中身のハッシュ, ページごとのリンク先のページ)。build が、変わったページだけを作り直すのに使う。
-    ハッシュは、そのページの要求の ID を出てくる順の番号に、手元の画像をパスと更新時刻に置き換えて取る（組むたびに変わる ID で変わらない）。
-    ページへのリンクは、リンク先のハッシュを入れる（リンク先が変われば、リンク元も変わる）。ノートも入れる。"""
+    ハッシュは、そのページの要求の ID を出てくる順の番号に、手元の画像を中身のハッシュに置き換えて取る（組むたびに変わる ID で変わらない）。
+    ページへのリンクは、リンクの場所にリンク先のハッシュを入れる。ノートも入れる。"""
     own, owner, per, links = {}, [], defaultdict(list), defaultdict(set)
     for r in reqs:
         (k, v), = r.items()
@@ -1041,13 +1058,24 @@ def pages_of(deck, reqs):
         per[pg].append(r)
         if t := v.get("style", {}).get("link", {}).get("pageObjectId"):
             links[pg].add(t)
-    img = lambda m: json.dumps(f"@IMG:{deck.images[int(m.group(1))]}:{os.path.getmtime(deck.images[int(m.group(1))])}")
-    base = {}
+    files = {}
+
+    def img(m):  # 手元の画像は中身のハッシュにする（同じパスのまま中身を替えても作り直す）
+        f = deck.images[int(m.group(1))]
+        if f not in files:
+            files[f] = hashlib.sha256(Path(f).read_bytes()).hexdigest()
+        return json.dumps(f"@IMG:{files[f]}")
+
+    sha = lambda t: hashlib.sha256(t.encode()).hexdigest()
+    body, base = {}, {}
     for s in deck.slides:
         ids = {}
-        body = re.sub(rf'"{deck.run}_\d+', lambda m: '"#' + str(ids.setdefault(m.group(), len(ids))), json.dumps(per[s], sort_keys=True))
-        base[s] = hashlib.sha256((re.sub(r'"@IMG(\d+)"', img, body) + json.dumps(deck.notes.get(s))).encode()).hexdigest()
-    digest = {s: hashlib.sha256((base[s] + "".join(base[t] for t in sorted(links[s]))).encode()).hexdigest()[:16] for s in deck.slides}
+        b = re.sub(r'"link": \{"pageObjectId": "([^"]+)"\}', r'"link": {"pageObjectId": "@LINK:\1"}', json.dumps(per[s], sort_keys=True))  # リンク先は下でハッシュにする
+        b = re.sub(rf'"{deck.run}_\d+', lambda m: '"#' + str(ids.setdefault(m.group(), len(ids))), b)
+        body[s] = re.sub(r'"@IMG(\d+)"', img, b) + json.dumps(deck.notes.get(s))
+        base[s] = sha(re.sub(r'@LINK:[^"]+', "@LINK", body[s]))
+    # リンク先のページのハッシュを、リンクの出てくる場所に入れる（リンク先が変われば、リンク元も変わる。1 ページの中でリンク先を入れ替えても変わる）
+    digest = {s: sha(re.sub(r'@LINK:([^"]+)', lambda m: base[m.group(1)], body[s]))[:16] for s in deck.slides}
     return owner, digest, links
 
 
@@ -1069,9 +1097,13 @@ def build(pid, deck, force=False):
     for o in olds if not force else []:
         if m := PAGE_HASH.search(o):
             have[m.group(1)].append(o)
+    new_n = Counter(digest.values())
+    twins = {h for h in new_n if new_n[h] > 1 or len(have[h]) > 1}  # 中身の同じページ（今の pages.py か、前に組んだデッキに 2 枚以上）
     for s in deck.slides:
         if have[digest[s]]:
             keep[s] = have[digest[s]].pop(0)
+    for s in [s for s in keep if any(digest[t] in twins for t in links[s])]:  # 中身の同じページのどれへのリンクかはハッシュで分からないので、リンク元を作り直す
+        keep.pop(s)
     while lost := [s for s in keep if links[s] - set(keep)]:  # 作り直すページへのリンクは、そのページの新しい ID を指すように、リンク元も作り直す
         for s in lost:
             keep.pop(s)
@@ -1351,14 +1383,31 @@ LOCAL_ONLY = ("手元の lint（組んでいない）。「（見積もり）」
               "見ていないもの: 画像で測る箱の余白（box_pad）、Google が描いた折り返し・画像の枠・ページ番号")
 
 
+def page_numbers(args):
+    """引数の並び args の --pages の次の値（「3,5」）を、ページの番号の集合にする。値がないか数でなければ止める（slides.py lint・gslides.py check）。"""
+    k = args.index("--pages") + 1
+    s = args[k] if k < len(args) else ""
+    if not re.fullmatch(r"\d+(,\d+)*", s):
+        sys.exit(f"--pages には 1 から始まるページの番号を「3,5」の形で渡す: {s!r}")
+    return {int(n) for n in s.split(",")}
+
+
+def clean_after(clean, hashes, pages, bad):
+    """lint_local が残す、要修正のなかったページのハッシュ。hashes はページの順のハッシュ、pages は今回見たページ、bad は要修正の出たページ（番号）。
+    見たページで要修正のなかったものを足し、見なかったページは前の記録を残す。要修正の出たページのハッシュは外す（同じ中身のページが別の番号で通っていても）。"""
+    seen = {h for i, h in enumerate(hashes, 1) if i in pages and i not in bad}
+    return ((clean & set(hashes)) | seen) - {h for i, h in enumerate(hashes, 1) if i in bad}
+
+
 def lint_local(path="pages.py", url=None, talk=False, pages=None):
     """[slides_py-018] 組まずに path の make(d) から組む要求を作り、presentations.get の形に組み立てて（local_json）lint をかける（テストの unit。直すたびに回す）。
     Google からはデッキ（url を省くと既定のテーマのテンプレート）の masters・layouts を読むだけ。pages（番号の集合）のページの指摘だけを出す。
-    pages が None なら、前回この pages.py に回したときから変わったページと、前回の要修正が残ったページ（ページの中身のハッシュ pages_of で見る）。
-    デッキ全体の指摘（扉・結論バンドの数など）はいつも出す。組んで画像を取るのは区切りだけにする（../slides.md の 1）。"""
+    pages が None なら、前回この pages.py に同じデッキと同じ規則で回したときから変わったページと、前回の要修正が残ったページ（ページの中身のハッシュ pages_of で見る）。
+    デッキ全体の規則（扉・結論バンドの数など）とワークスペースの点検はいつも全ページを見る。組んで画像を取るのは区切りだけにする（../slides.md の 1）。"""
     if Path(path).parent != Path("."):
         sys.exit(f"lint はファイルのあるフォルダ（build/）で、名前だけを渡して回す: {path}")
-    p = request("GET", f"{SLIDES}/{file_id(url) if url else template_id()}?fields=title,masters,layouts")
+    src = file_id(url) if url else template_id()
+    p = request("GET", f"{SLIDES}/{src}?fields=title,masters,layouts")
     use_layouts(p)
     use_font(deck_font(p))
     use_theme(theme_table(deck_theme(p)))
@@ -1371,10 +1420,15 @@ def lint_local(path="pages.py", url=None, talk=False, pages=None):
         deck.finish()
     reqs = json.loads(resolved(deck, p))
     _, digest, _ = pages_of(deck, reqs)
-    state = Path(tempfile.gettempdir()) / f"slides_lint_{hashlib.sha1(str(Path(path).resolve()).encode()).hexdigest()[:8]}.json"
+    ws = gapi.find_factory()
+    rules = [Path(__file__).with_name("lint.py"), Path(__file__)] + ([ws.parent / "rules" / "deck-build" / "checks.py"] if ws else [])
+    key = "\0".join([str(Path(path).resolve()), src, str(talk), json.dumps(p, sort_keys=True)] + [f.read_text() if f.is_file() else "" for f in rules])  # lint の結果を変えるもの（見るデッキとそのマスター・レイアウト、--talk、規則の lint.py・slides.py・ワークスペースの checks.py）が変われば、前の記録を使わない
+    state = Path(tempfile.gettempdir()) / f"slides_lint_{gapi.user()}_{hashlib.sha1(key.encode()).hexdigest()[:8]}.json"
     clean = set(json.loads(state.read_text())) if state.is_file() else set()  # 前に見て、要修正のなかったページのハッシュ
     if pages in (None, "all"):
         pages = {i for i, s in enumerate(deck.slides, 1) if pages == "all" or not state.is_file() or digest[s] not in clean}
+    elif over := sorted(pages - set(range(1, len(deck.slides) + 1))):
+        sys.exit(f"--pages の {', '.join(map(str, over))} がない（{len(deck.slides)} 枚）")
     for chunk in re.split(r"(?m)^(?=警告: \[p\d+\])", err.getvalue()):  # 警告の文に改行が入ることがある
         if not (w := re.match(r"警告: \[p(\d+)\]", chunk)) or int(w.group(1)) in pages:
             print(chunk, end="", file=sys.stderr)
@@ -1382,9 +1436,8 @@ def lint_local(path="pages.py", url=None, talk=False, pages=None):
     import lint
     r = lint.Report()
     hard = lint.lint_slides(q, r, "差し替え用" in q["title"], talk, pages)
-    bad = {lint.hit_page(h) for k in lint.HARD_NAMES for h in r.hits.get(k, [])}
-    seen_clean = {digest[s] for i, s in enumerate(deck.slides, 1) if i in pages and i not in bad}  # 今回見て、要修正のなかったページ
-    state.write_text(json.dumps(sorted(seen_clean | (clean & set(digest.values())))))  # 見なかったページは、前の記録を残す（今のデッキにあるものだけ）
+    bad = {lint.hit_page(h) for k in lint.HARD_NAMES | r.extra_hard for h in r.hits.get(k, [])}
+    state.write_text(json.dumps(sorted(clean_after(clean, [digest[s] for s in deck.slides], pages, bad))))
     warnings = sum(int(re.match(r"\[p(\d+)\]", w).group(1)) in pages for w in deck.warnings)
     print(f"\n{LOCAL_ONLY}\n" + json.dumps({"file": path, "slides": len(deck.slides), "pages": sorted(pages), "warnings": warnings}, ensure_ascii=False))
     if hard:
@@ -1855,15 +1908,47 @@ def selftest_diff():
         lint.lint_slides(q, r := lint.Report(), only={3})
     assert not r.hits[lint.NO_NOTES] or all(h.startswith("p3") for h in r.hits[lint.NO_NOTES])  # 選んだページの指摘だけ
     assert "p3" in r.hits[lint.NO_NOTES]
+    with contextlib.redirect_stdout(io.StringIO()):
+        lint.lint_slides(dict(q, slides=q["slides"][1:]), r := lint.Report(), only={2})  # 表紙を外したデッキの 2 枚目だけを見ても
+    assert r.hits[lint.NO_COVER]  # 「1 枚目が表紙でない」（デッキ全体の規則）は絞らない
 
     # ページのハッシュ: 組むたびに変わる ID では変わらず、中身が変わったページと、そこへリンクするページだけが変わる
     _, h1, links = pages_of(d, json.loads(resolved(d, p)))
     e = make_deck(make("リード"), "t")
+    assert e.run != d.run  # 続けて作っても、ID の頭は別
+    for bad_arg in ([], ["3,x"], ["3,"]):
+        try:
+            page_numbers(["--pages", *bad_arg])
+            raise AssertionError(f"--pages {bad_arg!r} を通した")
+        except SystemExit:
+            pass
+    assert page_numbers(["lint", "--pages", "3,5", "--talk"]) == {3, 5}
+    assert clean_after({"A", "B", "Z"}, ["A", "B", "A", "C"], {3, 4}, {3}) == {"B", "C"}  # 通っていた A も、今回要修正なら外す。消えたページ（Z）は落とす
+    assert clean_after(set(), ["A", "A"], {1, 2}, {None, 2}) == set()  # 同じ中身の 2 枚のうち 1 枚が要修正（デッキ全体の要修正の None は数えない）
     _, h2, _ = pages_of(e, json.loads(resolved(e, p)))
     f = make_deck(make("別のリード"), "t")
     _, h3, _ = pages_of(f, json.loads(resolved(f, p)))
     assert list(h1.values()) == list(h2.values()) and links[d.slides[2]] == {d.slides[1]}
     assert [a == b for a, b in zip(h1.values(), h3.values())] == [True, False, False]
+
+    def swap(a, b):  # 1 枚目から 2 枚目・3 枚目へのリンク（a, b の順に置く）と、手元の画像
+        def m(d):
+            s = d.page("S")
+            d.text(s, X, Y_BODY, W, 1, [("先 1", {"link": a}), "、", ("先 2", {"link": b})])
+            d.image(s, img, X, 3, 1, 1)
+            d.page("二")
+            d.page("三")
+        return m
+    with tempfile.TemporaryDirectory() as t:
+        img = os.path.join(t, "x.png")
+        Path(img).write_bytes(b"1")
+        hs = [pages_of(e, json.loads(resolved(e, p)))[1][e.slides[0]] for e in (make_deck(swap(2, 3), "t"), make_deck(swap(3, 2), "t"))]
+        assert hs[0] != hs[1]  # 1 ページの中でリンク先を入れ替えたら変わる
+        st = os.stat(img)
+        Path(img).write_bytes(b"2")
+        os.utime(img, ns=(st.st_atime_ns, st.st_mtime_ns))  # 同じパス・同じ更新時刻のまま中身を替える
+        e = make_deck(swap(2, 3), "t")
+        assert pages_of(e, json.loads(resolved(e, p)))[1][e.slides[0]] != hs[0]
 
     # build: 前に組んだページと同じハッシュのページは残し、変わったページだけを作って、古いページを消し、順をそろえる
     sent, live, real = [], [], {k: globals()[k] for k in ("request", "batch", "revision")}
@@ -1906,6 +1991,19 @@ def selftest_diff():
             sent.clear()
             build("x" * 10, f, force=True)
             assert sum("createSlide" in r for r in sent[0]) == 3 and len(live) == 3  # --force は全部
+
+            def twin(n, to):  # 1 枚目から、中身の同じ n 枚のうち to 枚目へリンクする
+                def m(d):
+                    d.text(d.page("S"), X, Y_BODY, W, 1, ["出典: ", ("先", {"link": to})])
+                    for _ in range(n):
+                        d.page("同じ")
+                return m
+            build("x" * 10, make_deck(twin(2, 3), "t"), force=True)
+            first = live[0]
+            sent.clear()
+            build("x" * 10, make_deck(twin(1, 2), "t"))  # 3 枚目を消し、2 枚目へリンクし直す（S のハッシュは変わらない）
+            link = next(r["updateTextStyle"]["style"]["link"] for rs in sent for r in rs if "link" in r.get("updateTextStyle", {}).get("style", {}))
+            assert live[0] != first and link == {"pageObjectId": live[1]} and len(live) == 2, (first, live, link)  # S を作り直し、残ったページを指す
     finally:
         globals().update(real)
         gapi.guard, gapi.stamp, COPYRIGHT = old_g, old_s, old_c
@@ -1923,7 +2021,11 @@ def main():
     if a[:1] == ["dry"] and len(a) <= 3:
         return dry(next((x for x in a[1:] if x.endswith(".py")), "pages.py"), next((x for x in a[1:] if not x.endswith(".py")), None))
     if a[:1] == ["lint"]:
-        pick = {int(n) for n in a[a.index("--pages") + 1].split(",")} if "--pages" in a else "all" if "--all" in a else None
+        if bad := [x for x in a[1:] if x.startswith("--") and x not in ("--pages", "--all", "--talk")]:
+            sys.exit(f"slides.py lint が知らないフラグ: {' '.join(bad)}（--pages 3,5・--all・--talk）")
+        if "--pages" in a and "--all" in a:
+            sys.exit("slides.py lint の --pages と --all は、どちらか 1 つだけ渡す")
+        pick = page_numbers(a) if "--pages" in a else "all" if "--all" in a else None
         rest = [x for i, x in enumerate(a[1:], 1) if not x.startswith("--") and a[i - 1] != "--pages"]
         return lint_local(next((x for x in rest if x.endswith(".py")), "pages.py"), next((x for x in rest if not x.endswith(".py")), None), "--talk" in a, pick)
     if not (a[:1] == ["build"] and len(a) >= 2 or a[:1] == ["new"] and len(a) >= 3):

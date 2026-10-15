@@ -3,7 +3,7 @@
 認証は単独で動く（gcloud も、ほかの Google のスキルも要らない）。トークンは、環境変数 GOOGLE_OAUTH_ACCESS_TOKEN、なければ
 authorized_user の認証情報の JSON（GOOGLE_APPLICATION_CREDENTIALS、なければ gcloud の ADC のファイル）の refresh_token で取る。401・403 や認証情報がないときは factory-doctor で確かめる。
 usage: python3 gapi.py --selftest"""
-import datetime, functools, json, os, re, sys, tempfile, threading, time, tomllib, urllib.error, urllib.parse, urllib.request, uuid
+import datetime, functools, getpass, json, os, re, sys, tempfile, threading, time, tomllib, urllib.error, urllib.parse, urllib.request, uuid
 from pathlib import Path
 
 SLIDES = "https://slides.googleapis.com/v1/presentations"
@@ -33,8 +33,8 @@ def window_end(body, now=None):
             t = datetime.datetime.fromisoformat(v.replace("Z", "+00:00")).timestamp()
     except ValueError:
         return None
-    end = t + 60 + 1  # 1 秒の余裕（時計のずれ）
-    return end if end > (now or time.time()) - 60 else None  # 古すぎる値は読み違えとみなす
+    end, now = t + 60 + 1, now or time.time()  # 1 秒の余裕（時計のずれ）
+    return end if now - 60 < end <= now + 65 else None  # 古すぎる値と、1 分より先の値は読み違えとみなす（待ちすぎない）
 
 
 class Clock:
@@ -128,15 +128,19 @@ def token():
     return _TOK
 
 
-def request(method, url, body=None, raw=None, ctype="application/json", binary=False):
-    """JSON を辞書で返す（binary=True ならバイト列）。429 は待って取り直す（サムネイルは 1 分あたりの上限がある）。"""
+def request(method, url, body=None, raw=None, ctype="application/json", binary=False, paced=False):
+    """JSON を辞書で返す（binary=True ならバイト列）。429 は待って取り直す（サムネイルは 1 分あたりの上限がある）。
+    paced=True（ページの画像）なら、送るたびに（429 の取り直しも）上限を見越して待つ（pace）。待った秒は WAITED・PACED に足す。"""
     data = raw if raw is not None else (json.dumps(body).encode() if body is not None else None)
     headers = {"Authorization": f"Bearer {token()}", "Content-Type": ctype}
     if qp := factory().get("google", {}).get("quota_project"):
         headers["x-goog-user-project"] = qp  # gcloud の既定の OAuth クライアントで取ったトークンは、これがないと 403
     for wait in (5, 15, 30, 60, None):
         if (hold := _HOLD[0] - time.time()) > 0:  # ほかの取り手が 429 を受け、分の枠が明けるのを待っている
+            WAITED.append(hold)
             time.sleep(hold)
+        if paced:
+            pace()
         try:
             with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=headers, method=method)) as r:
                 b = r.read()
@@ -144,10 +148,13 @@ def request(method, url, body=None, raw=None, ctype="application/json", binary=F
         except urllib.error.HTTPError as e:
             body = e.read().decode(errors="replace")
             if e.code == 429 and wait:
-                with _LOCK:  # 枠が分かれば、明けるまで待つ（取り手がそろって 5・15・30 秒待つより短い）。分からなければ、5・15・30・60 秒
+                with _LOCK:  # 枠が分かれば、明けるまで待つ（取り手がそろって 5・15・30 秒待つより短い）。分からないか、もう明けている（時計のずれ）なら、5・15・30・60 秒
                     end = window_end(body)
-                    _HOLD[0] = max(_HOLD[0], end or 0)
-                    w = max(_HOLD[0] - time.time(), 0.5) if end else wait
+                    if end and end > time.time():
+                        _HOLD[0] = max(_HOLD[0], end)
+                        w = _HOLD[0] - time.time()
+                    else:
+                        w = wait
                 WAITED.append(w)
                 time.sleep(w)
                 continue
@@ -212,34 +219,47 @@ def slide_ids(pid):
     return [s["objectId"] for s in request("GET", f"{SLIDES}/{pid}?fields=slides(objectId)").get("slides", [])]
 
 
+def user():
+    """この機械の使っている人の名前。手元の記録のファイルを人ごとに分ける（Linux の /tmp は人で共有する）。取れなければ "user"。"""
+    try:
+        return getpass.getuser()
+    except Exception:  # 環境変数も passwd もない（コンテナなど）。getpass は版によって OSError か KeyError を出す
+        return "user"
+
+
 THUMB_PER_MIN = 60  # ページの画像は 1 人 1 分 60 回まで（Slides API の expensive read。https://developers.google.com/workspace/slides/api/limits）
-THUMB_LOG = os.path.join(tempfile.gettempdir(), "gapi_thumbnails")  # この機械で画像を取った時刻。ほかの会話・子の確かめと上限を分け合う
+THUMB_LOG = os.path.join(tempfile.gettempdir(), f"gapi_thumbnails_{user()}")  # この機械で画像を取った時刻。ほかの会話・子の確かめと上限を分け合う（上限は人ごとなので、ファイルも人ごと）
 PACED = []  # 上限を見越して待った秒（pace が足す）
 
 
 def pace(path=THUMB_LOG, limit=THUMB_PER_MIN, window=61):
     """ページの画像を取る前に呼ぶ。この機械で直前の window 秒に limit 回取っていたら、空くまで待つ（超えると 429 で、分の枠が明けるまで止まる。
     前の版の 5・15・30 秒の取り直しでは、2026-10-15 に 53 枚で測ると、最後の 6 枚が 52 秒ずつ待った）。ponytail: ほかの機械（CI など）で同じ人が取った分は数えない（429 の取り直しが拾う）"""
-    import fcntl
+    try:
+        import fcntl
+    except ImportError:  # Windows。見越さない（429 の取り直しが拾う）
+        return
     while True:
-        with open(path, "a+") as f:
-            fcntl.flock(f, fcntl.LOCK_EX)  # 同じ機械の会話・子が同じファイルを読み書きする
-            f.seek(0)
-            now = time.time()
-            ts = sorted(t for t in map(float, f.read().split()) if now - t < window)
-            if len(ts) < limit:
+        try:
+            with open(path, "a+") as f:
+                fcntl.flock(f, fcntl.LOCK_EX)  # 同じ機械の会話・子が同じファイルを読み書きする
                 f.seek(0)
-                f.truncate()
-                f.write(" ".join(map(str, ts + [now])))
-                return
+                now = time.time()
+                ts = sorted(float(t) for t in re.findall(r"\d+(?:\.\d+)?", f.read()) if now - float(t) < window)  # 数でないものは読み飛ばす
+                if len(ts) < limit:
+                    f.seek(0)
+                    f.truncate()
+                    f.write(" ".join(map(str, ts + [now])))
+                    return
+        except OSError:  # 読み書きできなければ見越さない（429 の取り直しが拾う）
+            return
         PACED.append(w := ts[len(ts) - limit] + window - now)
         time.sleep(w)
 
 
 def thumbnail(pid, obj):
     """Google が描いたページの画像（1600 × 900）の情報。contentUrl は 30 分で切れ、知っていれば誰でも開ける（人に見せない）。上限を見越して待つ（pace）。"""
-    pace()
-    return request("GET", f"{SLIDES}/{pid}/pages/{obj}/thumbnail?thumbnailProperties.thumbnailSize=LARGE&thumbnailProperties.mimeType=PNG")
+    return request("GET", f"{SLIDES}/{pid}/pages/{obj}/thumbnail?thumbnailProperties.thumbnailSize=LARGE&thumbnailProperties.mimeType=PNG", paced=True)
 
 
 def run(main):
@@ -263,7 +283,32 @@ def selftest():
     body = '"quota_limit": "ExpensiveReadRequestsPerMinutePerUser",\n          "window_start_time": "1760000000",\n          "service": "slides.googleapis.com"'  # 429 の本文の形（2026-10-15）
     assert window_end(body, t0) == t0 + 61
     assert window_end('"window_start_time": "1760000000000"', t0) == t0 + 61 and window_end('"window_start_time": 1760000000', t0) == t0 + 61
+    assert window_end('"window_start_time": "%d"' % (t0 + 3600), t0) is None  # 1 時間先は読み違え（そこまで待たない）
     assert window_end("{}", t0) is None and window_end('"window_start_time": "x"', t0) is None and window_end('"window_start_time": "1"', t0) is None
+    import io
+    real = urllib.request.urlopen, time.sleep, factory, globals()["_TOK"], globals()["pace"]
+    calls, slept, paced = [], [], []
+
+    def fake(req, *a, **k):  # 1 回目は、もう明けた枠の 429。2 回目は通す
+        calls.append(req)
+        if len(calls) == 1:
+            raise urllib.error.HTTPError(req.full_url, 429, "x", {}, io.BytesIO(b'"window_start_time": "%d"' % (time.time() - 70)))
+        return io.BytesIO(b"{}")
+
+    globals().update(factory=lambda: {}, _TOK="t", pace=lambda: paced.append(1))
+    urllib.request.urlopen, time.sleep = fake, slept.append
+    try:
+        assert request("GET", "https://example.invalid", paced=True) == {} and slept == [5]  # 明けた枠なら、0.5 秒でなく前の 5 秒で取り直す
+        assert len(paced) == 2  # 取り直しも、上限を見越して数える
+        calls.clear()
+        _HOLD[0] = time.time() + 30  # ほかの取り手が 429 で枠を待っている
+        calls.append(0)  # 1 回目を 429 にしない
+        assert request("GET", "https://example.invalid") == {} and 25 < slept[-1] <= 30 and len(WAITED) == 2  # 枠を待った秒も数える
+    finally:
+        urllib.request.urlopen, time.sleep = real[0], real[1]
+        globals().update(factory=real[2], _TOK=real[3], pace=real[4])
+        WAITED.clear()
+        _HOLD[0] = 0.0
     with tempfile.TemporaryDirectory() as d:  # 上限に届いたら、いちばん古い 1 回が窓を出るまで待つ
         log = os.path.join(d, "t")
         open(log, "w").write(f"{time.time() - 0.6} {time.time() - 0.5}")
@@ -272,6 +317,10 @@ def selftest():
         assert time.time() - t0 < 0.1 and not PACED
         pace(log, limit=3, window=0.8)
         assert 0.1 < time.time() - t0 < 0.5 and len(PACED) == 1 and len(open(log).read().split()) <= 3
+        open(log, "w").write("x 1.5.6")  # 壊れた中身は読み飛ばす
+        pace(log, limit=3, window=0.8)
+        assert len(PACED) == 1
+        pace(os.path.join(d, "no", "such"), limit=3)  # 書けないところでも止まらない
     print("selftest ok")
 
 
