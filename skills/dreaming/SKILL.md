@@ -1,6 +1,6 @@
 ---
 name: dreaming
-description: このフォルダの指示（AGENTS.md）とスキルを、会話の記録から定期的に整理する（Devin の Dreaming にならった）。前回からの Claude Code・Codex・pi の会話と、決まりの台帳（`.factory/ledger.jsonl`）の指摘から、決まりに戻し忘れたユーザーの指示とくり返しを拾い、重なり・古い記述・切れたパスを見つけ、決まりが読まれているかを測る。決まりの変更は提案にして、ユーザーの「適用」を待つ。索引の追加など危なくないものだけはそのまま直す。月に 1 回は deck-research の調べ直しも回す。スケジューラー（T3 Code・Claude Code Desktop・Codex app・launchd）から prompt.txt の 1 行で呼ばれる。「整理して」「dreaming して」「提案を適用して」と頼まれたときも読む。
+description: このフォルダの指示（AGENTS.md）とスキルを、会話の記録から定期的に整理する（Devin の Dreaming にならった）。前回からの Claude Code・Codex・pi の会話と、決まりの台帳（`.factory/ledger.jsonl`）の指摘から、決まりに戻し忘れたユーザーの指示とくり返しを拾い、重なり・古い記述・切れたパスを見つけ、決まりが読まれているかを測る。決まりの変更は提案にして、ユーザーの「適用」を待つ。索引の追加など危なくないものだけはそのまま直す。月に 1 回は deck-research の調べ直しも回す。スケジューラー（T3 Code・Claude Code Desktop・Omnigent・Codex app・launchd など）から prompt.txt の 1 行で呼ばれる。「整理して」「dreaming して」「提案を適用して」と頼まれたときも読む。
 ---
 
 # 定期の整理（dreaming）
@@ -17,7 +17,7 @@ description: このフォルダの指示（AGENTS.md）とスキルを、会話�
 | ファイル | 中身 |
 |---|---|
 | `prompt.txt` | スケジューラーに渡す 1 行 |
-| [schedule.md](schedule.md) | T3 Code・Claude Code Desktop・Codex app・launchd への登録のしかた |
+| [schedule.md](schedule.md) | スケジューラーごとの登録のしかた |
 | `scripts/sessions.py` | 前回から後の会話から、ユーザーの発言・開いた決まりのファイル・道具のエラーを抜き出す（`--selftest` あり） |
 | `scripts/snapshot.sh` | 直す前に固めて残す（`save`）、その後の差分を出す（`diff`）、戻す（`restore`） |
 | `scripts/run.sh` | launchd・cron から `claude` か `codex` で回す |
