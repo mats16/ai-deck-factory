@@ -20,7 +20,7 @@ from gapi import DRIVE, GSLIDES, PPTX, SLIDES, batch, factory, factory_path, fil
 from lint import JA, cells, contrast, flatten, lum, paras, solid
 from slides import (BG, BLANK, CARD, COPYRIGHT_PT, DECOR, EMU, FONT, GA, HEAD, INSET, NAVY, NAVY_BLOCK, ON_RED, OSS, PAD, PANEL, PREVIEW, RED, RED_ON_NAVY,
                     RED_SOFT, RED_TEXT, RULE, SLOTS, STAGE_TEXT, SUB, SUB_ON_NAVY, TEXT, THEMES, WHITE, W, X, Y_BODY, Y_FOOT, build, cols, make_deck, number_style, rgb)
-from slides import FIXED as FIXED_DEFAULT, FOLDER, JP_FONTS, LAYOUT_MARK, NAMED, PROP, PUBLISHED, THEME_MARK, THEME_PROP, THEMES_DIR, VARIANTS, find_themes_folder, is_blank, need_brand, placeholders, theme_fixed, theme_font, use_layouts, use_theme
+from slides import FIXED as FIXED_DEFAULT, FOLDER, FONT_EM, JP_FONTS, LAYOUT_MARK, NAMED, PROP, PUBLISHED, THEME_MARK, THEME_PROP, THEMES_DIR, VARIANTS, find_themes_folder, is_blank, need_brand, placeholders, theme_fixed, theme_font, use_font, use_layouts, use_theme
 
 BLANK_PPTX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "blank.pptx")  # --from-base に元の URL を渡さないときの元。中身は ../assets/README.md
 NAMES = {"visual": "テンプレート（visual: このフォルダの色）", "company": "テンプレート（company: 会社の色をコントラストだけ調整）"}
@@ -198,7 +198,7 @@ def audit(url):
                 ja += 1
             else:
                 latin += 1
-    kind = lambda f: "和文あり（Google Fonts）" if f in JP_FONTS else "描けない（別の書体になる）" if f in NO_RENDER else "和文がない欧文の書体か、確かめていない書体"
+    kind = lambda f: "和文あり（Google Fonts）" if f in JP_FONTS else "欧文（和文は別のゴシック。字幅を測ってあり、font に書ける）" if f in FONT_EM else "描けない（別の書体になる）" if f in NO_RENDER else "和文がない欧文の書体か、確かめていない書体"
     out += ["", "## 書体", "", "| 書体 | 使っている文字の連なり | 和文 |", "|---|---|---|"]
     out += [f"| {f} | {n} | {kind(f) if f != '（継承）' else ''} |" for f, n in fonts.most_common()]
     out += ["", "## プレースホルダーの文字の大きさ（マスターとレイアウト）", ""] + [f"- {k}: {', '.join(f'{v:g}pt' for v in sorted(vs))}" for k, vs in sorted(sizes.items())]
@@ -211,6 +211,7 @@ def specimen(theme, origin=()):
     origin は、色の早見表の出典の行に足す元のテンプレートの部品（template() が作る。合わせ直しでは元が分からないので書かない）。"""
     T = palette(theme)
     use_theme(themes().get(theme, {}))  # 固定の色と著作権表示はテーマの値（slides.py build がデッキのテーマから読むのと同じ）
+    use_font(theme_font(themes().get(theme, {})))  # 字幅は、styles がマスターに書く書体のもの
     docs = "https://developers.google.com/workspace/slides"  # 出典の行の見本のリンク。どの会社のテンプレートにも入るので、会社に結びつかない公開のページ
 
     def on(fill, want=None):  # 色の箱に載せる文字の色。want が届かなければ（本文の地が暗いテーマの淡い色の箱など）、札の文字か白の届くほう

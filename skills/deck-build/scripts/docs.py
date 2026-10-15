@@ -468,7 +468,7 @@ def need_theme(doc):
 def load_theme(t):
     """テーマの版面・大きさ・色を入れる（style_reqs・put_table・Doc が読む値）。書いていない値は既定のまま。
     page・margins は mm（[幅, 高さ]・[上下, 左右]）、body・headings は pt、heading・table_head は 6 桁の色。description は使い分けの説明（cmd_themes）。
-    font・mono は本文と等幅の書体。font は和文を描けると確かめた書体（slides.py の JP_FONTS）だけ。文字の幅の見込みは Noto Sans JP と Cascadia Mono のまま。"""
+    font・mono は本文と等幅の書体。font は和文を描けると確かめた書体（slides.py の JP_FONTS）と DM Sans（FONT_EM）だけ。行送りの見込みは Noto Sans JP のまま。"""
     global PAGE_MM, MARGIN_TB_MM, MARGIN_LR_MM, TEXT_MM, TABLE_HEAD, SCALE, FONT, MONO
     FONT, MONO = theme_font(t), theme_mono(t)  # 書体の確かめはスライドと同じ（和文を描けない書体、リガチャのある等幅を止める）
     PAGE_MM = tuple(t.get("page", PAGE_MM))

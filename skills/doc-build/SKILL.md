@@ -88,7 +88,7 @@ title: Lakebase の導入の検討について              # 表紙を作らな
   headings = [12, 11, 10.5]     # 見出し 1〜3（pt）
   heading = "4A86E8"            # 見出しの色（6 桁）
   table_head = ["F3F3F3", "303F47"]  # 表の見出しの行の地と文字の色
-  font = "Noto Sans JP"         # 本文の書体。書けるのは slides.py の JP_FONTS（和文を描けると確かめた書体）だけ
+  font = "Noto Sans JP"         # 本文の書体。書けるのは slides.py の JP_FONTS（和文を描けると確かめた書体）と DM Sans（和文は Google が選ぶゴシック。Docs では確かめていない）
   mono = "Cascadia Mono"        # コードの等幅。リガチャのある書体（LIGATURE_MONO）は止める
   ```
   `font`・`mono` を書かなければ Noto Sans JP と Cascadia Mono。行送りと字の幅の見込みは、この 2 つで測った値のまま（違う書体では 1 行の字数や改ページがずれる）。Google Fonts にない名前は、黙って別の書体で描かれる。書いたら、そのテーマの文書を組み、`docs.py check` の「PDF の書体」と画像で見る。lint の書体の検査は、`docs.py check` が、`docs.py build` が文書に残した書体（組んだときのテーマの書体）と比べる。残していない文書（前の版で組んだもの）と、`lint.py` に文書の JSON をじかに渡したときは、既定の書体と比べる。

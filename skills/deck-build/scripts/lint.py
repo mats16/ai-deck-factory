@@ -11,7 +11,7 @@ from collections import Counter, defaultdict
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from slides import BAND_BOTTOM, COPYRIGHT_PT, EMU, FONT, INSET, LAYOUT_MARK, MONO_DEFAULT, STAGE_FILL, Y_BODY, Y_BODY_NOLEAD, Y_FOOT, Y_LEAD, deck_card, deck_font, deck_mono, em_width  # 版面・書体・字幅の見積もりは、組む側（slides.py）と同じものを使う
+from slides import BAND_BOTTOM, COPYRIGHT_PT, EMU, FONT, INSET, LAYOUT_MARK, MONO_DEFAULT, STAGE_FILL, Y_BODY, Y_BODY_NOLEAD, Y_FOOT, Y_LEAD, deck_card, deck_font, deck_mono, em_width, use_font  # 版面・書体・字幅の見積もりは、組む側（slides.py）と同じものを使う
 
 DOC_MIN_PT = 9  # ドキュメントの文字の下限。図表の題・出典・表の中・フッターが 9pt（visual_doc.md の 1）
 MIN_PT = 11  # [lint-001] スライドの文字の下限。社内資料の差し替え用（名前に「差し替え用」）は元の大きさのままなので見ない
@@ -508,6 +508,7 @@ def lint_slides(p, r, reuse=False, talk=False):
     titles, sizes, pairs, chars, dark, foot_secret, bands, claims, wraps = [], Counter(), defaultdict(list), [], [], [], [], [], []
     global MONO
     font, MONO = deck_font(p), deck_mono(p)  # 会社のテンプレートは会社の書体（deck-template）。等幅はデッキのテーマの mono
+    use_font(font)  # 字幅の見積もり（行数・折り返し）もデッキの書体のもの
     card = deck_card(p)  # カードの地。デッキのテーマの CARD（書かなければ白）
     for i, s in enumerate(p.get("slides", []), 1):
         scheme = scheme_of(p, s.get("slideProperties", {}).get("masterObjectId"))
@@ -1102,6 +1103,12 @@ def selftest():
     slides.theme_table = table
     res, _, hard = run(deck([(NAVY, [title(), shape(1, font=MONO_DEFAULT, text=["# 名前"])])]))
     assert len(res.hits[MONO_NG]) == 1 and MONO == MONO_DEFAULT  # テーマの名前のないデッキは既定に戻す
+    dm = deck([(NAVY, [shape(1, y=0.62, size=24, w=12, text=["見出し"], font="DM Sans"), shape(1, font="DM Sans")])])  # template.py が DM Sans で組んだテーマのデッキ
+    dm["masters"][0]["pageElements"] = [{"description": "ai-deck-factory theme=dm", "shape": {"placeholder": {"type": "SLIDE_NUMBER"}, "text": {"textElements": [{"textRun": {"style": {"fontFamily": "DM Sans"}}}]}}}]
+    res, _, hard = run(dm)
+    assert not res.hits[FONT_NG] and slides.TEXT_EM is slides.DM_SANS_EM  # 書体はマスターの DM Sans と比べ、字幅も DM Sans で見込む
+    run(deck([(NAVY, [title()])]))
+    assert slides.TEXT_EM is slides.ASCII_EM  # 次のデッキは、その書体の字幅に戻す
     copyright_text = "© 2026 Databricks, Inc. All rights reserved.｜Internal Only"
     for y, size, text, expected in ((7.08, 9, copyright_text, 0), (7.08, 8, copyright_text, 1),
                                     (2, 9, copyright_text, 1), (7.08, 9, "資料名", 1)):
