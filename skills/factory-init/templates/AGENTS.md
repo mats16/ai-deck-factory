@@ -45,6 +45,7 @@ AI Deck Factory（プラグイン）で、スライドとドキュメントを�
 | 場面 | 開くファイル |
 |---|---|
 | 資料を作る・直す（最初に） | `deck-practices/SKILL.md`（作業の始め方、残すもの、場面ごとに読むファイル） |
+| 顧客の profile を作る・取り直す | `customer-profile/SKILL.md`（事業・組織・技術の構成・エンジニアの好み。memory との分け方） |
 | 材料を集める | `deck-practices/materials.md`（検索・会議の記録・社内のチャットの使い方、`references.md` の台帳） |
 | 社内資料の流用 | `deck-practices/reuse.md`（4 つの段階の決め方、Google Slides の書き出しとページの画像） |
 | 構成案と言葉 | `deck-practices/content.md`（資料の種類ごとの書き分け、見出し、文体と出典） |
@@ -61,7 +62,7 @@ AI Deck Factory（プラグイン）で、スライドとドキュメントを�
 
 - **受けたらすぐ決まりの台帳に書く。** `python3 <スキル deck-practices のフォルダ>/scripts/ledger.py add --deck <資料のフォルダ> --quote "<ユーザーの言葉（できるだけ原文）>" --fix "<直した箇所>" --to <戻し先> --check <lint・レビュー・なし>`。ユーザーがはっきり決めたこと（案から選んだ、言い切った）には `--decided` を付ける。台帳はこのワークスペースの `.factory/ledger.jsonl`（顧客のことが入るので、外に写さない）。会話はコンパクションで要約になり、指示が落ちることがある。
 - **直したら、その場で戻す。** 片付けまで待たない。決まりには ID と短い理由だけを書き、日付と原文は決まりの台帳に残す（`deck-practices/rules.md` の「修正の指示の戻し方」）。報告の最後に、どの指示をどの決まりに戻したかを書く。
-- **エージェントのメモリに書いて済ませない。** 資料づくりの決まりは、ここか `rules/` に、顧客ごとの好みは顧客の `memory.md` に書く。エージェントのメモリはほかのエージェントから見えない。
+- **エージェントのメモリに書いて済ませない。** 資料づくりの決まりは、ここか `rules/` に、顧客ごとの好みは顧客の `memory.md` に、顧客のことは顧客の `profile.md` に書く。エージェントのメモリはほかのエージェントから見えない。
 
 ## 調べもの
 
@@ -90,14 +91,15 @@ AI Deck Factory（プラグイン）で、スライドとドキュメントを�
 
 ```
 Customers/<顧客>/<内容>_<YYYYMM か YYYYMMDD>/   … 顧客向けの資料。1 本につき 1 フォルダ（中の形と名前の付け方は deck-practices/SKILL.md の 1）
-Customers/<顧客>/memory.md                        … その顧客の好みと、資料をまたいで効く相手のこと（deck-practices/rules.md の「顧客の memory」）
+Customers/<顧客>/memory.md                        … その顧客の資料への好み（どう作るか）（deck-practices/rules.md の「顧客の memory」）
+Customers/<顧客>/profile.md                       … その顧客の事業・組織・技術の構成・エンジニアの好み（customer-profile）
 Internal/<内容>_<YYYYMM か YYYYMMDD>/           … 社内向けの資料（中の形は顧客向けと同じ）
 Research/<内容>_<YYYYMMDD>.md                    … 調べもの
 Research/deck_research/                           … deck-research の調べ直しの記録（state.md・log/）
 rules/<スキル>/<ファイル>                         … このワークスペースの決まり（プラグインの同じファイルへの足しと上書き）
 rules/deck-build/checks.py                        … このワークスペースの点検（lint が読み込む）
 assets/                                           … 自分だけの画像（slides.asset() が先に探す）
-.factory/                                         … スクリプトが書く記録（lint・dreaming）。手で直さない
+.factory/                                         … スクリプトが書く記録（lint・dreaming）と、顧客の profile の前の版。手で直さない
 factory.toml                                      … 人ごとに変わる設定値（スクリプトが読む）
 references_index.md                               … 過去に使った資料の索引
 ```

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """プラグインのスキルのファイルが読まれたら、ワークスペースの同じパスの rules/<スキル>/<ファイル> を続けて出す（開き忘れを防ぐ）。
-顧客の資料の 構成案*.md・社内メモ_*.md・references.md が読まれたら、その顧客の Customers/<顧客>/memory.md（好みと、資料をまたいで効く相手のこと）を続けて出す。
+顧客の資料の 構成案*.md・社内メモ_*.md・references.md が読まれたら、その顧客の Customers/<顧客>/memory.md（資料への好み。どう作るか）を続けて出す。
 決まりの層は skills/deck-practices/rules.md。Claude Code は hooks.json の PostToolUse（Read・Bash・Skill）、pi は extensions/rules.ts から呼ぶ。
 usage: rules_overlay.py claude   （標準入力に Claude Code の hook の JSON）
        rules_overlay.py pi       （標準入力に {"cwd", "text", "isPath"}。isPath は text が読んだファイルのパスのとき。出力は {"context": …}）
@@ -64,7 +64,7 @@ def overlays(cwd, text, skill=None, is_path=False):
     for p in memories(ws, cwd, text, is_path):
         if p.is_file() and p not in seen:
             seen.add(p)
-            mem.append(f"## 顧客の memory: {p.relative_to(ws)}\n\nこの顧客の好みと、資料をまたいで効く相手のこと。ワークスペースの決まりとプラグインより優先する。新しいユーザーの言葉と食い違えば、そちらに従って memory を直す（deck-practices/rules.md の「顧客の memory」）。\n\n{p.read_text()}")
+            mem.append(f"## 顧客の memory: {p.relative_to(ws)}\n\nこの顧客の資料への好み（どう作るか。相手の事業や構成は profile.md）。ワークスペースの決まりとプラグインより優先する。新しいユーザーの言葉と食い違えば、そちらに従って memory を直す（deck-practices/rules.md の「顧客の memory」）。\n\n{p.read_text()}")
     for name, f in refs:
         p = ws / "rules" / name / f
         if p.is_file() and p not in seen:
