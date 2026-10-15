@@ -77,7 +77,7 @@ AI Deck Factory のテンプレートは、`slides.py new` が複製する Googl
 6. **測る。** `python3 $K/template.py check acme`。役割の組ごとの比と、届かない組の直す案（色相と彩度を保ち、明るさだけを変えた色）を出す。直す案は会社のブランドの色を変えるので、前と後の色をユーザーに見せて決めてもらう（黙って写さない）。直す案を使わないなら、当てる色を替える。NG が 0 になるまで繰り返す。
 7. **作る。** `python3 $K/template.py acme --from-base <元の URL>`（C は URL を渡さない）。元を `[drive] factory` の下の Themes フォルダ（なければ作る）に複製し、マスターと Blank だけを残し、配色・書体・ページ番号を合わせ、見本のページ（表紙、章の扉、テーマの枠の早見表、テーマに入れない色の早見表、部品の 2 枚）を組む。URL は `[slides.themes.acme]` の `url` に書き込まれる（手で写さない）。
 8. **確かめる。** `python3 $K/gslides.py check <テンプレートの URL>`。要修正は 0、コントラストの一覧に出るのは見本の飾り（章番号）だけにする。全ページの画像を開き、書体が描けているか（明朝や別のゴシックになっていないか）、社名と著作権表示、会社の資料と並べて色に違和感がないかを見る。URL をユーザーに渡して見てもらう。
-9. **使い始める。** 既定にするなら `[slides] default_theme` を書き換える。デッキごとに選ぶなら `slides.py new <フォルダ> <名前> --theme acme`。全社に配るなら、作ったテンプレートを全社の共有テーマのフォルダ（`[drive] shared_themes`）に置く（Themes フォルダをそのまま共有テーマのフォルダにしてもよい）。ほかの人は `[slides.themes.acme]` に `url` を書くだけで、同じ値で組める（`../deck-build/slides.md` の 3 の slides-032）。
+9. **使い始める。** 既定にするなら `[slides] default_theme` を書き換える。デッキごとに選ぶなら `slides.py new <フォルダ> <名前> --theme acme`。全社に配るなら、作ったテンプレートを全社の共有テーマのフォルダ（`[drive] shared_themes`）に置く（Themes フォルダをそのまま共有テーマのフォルダにしてもよい）。2026-10-14 より前の `template.py` で作ったテンプレートには、Drive のプロパティにテーマの名前（`adf.theme`）がなく、置いても `slides.py themes` に出ない。先に持ち主が `template.py acme` で合わせ直す（配色・書体・見本のページも今の `factory.toml` で組み直す。factory-doctor の「共有テーマ」に出る）。ほかの人は `[slides.themes.acme]` に `url` を書くだけで、同じ値で組める（`../deck-build/slides.md` の 3 の slides-032）。
 
 ## 3 つの場合の違い
 

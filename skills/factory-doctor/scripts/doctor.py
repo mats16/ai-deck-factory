@@ -134,10 +134,13 @@ def check(ws, local=False):
         try:
             files, have = slides.shared_files(), {gapi.file_id(u) for u in temps.values()}  # 自分の Themes は読まない（slides.py themes が出す）
             names, new = [f["properties"][slides.THEME_PROP] for f in files], [f["properties"][slides.THEME_PROP] for f in files if f["id"] not in have]
+            bare = 0 if names else len(slides.theme_files(gapi.folder_id(dr["shared_themes"]), named=False))  # 名前のあるものが 1 つでもあれば数えない（base の写しのように、名前がなくて正しいものもある）
         except slides.READ_ERRORS:  # 開けないことは drive.shared_themes に出ている
             return out
         if dup := sorted({n for n in names if names.count(n) > 1}):
             warn("共有テーマ", f"同じ名前のテーマが 2 つ以上ある（どれを url で指すか迷う。古いほうをフォルダから外す）: {', '.join(dup)}")
+        elif bare:  # テーマの名前を書く前（2026-10-14 より前）の template.py で作ったもの
+            warn("共有テーマ", f"Google Slides が {bare} 個あるが、どれにもテーマの名前（{slides.THEME_PROP}）がない。持ち主が template.py <テーマ> で合わせ直すと書かれる")
         elif not names:
             warn("共有テーマ", "テーマがない。管理者が template.py で作ったテンプレートを置く（ほかのファイルは読まない）")
         else:
@@ -218,6 +221,27 @@ def selftest():
         assert "review.deck_review_max_rounds" not in kinds()
         with contextlib.redirect_stdout(io.StringIO()):
             assert main([tmp, "--local"]) == (0 if shutil.which("uv") else 1)
+        toml.write_text(toml.read_text().replace('shared_themes = ""', 'shared_themes = "shared"'))
+        import gapi, slides
+        cwd, saved = os.getcwd(), (gapi.request, slides.shared_files, slides.theme_files)
+        gapi.request = lambda method, url, *a, **k: {"user": {"emailAddress": "me"}} if "/about" in url else {"name": "x"}
+        shared = lambda: next(d for _, n, d in check(Path(tmp)) if n == "共有テーマ")
+
+        def unreadable(folder, named=True):
+            raise gapi.ApiError("404")
+        try:
+            slides.shared_files, slides.theme_files = lambda: [], lambda folder, named=True: [{"id": "a"}, {"id": "b"}]
+            assert "2 個あるが" in shared()  # 名前のない Slides だけ
+            slides.theme_files = lambda folder, named=True: []
+            assert shared().startswith("テーマがない")
+            slides.shared_files = lambda: [{"id": "a", "properties": {slides.THEME_PROP: "acme"}}]
+            slides.theme_files = lambda folder, named=True: 1 / 0  # 名前のあるものがあれば、もう 1 回は読まない
+            assert shared().startswith("acme")
+            slides.shared_files, slides.theme_files = lambda: [], unreadable
+            assert "共有テーマ" not in {n for _, n, _ in check(Path(tmp))}  # 読めなければ出さない（止まらない）
+        finally:
+            gapi.request, slides.shared_files, slides.theme_files = saved
+            os.chdir(cwd)
     print("selftest ok")
 
 

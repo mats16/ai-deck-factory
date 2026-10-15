@@ -847,11 +847,11 @@ def theme_description(name):
     return t.get("description") or THEME_NOTES.get(name, "")
 
 
-def theme_files(folder):
-    """Drive のフォルダ folder（ID）の Google Slides のうち、template.py がテーマの名前（PROP）を書いたもの。新しい順。"""
+def theme_files(folder, named=True):
+    """Drive のフォルダ folder（ID）の Google Slides のうち、template.py がテーマの名前（PROP）を書いたもの（named が False なら全部）。新しい順。"""
     q = urllib.parse.urlencode({"q": f"'{folder}' in parents and mimeType = '{GSLIDES}' and trashed = false", "orderBy": "modifiedTime desc", "pageSize": 1000,
                                 "fields": "files(id,description,properties)", "supportsAllDrives": "true", "includeItemsFromAllDrives": "true", "corpora": "allDrives"})
-    return [f for f in request("GET", f"{DRIVE}/files?{q}")["files"] if (f.get("properties") or {}).get(THEME_PROP)]
+    return [f for f in request("GET", f"{DRIVE}/files?{q}")["files"] if not named or (f.get("properties") or {}).get(THEME_PROP)]
 
 
 @functools.cache
