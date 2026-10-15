@@ -3,7 +3,7 @@
 認証は単独で動く（gcloud も、ほかの Google のスキルも要らない）。トークンは、環境変数 GOOGLE_OAUTH_ACCESS_TOKEN、なければ
 authorized_user の認証情報の JSON（GOOGLE_APPLICATION_CREDENTIALS、なければ gcloud の ADC のファイル）の refresh_token で取る。401・403 や認証情報がないときは factory-doctor で確かめる。
 usage: python3 gapi.py --selftest"""
-import functools, json, os, re, sys, time, tomllib, urllib.error, urllib.parse, urllib.request, uuid
+import datetime, functools, json, os, re, sys, tempfile, threading, time, tomllib, urllib.error, urllib.parse, urllib.request, uuid
 from pathlib import Path
 
 SLIDES = "https://slides.googleapis.com/v1/presentations"
@@ -14,6 +14,44 @@ PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentatio
 GSLIDES = "application/vnd.google-apps.presentation"
 GDOCS = "application/vnd.google-apps.document"
 _TOK = None
+WAITED = []  # 429 で待った秒（request が足す。Clock が回数と秒を出す）
+_HOLD = [0.0]  # 429 の分の枠が明ける時刻。並べて取るほかの取り手も、それまで送らない
+_LOCK = threading.Lock()
+
+
+def window_end(body, now=None):
+    """429 の本文の ErrorInfo の window_start_time（分の枠の始まり。2026-10-15 の本文では epoch の秒の文字列。ISO 8601・ミリ秒も読む）から、枠が明ける時刻（epoch 秒）。なければ None。
+    上限は 1 人 1 分（quota_unit 1/min/{project}/{user}）の枠で数えるので、枠が明ければ通る（2026-10-15 に 429 の本文で確かめた。枠の始まりは分の頭にそろっていない）。"""
+    m = re.search(r'"window_start_time"\s*:\s*"?([^",}]+)', body)
+    if not m:
+        return None
+    v = m.group(1).strip()
+    try:
+        t = float(v) / (1000 if float(v) > 1e11 else 1) if re.fullmatch(r"[\d.]+", v) else datetime.datetime.fromisoformat(v.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+    end = t + 60 + 1  # 1 秒の余裕（時計のずれ）
+    return end if end > (now or time.time()) - 60 else None  # 古すぎる値は読み違えとみなす
+
+
+class Clock:
+    """工程ごとの秒を数え、標準エラーに 1 行で出す（slides.py build・gslides.py check。記録から長い回の原因を分けるため）。429 と上限を見越した待ちも出す。"""
+
+    def __init__(self):
+        self.t, self.parts = time.time(), []
+
+    def lap(self, name):
+        now = time.time()
+        self.parts.append((name, now - self.t))
+        self.t = now
+
+    def show(self, what):
+        waits = (f"・429 の待ち {len(WAITED)} 回・計 {sum(WAITED):.0f} 秒" if WAITED else "") + (f"・上限を見越した待ち {len(PACED)} 回・計 {sum(PACED):.0f} 秒" if PACED else "")
+        print(f"{what}の時間（秒）: " + "・".join(f"{n} {s:.1f}" for n, s in self.parts) + f"・計 {sum(s for _, s in self.parts):.1f}{waits}"
+              + ("（待ちは並べた取り手ごとの合計）" if waits else ""), file=sys.stderr)
+
+
+CLOCK = Clock()  # 読み込んだときから数える
 
 
 def locate():
@@ -94,15 +132,23 @@ def request(method, url, body=None, raw=None, ctype="application/json", binary=F
     if qp := factory().get("google", {}).get("quota_project"):
         headers["x-goog-user-project"] = qp  # gcloud の既定の OAuth クライアントで取ったトークンは、これがないと 403
     for wait in (5, 15, 30, 60, None):
+        if (hold := _HOLD[0] - time.time()) > 0:  # ほかの取り手が 429 を受け、分の枠が明けるのを待っている
+            time.sleep(hold)
         try:
             with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=headers, method=method)) as r:
                 b = r.read()
                 return b if binary else (json.loads(b) if b else {})
         except urllib.error.HTTPError as e:
+            body = e.read().decode(errors="replace")
             if e.code == 429 and wait:
-                time.sleep(wait)
+                with _LOCK:  # 枠が分かれば、明けるまで待つ（取り手がそろって 5・15・30 秒待つより短い）。分からなければ、5・15・30・60 秒
+                    end = window_end(body)
+                    _HOLD[0] = max(_HOLD[0], end or 0)
+                    w = max(_HOLD[0] - time.time(), 0.5) if end else wait
+                WAITED.append(w)
+                time.sleep(w)
                 continue
-            raise ApiError(f"{e.code} {method} {url}\n{e.read().decode(errors='replace')[:2000]}") from None
+            raise ApiError(f"{e.code} {method} {url}\n{body[:2000]}") from None
 
 
 def batch(pid, reqs):
@@ -163,8 +209,33 @@ def slide_ids(pid):
     return [s["objectId"] for s in request("GET", f"{SLIDES}/{pid}?fields=slides(objectId)").get("slides", [])]
 
 
+THUMB_PER_MIN = 60  # ページの画像は 1 人 1 分 60 回まで（Slides API の expensive read。https://developers.google.com/workspace/slides/api/limits）
+THUMB_LOG = os.path.join(tempfile.gettempdir(), "gapi_thumbnails")  # この機械で画像を取った時刻。ほかの会話・子の確かめと上限を分け合う
+PACED = []  # 上限を見越して待った秒（pace が足す）
+
+
+def pace(path=THUMB_LOG, limit=THUMB_PER_MIN, window=61):
+    """ページの画像を取る前に呼ぶ。この機械で直前の window 秒に limit 回取っていたら、空くまで待つ（超えると 429 で 5・15・30 秒待つことになる。
+    2026-10-15 に 53 枚で測ると、最後の 6 枚が 52 秒ずつ待った）。ponytail: ほかの機械（CI など）で同じ人が取った分は数えない（429 の取り直しが拾う）"""
+    import fcntl
+    while True:
+        with open(path, "a+") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)  # 同じ機械の会話・子が同じファイルを読み書きする
+            f.seek(0)
+            now = time.time()
+            ts = sorted(t for t in map(float, f.read().split()) if now - t < window)
+            if len(ts) < limit:
+                f.seek(0)
+                f.truncate()
+                f.write(" ".join(map(str, ts + [now])))
+                return
+        PACED.append(w := ts[len(ts) - limit] + window - now)
+        time.sleep(w)
+
+
 def thumbnail(pid, obj):
-    """Google が描いたページの画像（1600 × 900）の情報。contentUrl は 30 分で切れ、知っていれば誰でも開ける（人に見せない）。"""
+    """Google が描いたページの画像（1600 × 900）の情報。contentUrl は 30 分で切れ、知っていれば誰でも開ける（人に見せない）。上限を見越して待つ（pace）。"""
+    pace()
     return request("GET", f"{SLIDES}/{pid}/pages/{obj}/thumbnail?thumbnailProperties.thumbnailSize=LARGE&thumbnailProperties.mimeType=PNG")
 
 
@@ -184,6 +255,20 @@ def selftest():
         raise AssertionError("サービスアカウントを通した")
     except ApiError as e:
         assert "authorized_user" in str(e)
+    t0 = 1_760_000_000
+    assert window_end('{"metadata": {"window_start_time": "2025-10-09T08:53:20Z"}}', t0) == t0 + 61
+    body = '"quota_limit": "ExpensiveReadRequestsPerMinutePerUser",\n          "window_start_time": "1760000000",\n          "service": "slides.googleapis.com"'  # 429 の本文の形（2026-10-15）
+    assert window_end(body, t0) == t0 + 61
+    assert window_end('"window_start_time": "1760000000000"', t0) == t0 + 61 and window_end('"window_start_time": 1760000000', t0) == t0 + 61
+    assert window_end("{}", t0) is None and window_end('"window_start_time": "x"', t0) is None and window_end('"window_start_time": "1"', t0) is None
+    with tempfile.TemporaryDirectory() as d:  # 上限に届いたら、いちばん古い 1 回が窓を出るまで待つ
+        log = os.path.join(d, "t")
+        open(log, "w").write(f"{time.time() - 0.6} {time.time() - 0.5}")
+        t0 = time.time()
+        pace(log, limit=3, window=0.8)
+        assert time.time() - t0 < 0.1 and not PACED
+        pace(log, limit=3, window=0.8)
+        assert 0.1 < time.time() - t0 < 0.5 and len(PACED) == 1 and len(open(log).read().split()) <= 3
     print("selftest ok")
 
 

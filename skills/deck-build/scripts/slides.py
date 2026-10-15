@@ -3,8 +3,11 @@
 資料ごとの build/pages.py に NAME（資料名・秘密区分）と、ページの関数・共通の関数と定数・make(d) だけを書き、部品は Deck のメソッドを使う。
 usage（資料の build/ で。pages.py は今いるフォルダのもの）:
   slides.py new <Drive のフォルダの URL か ID> <Drive 上の名前> [--theme <テーマ>]   テンプレートを複製して組む（テーマは factory.toml の [slides.themes.<名前>]。その url のテンプレートを複製する）
-  slides.py build <URL か ID> [--force]   組み直す（ページをすべて作り直す。URL は変わらない）。前に組んだあとに画面で直されているか、
-                                          未解決のコメントがあれば止まる。直しを pages.py に入れてから --force で組み直す
+  slides.py build <URL か ID> [--force]   組み直す（中身の変わったページだけを作り直し、順をそろえる。URL は変わらない）。前に組んだあとに画面で直されているか、
+                                          未解決のコメントがあれば止まる。直しを pages.py に入れてから --force で組み直す（--force は全ページを作り直す）。
+                                          作り直したページを /tmp/slides_<ID の頭 8 字>/changed.json に、工程ごとの秒を標準エラーに出す
+  slides.py lint [<ファイル>] [<URL か ID>] [--pages 3,5 | --all] [--talk]   組まずに、組む要求を手元で presentations.get の形にして lint をかける（テストの unit。
+                                          直すたびに回す）。既定は前に回したときから変わったページ（と要修正が残ったページ）。URL を省くと既定のテーマのテンプレートで見る
   slides.py dry [<ファイル>] [<URL か ID>]   組まずに make を走らせ、組むときの警告・枚数・ノートのないページを出す（既定は pages.py。子が書いた build/pages_<担当>.py を確かめる。
                                           URL を渡すと、表紙・扉のパターンとテーマをそのデッキから読む（読むだけ）。../slides.md の 2）
   slides.py themes   テーマの名前・説明・テンプレートがあるか・既定か。資料ごとに選ぶ（../../deck-practices/SKILL.md の「作業の始め方」の 5）。
@@ -13,7 +16,8 @@ usage（資料の build/ で。pages.py は今いるフォルダのもの）:
   slides.py --selftest
 テンプレートの管理は template.py。色は下の「色の役割」の名前で渡す。役割の名前はテーマの色（マスターの配色）を指すので、テンプレートを替えると色が変わる。
 見た目の決まりは ../../deck-practices/visual.md の 1。"""
-import ast, atexit, functools, importlib, json, math, os, re, shutil, subprocess, sys, tempfile, time, tomllib, urllib.error, urllib.parse, urllib.request
+import ast, atexit, contextlib, functools, hashlib, importlib, io, itertools, json, math, os, re, shutil, subprocess, sys, tempfile, time, tomllib, urllib.error, urllib.parse, urllib.request
+from collections import defaultdict
 from pathlib import Path
 
 sys.dont_write_bytecode = True  # build/ と scripts/ に __pycache__ を残さない
@@ -229,13 +233,25 @@ def iconify(name, color=TEXT, w=512):
     """Iconify のアイコン（"tabler:database"、"logos:aws"）の PNG の URL。color（6 桁）は 1 色のセットにだけ効く。名前がなければ止める。
     [slides_py-004] 同じアイコンは 1 回だけ確かめる（20 枚で 60 回ほど問い合わせると 429 が返った）。"""
     svg = "https://api.iconify.design/" + name.replace(":", "/", 1) + ".svg"
+    if name in icons_ok():
+        return png(f"{svg}?color=%23{color}", w)
     try:  # 名前の間違いは、組むときに Slides API の「画像を取れない」としか出ないので、先に確かめる。既定の User-Agent は 403 になる
         urllib.request.urlopen(urllib.request.Request(svg, method="HEAD", headers={"User-Agent": "slides.py"}), timeout=15)
+        with open(ICONS_OK, "a") as f:
+            f.write(name + "\n")
     except urllib.error.HTTPError as e:
         if e.code == 404:
             sys.exit(f"アイコンがない: {name}。名前は https://icon-sets.iconify.design/ で探す")
         print(f"警告: アイコンの名前を確かめられなかった: {name}（{e.code}）。組むときに Slides API が取れなければ止まる", file=sys.stderr)
     return png(f"{svg}?color=%23{color}", w)
+
+
+ICONS_OK = Path(tempfile.gettempdir()) / "slides_iconify_ok"  # あると確かめたアイコンの名前。組み直すたび・lint のたびに問い合わせない（53 枚で 35 個、2.5 秒かかった）
+
+
+@functools.cache
+def icons_ok():
+    return set(ICONS_OK.read_text().split()) if ICONS_OK.is_file() else set()
 
 
 def asset(path):
@@ -989,47 +1005,238 @@ def theme_of(pid):
     return deck_theme(p)
 
 
-def build(pid, deck, force=False):
-    """pid のプレゼンのページを、deck のページに置き換える。force=False なら、先に guard で画面での直しとコメントを確かめる。"""
-    need_brand()
-    if not force:
-        gapi.guard(pid, revision(pid), STAMP, "pages.py")
-    p = request("GET", f"{SLIDES}/{pid}?fields=slides(objectId),layouts(objectId,layoutProperties(displayName),pageElements(description,shape(placeholder))),"
-                       "masters(pageElements(description,shape))")  # description は deck_font が見るテーマの名前
+def resolved(deck, p):
+    """deck の要求に、デッキ p（layouts・masters）の書体と、Blank・表紙・扉のレイアウトの ID を入れたもの（JSON の文字列）。build が送り、lint が手元で組む。"""
     kinds = {l["objectId"]: f"@{k.upper()}{n}" for (k, n), l in deck_layouts(p).items()}  # 表紙・扉のパターンのレイアウト（template.py が残したもの）
     ls = [l for l in p["layouts"] if is_blank(l) and l["objectId"] not in kinds]  # 会社のテンプレートから作ったものは、template.py が残した Blank が 1 つだけ（名前は会社のもの）
     layout = next((l["objectId"] for l in ls if l["layoutProperties"]["displayName"] == BLANK), ls[0]["objectId"] if len(p["layouts"]) == len(kinds) + 1 and ls else None)
     if not layout:
         sys.exit(f"レイアウト「{BLANK}」がない。AI Deck Factory のテンプレートから作ったプレゼンではない（slides.py new で作る）")
-    font = deck_font(p)
     lay = {"@LAYOUT": layout} | {k: i for i, k in kinds.items()}
     if miss := sorted(set(re.findall(r'"(@(?:COVER|SECTION)\d+)"', json.dumps(deck.reqs))) - set(lay)):
         sys.exit(f"デッキに表紙・扉のパターン {', '.join(miss)} のレイアウトがない（テンプレートを作り直す前に複製したデッキ）。番号を変えるか、slides.py new で作り直す")
-    reqs = re.sub(r'"(@LAYOUT|@COVER\d+|@SECTION\d+)"', lambda m: json.dumps(lay[m.group(1)]), json.dumps(refont(deck.reqs, font)))
+    return re.sub(r'"(@LAYOUT|@COVER\d+|@SECTION\d+)"', lambda m: json.dumps(lay[m.group(1)]), json.dumps(refont(deck.reqs, deck_font(p))))
+
+
+PAGE_HASH = re.compile(r"h([0-9a-f]{16})$")  # build がページの ID の末尾に付ける、中身のハッシュ
+
+
+def pages_of(deck, reqs):
+    """(要求ごとの持ち主のページ, ページごとの中身のハッシュ, ページごとのリンク先のページ)。build が、変わったページだけを作り直すのに使う。
+    ハッシュは、そのページの要求の ID を出てくる順の番号に、手元の画像をパスと更新時刻に置き換えて取る（組むたびに変わる ID で変わらない）。
+    ページへのリンクは、リンク先のハッシュを入れる（リンク先が変われば、リンク元も変わる）。ノートも入れる。"""
+    own, owner, per, links = {}, [], defaultdict(list), defaultdict(set)
+    for r in reqs:
+        (k, v), = r.items()
+        o = v.get("objectId", v.get("groupObjectId"))
+        if k == "createSlide":
+            pg = own[o] = own[o + "_n"] = o
+        elif "elementProperties" in v:
+            pg = own[o] = v["elementProperties"]["pageObjectId"]
+        elif k == "groupObjects":
+            pg = own[o] = own[v["childrenObjectIds"][0]]
+        else:
+            pg = own[o]
+        owner.append(pg)
+        per[pg].append(r)
+        if t := v.get("style", {}).get("link", {}).get("pageObjectId"):
+            links[pg].add(t)
+    img = lambda m: json.dumps(f"@IMG:{deck.images[int(m.group(1))]}:{os.path.getmtime(deck.images[int(m.group(1))])}")
+    base = {}
+    for s in deck.slides:
+        ids = {}
+        body = re.sub(rf'"{deck.run}_\d+', lambda m: '"#' + str(ids.setdefault(m.group(), len(ids))), json.dumps(per[s], sort_keys=True))
+        base[s] = hashlib.sha256((re.sub(r'"@IMG(\d+)"', img, body) + json.dumps(deck.notes.get(s))).encode()).hexdigest()
+    digest = {s: hashlib.sha256((base[s] + "".join(base[t] for t in sorted(links[s]))).encode()).hexdigest()[:16] for s in deck.slides}
+    return owner, digest, links
+
+
+def build(pid, deck, force=False):
+    """pid のプレゼンのページを、deck のページに置き換える。force=False なら、先に guard で画面での直しとコメントを確かめる。
+    [slides_py-016] 変わったページだけを作り直す。ページの ID の末尾に中身のハッシュ（pages_of）を付け、デッキに同じハッシュのページがあれば残して並べ替えるだけにする。
+    ハッシュのないページ（前の版の build で組んだもの、画面で足したもの）は消して作り直す。force なら、全ページを作り直す（画面での直しも消す）。"""
+    need_brand()
+    if not force:
+        gapi.guard(pid, revision(pid), STAMP, "pages.py")
+        gapi.CLOCK.lap("画面の直しの確かめ")
+    p = request("GET", f"{SLIDES}/{pid}?fields=slides(objectId),layouts(objectId,layoutProperties(displayName),pageElements(description,shape(placeholder))),"
+                       "masters(pageElements(description,shape))")  # description は deck_font が見るテーマの名前
+    gapi.CLOCK.lap("GET")
+    font = deck_font(p)
+    reqs = json.loads(resolved(deck, p))
+    owner, digest, links = pages_of(deck, reqs)
+    olds, have, keep = [s["objectId"] for s in p.get("slides", [])], defaultdict(list), {}
+    for o in olds if not force else []:
+        if m := PAGE_HASH.search(o):
+            have[m.group(1)].append(o)
+    for s in deck.slides:
+        if have[digest[s]]:
+            keep[s] = have[digest[s]].pop(0)
+    while lost := [s for s in keep if links[s] - set(keep)]:  # 作り直すページへのリンクは、そのページの新しい ID を指すように、リンク元も作り直す
+        for s in lost:
+            keep.pop(s)
+    ids = {s: keep.get(s, f"{s}h{digest[s]}") for s in deck.slides}
+    body = json.dumps([r for r, o in zip(reqs, owner) if o not in keep])
+    body = re.sub(rf'"({deck.run}_\d+)(_n)?"', lambda m: f'"{ids.get(m.group(1), m.group(1))}{m.group(2) or ""}"', body)
     # 新しいページを先に作ってから、前のページを消す。ページが 0 枚になると、使われていないマスターごと消える
-    old = [{"deleteObject": {"objectId": s["objectId"]}} for s in p.get("slides", [])]
+    old = [{"deleteObject": {"objectId": o}} for o in olds if o not in keep.values()]
+    made = [ids[r["createSlide"]["objectId"]] for r in reqs if "createSlide" in r and r["createSlide"]["objectId"] not in keep]  # 作った順に末尾へ足される
+    cur, moves = [o for o in olds if o in keep.values()] + made, []
+    for k, o in enumerate(ids[s] for s in deck.slides):  # 前から 1 枚ずつ置く（まとめて動かすと、元の順のまま動く。gslides.py keep と同じ）
+        if cur[k] != o:
+            moves.append({"updateSlidesPosition": {"slideObjectIds": [o], "insertionIndex": k}})
+            cur.remove(o)
+            cur.insert(k, o)
+    gapi.CLOCK.lap("差分を出す")
     carrier = None
     try:
-        if deck.images:
-            urls, carrier = carry(deck.images)
-            reqs = re.sub(r'"@IMG(\d+)"', lambda m: json.dumps(urls[int(m.group(1))]), reqs)
-        batch(pid, json.loads(reqs) + old)
+        if used := sorted({int(i) for i in re.findall(r'"@IMG(\d+)"', body)}):  # 作り直すページの手元の画像だけを運ぶ
+            urls, carrier = carry([deck.images[i] for i in used])
+            body = re.sub(r'"@IMG(\d+)"', lambda m: json.dumps(urls[used.index(int(m.group(1)))]), body)
+            gapi.CLOCK.lap("手元の画像を運ぶ")
+        send = json.loads(body) + old + moves
+        batch(pid, send)
+        gapi.CLOCK.lap(f"batchUpdate（{len(send)} 件）")
     finally:
         if carrier:  # 貼った画像はデッキの中に写し取られているので、仮のファイルは消してよい
             delete(carrier)
-    p = request("GET", f"{SLIDES}/{pid}?fields=slides(objectId,slideProperties(notesPage(notesProperties)))")
-    spk = {s["objectId"]: s["slideProperties"]["notesPage"]["notesProperties"]["speakerNotesObjectId"] for s in p["slides"]}
     nreqs = []  # ノートの枠はページを作ったあとでないと ID が分からないので、2 回目に書く
-    for sid, t in deck.notes.items():
-        if not t:
-            continue
-        nreqs += [{"insertText": {"objectId": spk[sid], "insertionIndex": 0, "text": t}},
-                  {"updateTextStyle": {"objectId": spk[sid], "textRange": {"type": "ALL"}, "style": {"fontFamily": font}, "fields": "fontFamily"}}]
-    batch(pid, nreqs)
+    if todo := {ids[s]: t for s, t in deck.notes.items() if t and s not in keep}:
+        p = request("GET", f"{SLIDES}/{pid}?fields=slides(objectId,slideProperties(notesPage(notesProperties)))")
+        spk = {s["objectId"]: s["slideProperties"]["notesPage"]["notesProperties"]["speakerNotesObjectId"] for s in p["slides"]}
+        for sid, t in todo.items():
+            nreqs += [{"insertText": {"objectId": spk[sid], "insertionIndex": 0, "text": t}},
+                      {"updateTextStyle": {"objectId": spk[sid], "textRange": {"type": "ALL"}, "style": {"fontFamily": font}, "fields": "fontFamily"}}]
+        batch(pid, nreqs)
+        gapi.CLOCK.lap("ノート（GET と batchUpdate）")
     gapi.stamp(pid, revision(pid), STAMP)
+    gapi.CLOCK.lap("版の記録")
+    d = f"/tmp/slides_{pid[:8]}"  # gslides.py check と同じフォルダ。画像は check が取り、同じファイルに画像のパスと指摘を足して書き直す
+    os.makedirs(d, exist_ok=True)
+    json.dump({"url": f"https://docs.google.com/presentation/d/{pid}/edit", "by": "build", "slides": len(deck.slides),
+               "pages": [{"page": i, "objectId": ids[s]} for i, s in enumerate(deck.slides, 1) if s not in keep]}, open(f"{d}/changed.json", "w"), indent=1)
     print(json.dumps({"presentationId": pid, "url": f"https://docs.google.com/presentation/d/{pid}/edit",
-                      "slides": len(deck.slides), "requests": len(deck.reqs) + len(old) + len(nreqs), "pages_without_notes": missing_notes(deck),
+                      "slides": len(deck.slides), "rebuilt": [i for i, s in enumerate(deck.slides, 1) if s not in keep], "removed": len(old),
+                      "requests": len(send) + len(nreqs), "pages_without_notes": missing_notes(deck),
                       "warnings": len(deck.warnings)}, ensure_ascii=False))
+    gapi.CLOCK.show("build ")
+
+
+def local_json(reqs, deck, p):
+    """[slides_py-017] 組む要求 reqs（resolved）を、Google を呼ばずに presentations.get の JSON の形にする（slides.py lint が lint をかける）。p はデッキの masters・layouts。
+    表の大きさは、Google と同じく 3,000,000 EMU の正方形にする（presentations.get の表は、行と列の大きさを要素の大きさに持たない）。
+    Google が描いてから決まるもの（画像の縦横の比に合わせた枠、ページ番号の枠、実際の折り返し）は入らない。"""
+    master = {l["objectId"]: l.get("layoutProperties", {}).get("masterObjectId") for l in p.get("layouts", [])}
+    slides, els, texts = [], {}, {}  # els: ID → (要素, 入っている並び)。texts: (ID, 行, 列) → [文字, 文字の書式, 段落の書式]（UTF-16 の 1 単位に 1 つ）
+
+    def merge(d, style, fields):
+        for f in fields.split(","):
+            d.pop(f, None)
+            if f in style:
+                d[f] = style[f]
+
+    def span(t, rng):
+        return (0, len(t)) if rng.get("type") == "ALL" else (rng.get("startIndex", 0), rng.get("endIndex", len(t)))
+
+    def paras(t, rng):  # 範囲にかかる段落の終わりの改行
+        a, b = span(t, rng)
+        ends = [j for j, c in enumerate(t) if c[0] == "\n"]
+        return [t[j] for i, j in enumerate(ends) if (ends[i - 1] + 1 if i else 0) < max(b, a + 1) and j >= a]
+
+    def emit(t):
+        out, start = [], 0
+        for j, (c, _, ps) in enumerate(t):
+            if c == "\n":
+                ps = dict(ps)
+                out.append({"paragraphMarker": {"style": ps, **({"bullet": {}} if ps.pop("_bullet", False) else {})}})
+                for st, g in itertools.groupby(t[start:j + 1], key=lambda x: json.dumps(x[1], sort_keys=True)):
+                    out.append({"textRun": {"content": "".join(x[0] for x in g), "style": json.loads(st)}})
+                start = j + 1
+        return {"textElements": out}
+
+    for r in reqs:
+        (k, v), = r.items()
+        o, key = v.get("objectId"), (v.get("objectId"), *((v["cellLocation"].get("rowIndex", 0), v["cellLocation"].get("columnIndex", 0)) if "cellLocation" in v else ()))
+        if k == "createSlide":
+            lid = v["slideLayoutReference"]["layoutId"]
+            slides.append({"objectId": o, "pageElements": [], "pageProperties": {}, "slideProperties": {"layoutObjectId": lid, "masterObjectId": master.get(lid)}})
+            els[o] = (slides[-1], None)
+        elif k in ("createShape", "createLine", "createImage", "createTable"):
+            ep = v["elementProperties"]
+            e = {"objectId": o, "size": ep["size"], "transform": ep["transform"]}
+            if k in ("createShape", "createLine"):  # Google は図形と線を 3,000,000 EMU の正方形の縮尺で返し、縮尺を小数 4 けたに丸める（箱の端に載った要素の内外が変わる）
+                sq, t = {"magnitude": 3000000, "unit": "EMU"}, dict(ep["transform"])
+                for a, d in (("scaleX", "width"), ("scaleY", "height")):
+                    t[a] = round(t[a] * ep["size"][d]["magnitude"] / 3000000, 4)
+                    if not t[a]:
+                        del t[a]  # 0 の値は省く（lint の flatten の読み方）
+                e |= {"size": {"width": sq, "height": sq}, "transform": t}
+            if k == "createShape":
+                e["shape"] = {"shapeType": v["shapeType"], "shapeProperties": {}}
+            elif k == "createLine":
+                e["line"] = {"lineCategory": v["category"], "lineProperties": {}}
+            elif k == "createImage":
+                e["image"] = {"contentUrl": v["url"]}
+            else:
+                e |= {"size": {"width": {"magnitude": 3000000, "unit": "EMU"}, "height": {"magnitude": 3000000, "unit": "EMU"}},
+                      "transform": {**ep["transform"], "scaleX": 1, "scaleY": 1},
+                      "table": {"rows": v["rows"], "columns": v["columns"], "tableRows": [{"tableCells": [{"location": {"rowIndex": i, "columnIndex": j}, "tableCellProperties": {}}
+                                                                                                         for j in range(v["columns"])]} for i in range(v["rows"])]}}
+            lst = els[ep["pageObjectId"]][0]["pageElements"]
+            lst.append(e)
+            els[o] = (e, lst)
+        elif k == "groupObjects":
+            kids = {id(els[c][0]) for c in v["childrenObjectIds"]}
+            lst = els[v["childrenObjectIds"][0]][1]
+            at = [i for i, x in enumerate(lst) if id(x) in kids]
+            g = {"objectId": v["groupObjectId"], "transform": {"scaleX": 1, "scaleY": 1, "unit": "EMU"}, "elementGroup": {"children": [lst[i] for i in at]}}
+            for i in reversed(at):
+                del lst[i]
+            lst.insert(at[0], g)
+            for c in g["elementGroup"]["children"]:
+                els[c["objectId"]] = (c, g["elementGroup"]["children"])
+            els[g["objectId"]] = (g, lst)
+        elif o not in els:  # ページ番号の枠（_n）。Google がレイアウトから作るので、手元にはない
+            continue
+        elif k == "deleteObject":
+            e, lst = els.pop(o)
+            lst[:] = [x for x in lst if x is not e]
+        elif k == "insertText":
+            t = texts.setdefault(key, [["\n", {}, {}]])
+            t[v["insertionIndex"]:v["insertionIndex"]] = [[x, {}, {}] for c in v["text"] for x in [c] + [""] * (u16(c) - 1)]
+        elif k == "updateTextStyle" and key in texts:
+            a, b = span(texts[key], v["textRange"])
+            for c in texts[key][a:b]:
+                c[1] = dict(c[1])
+                merge(c[1], v["style"], v["fields"])
+        elif k == "updateParagraphStyle" and key in texts:
+            for c in paras(texts[key], v["textRange"]):
+                merge(c[2], v["style"], v["fields"])
+        elif k == "createParagraphBullets" and key in texts:
+            for c in paras(texts[key], v["textRange"]):
+                c[2]["_bullet"] = True
+        elif k == "updateShapeProperties":
+            merge(els[o][0]["shape"]["shapeProperties"], v["shapeProperties"], v["fields"])
+        elif k == "updateLineProperties":
+            merge(els[o][0]["line"]["lineProperties"], v["lineProperties"], v["fields"])
+        elif k == "updatePageProperties":
+            merge(els[o][0]["pageProperties"], v["pageProperties"], v["fields"])
+        elif k == "updatePageElementAltText":
+            els[o][0].update(title=v["title"], description=v["description"])
+        elif k == "updateTableCellProperties":
+            rng, rows = v["tableRange"], els[o][0]["table"]["tableRows"]
+            r0, c0 = rng["location"].get("rowIndex", 0), rng["location"].get("columnIndex", 0)
+            for row in rows[r0:r0 + rng["rowSpan"]]:
+                for cell in row["tableCells"][c0:c0 + rng["columnSpan"]]:
+                    merge(cell["tableCellProperties"], v["tableCellProperties"], v["fields"])
+    for (o, *cell), t in texts.items():
+        e = els[o][0]
+        (e["table"]["tableRows"][cell[0]]["tableCells"][cell[1]] if cell else e["shape"])["text"] = emit(t)
+    for s in slides:
+        if note := deck.notes.get(s["objectId"]):
+            s["slideProperties"]["notesPage"] = {"notesProperties": {"speakerNotesObjectId": s["objectId"] + ":notes"},
+                                                 "pageElements": [{"objectId": s["objectId"] + ":notes", "shape": {"text": emit([[c, {}, {}] for c in note] + [["\n", {}, {}]])}}]}
+    return {"title": p.get("title", deck.name), "slides": slides, "masters": p.get("masters", []), "layouts": p.get("layouts", [])}
 
 
 def placeholders(page):
@@ -1138,6 +1345,49 @@ def dry(path="pages.py", url=None):
     load_pages(Path(path).stem).make(d)
     print(json.dumps({"file": path, "slides": len(d.slides), "pages_without_notes": missing_notes(d), "warnings": len(d.warnings)}, ensure_ascii=False))
     return d
+
+
+LOCAL_ONLY = ("手元の lint（組んでいない）。「（見積もり）」の付いた指摘と組むときの警告は、組むときと同じ字幅の見積もりで、Google が描いた画像で確定する。"
+              "見ていないもの: 画像で測る箱の余白（box_pad）、Google が描いた折り返し・画像の枠・ページ番号")
+
+
+def lint_local(path="pages.py", url=None, talk=False, pages=None):
+    """[slides_py-018] 組まずに path の make(d) から組む要求を作り、presentations.get の形に組み立てて（local_json）lint をかける（テストの unit。直すたびに回す）。
+    Google からはデッキ（url を省くと既定のテーマのテンプレート）の masters・layouts を読むだけ。pages（番号の集合）のページの指摘だけを出す。
+    pages が None なら、前回この pages.py に回したときから変わったページと、前回の要修正が残ったページ（ページの中身のハッシュ pages_of で見る）。
+    デッキ全体の指摘（扉・結論バンドの数など）はいつも出す。組んで画像を取るのは区切りだけにする（../slides.md の 1）。"""
+    if Path(path).parent != Path("."):
+        sys.exit(f"lint はファイルのあるフォルダ（build/）で、名前だけを渡して回す: {path}")
+    p = request("GET", f"{SLIDES}/{file_id(url) if url else template_id()}?fields=title,masters,layouts")
+    use_layouts(p)
+    use_font(deck_font(p))
+    use_theme(theme_table(deck_theme(p)))
+    m = load_pages(Path(path).stem)
+    with contextlib.redirect_stderr(io.StringIO()) as err:  # 組むときの警告は、見るページのものだけを出す
+        deck = Deck(getattr(m, "NAME", "dry"))
+        m.make(deck)
+        if Path(path).stem != "pages":  # 子のファイルのページへのリンクは、全体の番号を指すので、親が組むときに確かめる（dry と同じ）
+            deck.links.clear()
+        deck.finish()
+    reqs = json.loads(resolved(deck, p))
+    _, digest, _ = pages_of(deck, reqs)
+    state = Path(tempfile.gettempdir()) / f"slides_lint_{hashlib.sha1(str(Path(path).resolve()).encode()).hexdigest()[:8]}.json"
+    clean = set(json.loads(state.read_text())) if state.is_file() else set()  # 前に見て、要修正のなかったページのハッシュ
+    if pages in (None, "all"):
+        pages = {i for i, s in enumerate(deck.slides, 1) if pages == "all" or not state.is_file() or digest[s] not in clean}
+    for chunk in re.split(r"(?m)^(?=警告: \[p\d+\])", err.getvalue()):  # 警告の文に改行が入ることがある
+        if not (w := re.match(r"警告: \[p(\d+)\]", chunk)) or int(w.group(1)) in pages:
+            print(chunk, end="", file=sys.stderr)
+    q = local_json(reqs, deck, p)
+    import lint
+    r = lint.Report()
+    hard = lint.lint_slides(q, r, "差し替え用" in q["title"], talk, pages)
+    bad = {lint.hit_page(h) for k in lint.HARD_NAMES for h in r.hits.get(k, [])}
+    state.write_text(json.dumps(sorted({digest[s] for i, s in enumerate(deck.slides, 1) if i in pages and i not in bad} | (clean & set(digest.values())))))
+    print(f"\n{LOCAL_ONLY}\n" + json.dumps({"file": path, "slides": len(deck.slides), "pages": sorted(pages), "warnings": sum(int(w[2:].split("]")[0]) in pages for w in deck.warnings)},
+                                        ensure_ascii=False))
+    if hard:
+        sys.exit("lint の要修正が残っている（上の出力を直す）")
 
 
 def merge(pages, fixes):
@@ -1565,7 +1815,100 @@ def selftest():
             for k in ("pages", "pages_a", "pages_s"):
                 sys.modules.pop(k, None)
             sys.path[:] = [x for x in sys.path if Path(x).resolve() != Path(t).resolve()]
+    selftest_diff()
     print("selftest ok")
+
+
+def selftest_diff():
+    """手元の JSON（local_json）と、変わったページだけを組む build（pages_of）。Google は呼ばない（request・batch などを差し替える）。"""
+    global COPYRIGHT
+    old_c, COPYRIGHT = COPYRIGHT, "© 2026 T. All rights reserved."  # need_brand を通す（どのデッキもこれで作る）
+    p = {"title": "t", "masters": [{"objectId": "M", "pageProperties": {"colorScheme": {"colors": []}}}],
+         "layouts": [{"objectId": "L", "layoutProperties": {"displayName": BLANK, "masterObjectId": "M"}, "pageElements": [{"shape": {"placeholder": {"type": "SLIDE_NUMBER"}}}]}]}
+
+    def make(lead):
+        def m(d):
+            d.cover("表紙", "k")
+            s = d.page("見出し", lead)
+            d.text(s, X, Y_BODY, W, 1, ["本文𝄞の", ("太字", {"bold": True}), "\n2 段落目"], bullets=True)
+            d.label(s, "札", X, 3, 2, 0.4)  # 角丸の箱と文字の枠のグループ
+            d.table(s, X, 4, [2, 2], [["見出し", "列"], ["行", "値"]])
+            d.note(s, "ノート。")
+            d.text(d.page("付録"), X, Y_BODY, W, 1, ["出典: ", ("前のページ", {"link": 2})])
+        return m
+
+    d = make_deck(make("リード"), "t")
+    q = local_json(json.loads(resolved(d, p)), d, p)
+    s2 = q["slides"][1]
+    assert [s["slideProperties"]["layoutObjectId"] for s in q["slides"]] == ["L"] * 3 and s2["slideProperties"]["masterObjectId"] == "M"
+    body = next(e for e in s2["pageElements"] if "本文" in json.dumps(e.get("shape", {}).get("text", {}), ensure_ascii=False))
+    te = body["shape"]["text"]["textElements"]
+    assert [x["textRun"]["content"] for x in te if "textRun" in x] == ["本文𝄞の", "太字", "\n", "2 段落目\n"] and all("bullet" in x["paragraphMarker"] for x in te if "paragraphMarker" in x)
+    assert next(x["textRun"]["style"] for x in te if x.get("textRun", {}).get("content") == "太字")["bold"] is True
+    table = next(e for e in s2["pageElements"] if "table" in e)
+    assert table["size"]["width"]["magnitude"] == 3000000 and table["table"]["tableRows"][1]["tableCells"][1]["text"]["textElements"][1]["textRun"]["content"] == "値\n"
+    assert any("elementGroup" in e for e in s2["pageElements"]) and s2["slideProperties"]["notesPage"]["pageElements"][0]["shape"]["text"]["textElements"][1]["textRun"]["content"] == "ノート。\n"
+    assert not any(e["objectId"] == s2["objectId"] + "_n" for e in s2["pageElements"])  # ページ番号の枠は Google が作るので、手元にはない
+    import lint
+    with contextlib.redirect_stdout(io.StringIO()):
+        lint.lint_slides(q, r := lint.Report(), only={3})
+    assert not r.hits[lint.NO_NOTES] or all(h.startswith("p3") for h in r.hits[lint.NO_NOTES])  # 選んだページの指摘だけ
+    assert "p3" in r.hits[lint.NO_NOTES]
+
+    # ページのハッシュ: 組むたびに変わる ID では変わらず、中身が変わったページと、そこへリンクするページだけが変わる
+    _, h1, links = pages_of(d, json.loads(resolved(d, p)))
+    e = make_deck(make("リード"), "t")
+    _, h2, _ = pages_of(e, json.loads(resolved(e, p)))
+    f = make_deck(make("別のリード"), "t")
+    _, h3, _ = pages_of(f, json.loads(resolved(f, p)))
+    assert list(h1.values()) == list(h2.values()) and links[d.slides[2]] == {d.slides[1]}
+    assert [a == b for a, b in zip(h1.values(), h3.values())] == [True, False, False]
+
+    # build: 前に組んだページと同じハッシュのページは残し、変わったページだけを作って、古いページを消し、順をそろえる
+    sent, live, real = [], [], {k: globals()[k] for k in ("request", "batch", "revision")}
+    old_g, old_s = gapi.guard, gapi.stamp
+
+    def fake_batch(pid, reqs):  # デッキのページの並びだけを手元で動かす
+        sent.append(reqs)
+        for r in reqs:
+            (k, v), = r.items()
+            if k == "createSlide":
+                live.append(v["objectId"])
+            elif k == "deleteObject" and v["objectId"] in live:
+                live.remove(v["objectId"])
+            elif k == "updateSlidesPosition":
+                live.remove(v["slideObjectIds"][0])
+                live.insert(v["insertionIndex"], v["slideObjectIds"][0])
+
+    globals().update(request=lambda m, u, *a, **k: {**p, "slides": [{"objectId": o, "slideProperties": {"notesPage": {"notesProperties": {"speakerNotesObjectId": o + "_sp"}}}} for o in live]},
+                     batch=fake_batch, revision=lambda pid: "rev")
+    gapi.guard = gapi.stamp = lambda *a: None
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            build("x" * 10, d)
+            made = list(live)
+            assert len(made) == 3 and all(PAGE_HASH.search(o) for o in made)  # 初めては全部
+            sent.clear()
+            build("x" * 10, f)  # 2 枚目のリードだけ変えた
+            new = [r["createSlide"]["objectId"] for r in sent[0] if "createSlide" in r]
+            assert len(new) == 2 and live == [made[0], *new]  # 2 枚目と、そこへリンクする 3 枚目を作り直し、古い 2 枚を消す
+            assert next(r["updateTextStyle"]["style"]["link"] for r in sent[0] if "link" in r.get("updateTextStyle", {}).get("style", {})) == {"pageObjectId": new[0]}
+            assert not any(made[0] in json.dumps(r) for r in sent[0])  # 1 枚目には触らない
+            assert json.load(open(f"/tmp/slides_{('x' * 10)[:8]}/changed.json"))["pages"] == [{"page": 2, "objectId": new[0]}, {"page": 3, "objectId": new[1]}]
+            sent.clear()
+            build("x" * 10, make_deck(make("別のリード"), "t"))  # 変えていない
+            assert not any("createSlide" in r for rs in sent for r in rs) and len(live) == 3
+            g = make_deck(lambda d: [make("別のリード")(d), d.slides.insert(0, d.slides.pop(1))], "t")  # 2 枚目を先頭に（1 枚目の扱いとリンク先が変わる）
+            build("x" * 10, g)
+            _, hg, _ = pages_of(g, json.loads(resolved(g, p)))
+            assert [PAGE_HASH.search(o).group(1) for o in live] == [hg[s] for s in g.slides]  # デッキの順が pages.py の順
+            sent.clear()
+            build("x" * 10, f, force=True)
+            assert sum("createSlide" in r for r in sent[0]) == 3 and len(live) == 3  # --force は全部
+    finally:
+        globals().update(real)
+        gapi.guard, gapi.stamp, COPYRIGHT = old_g, old_s, old_c
+        shutil.rmtree(f"/tmp/slides_{('x' * 10)[:8]}", ignore_errors=True)
 
 
 def main():
@@ -1578,6 +1921,10 @@ def main():
         return print(json.dumps(merge("pages.py", a[1:]), ensure_ascii=False))
     if a[:1] == ["dry"] and len(a) <= 3:
         return dry(next((x for x in a[1:] if x.endswith(".py")), "pages.py"), next((x for x in a[1:] if not x.endswith(".py")), None))
+    if a[:1] == ["lint"]:
+        pick = {int(n) for n in a[a.index("--pages") + 1].split(",")} if "--pages" in a else "all" if "--all" in a else None
+        rest = [x for i, x in enumerate(a[1:], 1) if not x.startswith("--") and a[i - 1] != "--pages"]
+        return lint_local(next((x for x in rest if x.endswith(".py")), "pages.py"), next((x for x in rest if not x.endswith(".py")), None), "--talk" in a, pick)
     if not (a[:1] == ["build"] and len(a) >= 2 or a[:1] == ["new"] and len(a) >= 3):
         sys.exit(__doc__)
     theme = a[a.index("--theme") + 1] if "--theme" in a else None
@@ -1588,9 +1935,11 @@ def main():
     if a[0] == "new":
         need_mark(theme or factory().get("slides", {}).get("default_theme", "visual"), mark)
     use_theme(theme_table(mark))
+    gapi.CLOCK.lap("テーマを読む")
     need_brand()  # 複製する前に止める（build でも止まるが、作った複製をゴミ箱に移すことになる）
     m = load_pages()
     deck = make_deck(m.make, m.NAME)
+    gapi.CLOCK.lap("要求を作る")
     if a[0] == "build":
         return build(src, deck, "--force" in a)
     pid = new(a[1], a[2], src)
