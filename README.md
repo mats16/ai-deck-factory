@@ -88,12 +88,12 @@ pi install git:github.com/mats16/ai-deck-factory        # git から
 
 | 使うところ | 書く場所 | 既定 | 書ける書体 |
 |---|---|---|---|
-| スライドの本文 | `[slides.themes.<名前>] font`（`template.py` がマスターに書く） | Noto Sans JP | 下の「本文の書体」の 18 個（`slides.py` の `JP_FONTS`）。ほかは `template.py` が止める |
+| スライドの本文 | `[slides.themes.<名前>] font`（`template.py` がマスターに書く） | Noto Sans JP | 下の「本文の書体」の 18 個（`slides.py` の `JP_FONTS`）と、欧文の DM Sans（`FONT_EM`）。ほかは `template.py` が止める |
 | スライドのコード | `[slides.themes.<名前>] mono` | Cascadia Mono | Google Fonts の等幅の書体。リガチャのある書体（`LIGATURE_MONO`）は止める |
-| ドキュメントの本文 | `[docs.themes.<名前>] font` | Noto Sans JP | スライドの本文と同じ 18 個 |
+| ドキュメントの本文 | `[docs.themes.<名前>] font` | Noto Sans JP | スライドの本文と同じ |
 | ドキュメントのコード | `[docs.themes.<名前>] mono` | Cascadia Mono | スライドのコードと同じ |
 
-- **文字の幅の見込みは、既定の 2 つの書体で測った値のまま。** `slides.py` の `em_width`・`ASCII_EM`（Noto Sans JP Regular）と `MONO_EM`（Cascadia Mono、0.586 em）は、書体を替えても変えない。ほかの書体では折り返しの見込み（組むときの警告、`d.card` の高さ、lint の行数）がずれるので、Google が描いたページの画像で見る。
+- **文字の幅の見込みは、測った書体のものを使う。** `slides.py` の `em_width` は、本文の英数字を `FONT_EM` の幅（Noto Sans JP Regular の `ASCII_EM`、DM Sans の `DM_SANS_EM`）で、コードを `MONO_EM`（Cascadia Mono、0.586 em）で見込む。測っていない書体は Noto Sans JP の幅で見込み、折り返しの見込み（組むときの警告、`d.card` の高さ、lint の行数）がずれるので、Google が描いたページの画像で見る。
 - **Google Fonts にない名前は、API が受け付けて黙って別の書体で描く。** 書いたら見本のページ（`template.py <名前>`、ドキュメントはそのテーマの文書）を組み、画像で確かめる。
 - lint の「書体が … でない」「等幅の … に和文」は、テーマの書体と比べる。
 
@@ -106,6 +106,8 @@ pi install git:github.com/mats16/ai-deck-factory        # git から
 | 明朝 | Noto Serif JP、BIZ UDPMincho、Shippori Mincho、Zen Old Mincho |
 | 手書き風 | Klee One |
 | 描けない（明朝と欧文のセリフ体になる。`template.py` の `NO_RENDER`） | Noto Sans CJK JP、Hiragino Sans、Yu Gothic |
+
+**本文の書体（欧文）:** DM Sans だけ書ける。和文の字がなく、Google Slides は和文を別のゴシックで描く（どの書体になるかは選べない）。2026-10-15 に、Google Fonts の版（可変）の英数字の幅を測り、Google Slides が字の大きさによらず opsz 14 の版で描くことを、12・18・30pt で描いた画像で確かめた。
 
 **コードの等幅の書体:** 2026-10-09 に調べた。等幅には和文の字形がないので、和文は本文の書体のまま、英数字の続きにだけ付ける。
 
@@ -191,6 +193,7 @@ gcloud の既定の OAuth クライアントで作った認証情報は、`googl
 - 2026-10-15: 既定のテーマ（`[slides] default_theme`）を、テンプレートの一覧から選択式で選んで切り替えられるようにする。deck-template を何をするか言わずに呼んだときと、会話で入れるとき（テンプレートがそろったあと）に聞く。一覧（`slides.py themes`）には、共有テーマのフォルダに加え、`[drive] factory` の下の Themes にあって `factory.toml` に `url` のないテンプレートも「個人。」として出す（ユーザー「deck-template 直接呼び出し時などで、データフォルダ配下にあるテーマを一覧で表示し、選択式でデフォルトのテンプレートを選べるようにしたいです。（factory.toml の設定を切り替える）」「INSTALL.md を介した初期セットアップ時にも既定のテンプレートをなににするか聞きたいです」）。
 - 2026-10-15: 会話で入れるとき（INSTALL.md）に、定期の整理（dreaming）を回すかと時刻を聞き、今の環境のスケジューラーに登録する。スケジューラーごとに分けて書かず、エージェントが自分の道具から、会話を閉じても残り、この PC のワークスペースで、権限の確認で止まらずに回るものを選ぶ（T3 Code・Claude Code Desktop・Omnigent は schedule.md に値を書いた）。2 つ以上あれば、会話を動かしているアプリのもの（T3 Code の中なら T3 Code）にする。なければ（Claude Code の CLI・pi。`/loop` は会話を閉じると止まる）、launchd か cron の入れ方を示し、ユーザーが手で入れる（ユーザー「INSTALL.md を介した初期セットアップで dreaming のスケジュール設定についても聞くようにしてください。」「私は T3 Code 経由で Pi も Claude Code も使っているので T3 が好ましいですが、直接 Claude Code を利用しているユーザーには Claude Code 上で設定されるようにしたいです。」「Pi のようなスケジュール設定を持たないハーネスを直接使っている場合は、マニュアルで設定するように案内してください。」「T3 同様に Omnigent もサポートしてください。もしくは明示的にサポートしていなくても勝手にツール判断して使うようにしてください（こちらのほうが望ましい）」）。
 - 2026-10-15: 顧客の profile（`Customers/<顧客>/profile.md`。事業、組織、技術の構成、エンジニアの好みと文化、いまの取り組み）を持ち、スキル `customer-profile` で作る・取り直す・書き足す。memory（資料をどう作るか。修正の指示から育つ）とは分け、相手が何者かを行ごとに出典と日付つきで持つ。迷ったら文の形で分け、「〜である」（事実）は profile、「〜にする・しない」（指示）は memory にする。聞き手の立場と関心は、hook が毎回出す memory に残す。取り直すときは、ユーザーが言った行と届かなかった道具の行を残す。顧客向けの資料の作り始めに読み、30 日より古ければ取り直す（ユーザー「顧客ごとにカスタマイズしたスライドを定期作成したりするのに参考情報として使う顧客情報、事業の性質やエンジニアの嗜好などを profile として持てるようにしたいです。」「既に memory や rule など記せる場所はありますが、`~/.vibe/profile` のように持てる機構・更新できる機構を追加したいです。」、文の形で分ける案に「OKです。それで進めて動作確認してください。」）。
+- 2026-10-15: テーマの本文の書体（`font`）に、欧文の DM Sans を選べるようにする。書体はこれまでどおり 1 つを選び、既定は Noto Sans JP のまま。文字の幅の見込み（組むときの警告、`d.card` の高さ、lint の行数）は、DM Sans の英数字の幅で測る（ユーザー「今までどおりメインのフォントを1つ選ぶ方式で変更なくて良いですが、フォントごとに横幅を計算している箇所があると思うので、その意味でのフォント対応をお願いします。」「Noto Sans JP or DM Sans を選択させるイメージです。が、規定は Noto Sans JP  のままで良いです。」）
 
 ## 入れていないもの
 
@@ -205,7 +208,7 @@ gcloud の既定の OAuth クライアントで作った認証情報は、`googl
 - **外部に出すとき:** 2026-10-12 に会社ごとの値をワークスペースに分けた。材料を集める道具は `factory.toml` の `[sources]`、社名・著作権表示・表紙のロゴは `[brand]`（`copyright` がないか仮の値なら組めない。factory-doctor が要修正）、テーマは `[slides.themes.<名前>]`・`[docs.themes.<名前>]`（`url`・`description`）、会社の素材はワークスペースの `assets/`、ドキュメントのテンプレートは `rules/doc-build/templates/`、会社の道具の使い方は `rules/`。プラグインに残る会社の前提は、組み込みのテーマ visual・company の色（Databricks のブランドの色）だけ。
 - **Documents を移す:** 顧客フォルダの `CLAUDE.md` は `memory.md` に名前を変える（factory-doctor が「顧客の memory」で出す）。`~/Documents` は今も自分の `.agents/skills/` で動いている（factory-doctor が「スキルの重なり」を出す）。移すときは、Documents の AGENTS.md の表を雛形の形（スキルの名前で指す。`rules/` も開く）にし、`.agents/skills/` の中核の 6 つを外し、`.agents/skills/dreaming/log/` を `.factory/dreaming/log/` に、`.agents/skills/deck-build/log/lint_runs.jsonl` を `.factory/lint_runs.jsonl` に移す。`deck-research` の記録は 2026-10-12 に `Research/deck_research/` へ移した。旧い場所の `.agents/skills/deck-research/log` は、移したときに進んでいた会話のための symlink なので、`.agents/skills/` と一緒に消す。ワークスペースの AGENTS.md の「方針を決めたあとを AI のレビューでそのまま作るか、人がレビューするかも選んでもらう」は、雛形の今の文（`[review] plan_reviewer` に従う）に替える（ワークスペースの決まりが優先するので、残すと毎回聞く。factory-doctor が「AGENTS.md の方針のレビュー」に出す）。
 - **代表の 3 枚の選び方:** 図・カード・表かコードから 1 枚ずつ選ぶ案と、`d.table`・`d.card` の決まった形だからと 3 枚から外すのをやめる案は、2026-10-13 の直しのあとの 10 本の記録で、当て漏れが減ったかを見てから決める。組むときの警告は最終行の字数だけを見て、文節の途中の折り返しは見ていない。
-- **テーマの残り:** テーマに入れない色・`copyright`・`mono` は組むたびに `factory.toml` から引くので、デッキを作ったあとで変えると、組み直したデッキでは役割の色だけが当時のままになる。ドキュメントの色（`docs.py` の `TEXT`・`RULE`）とフッターの著作権表示、表紙の社名（`company`）は、テーマごとには変えられない（同じ仕組みで足すかは、要るときに決める）。書体ごとの文字の幅は測っていない（既定の 2 つの値で見込む）。
+- **テーマの残り:** テーマに入れない色・`copyright`・`mono` は組むたびに `factory.toml` から引くので、デッキを作ったあとで変えると、組み直したデッキでは役割の色だけが当時のままになる。ドキュメントの色（`docs.py` の `TEXT`・`RULE`）とフッターの著作権表示、表紙の社名（`company`）は、テーマごとには変えられない（同じ仕組みで足すかは、要るときに決める）。文字の幅を測ったのは Noto Sans JP・DM Sans・Cascadia Mono だけ（ほかの書体は Noto Sans JP と Cascadia Mono の値で見込む）。DM Sans で組んだときの和文の書体（Google が選ぶゴシック）は、Docs では確かめていない。
 - **暗い本文のテーマの残り:** 表紙・扉の地と、結論バンド・表の見出しの行・コードの箱の地は、同じ `NAVY` のまま分けていない（暗いテーマでは表紙も `BG` より一段明るい灰色になる）。表紙だけを `BG` と同じ黒にしたい声が続けば分ける（lint の結論バンド・コードの箱の見分けも、その色で引き直す）。ドキュメント（`docs.py`）には暗いテーマがない。pages.py で見出しを `NAVY`、カードを `WHITE` と書いた過去の資料は、暗いテーマで組み直すと読めない（lint のコントラストの一覧に出る）。
 - **文体の残り:** 2026-10-13 の調べのうち、AI らしくない文章の癖（「X ではなく Y」「することができる」、定型の前置き・締め、同じ文末の 3 連続、新しい AI の語、書くときに見本と具体を渡すこと）と、読ませる資料（経営層や別の部署に送る、印刷して配る）で説明文を です・ます にしてよいかは、入れていない。後者は一次資料のない推測なので、読ませる資料で です・ます の指摘が続けて残るかを見てから決める。
 - **kaizen の Issue の残り:** 画像は `pr-assets` ブランチに置くので、元のリポジトリに書けない人は、画像のある Issue を出すと GitHub に fork ができる（`kaizen.py open` が作る）。持ち主が文や ID を変えて入れると、ワークスペースの写しを消す案（`ledger.py candidates` の「写しを消す」）が出ず、dreaming の重なりの見直しに任せる。どちらも、困ったら直す。

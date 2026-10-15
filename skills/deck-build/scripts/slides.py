@@ -124,11 +124,26 @@ ASCII_EM = dict(zip(" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXY
     .56, .47, .95, .61, .66, .64, .69, .59, .55, .69, .73, .29, .54, .65, .54, .81, .72, .74, .63, .74, .64, .60, .60, .72, .57, .88, .57, .53, .60, .34,
     .39, .34, .56, .56, .61, .56, .62, .51, .62, .55, .33, .56, .61, .28, .28, .55, .28, .93, .61, .61, .62, .62, .39, .47, .38, .61, .52, .80, .50, .52,
     .47, .34, .27, .34, .56)))
+# DM Sans の英数字と記号の幅（em）。Google Fonts の版（opsz・wght の可変）の opsz 14・wght 400 の hmtx。Google Slides は字の大きさによらずこの版で描く
+# （2026-10-15 に 12・18・30pt で描いて測り、見込みとのずれは 1% 以内。opsz 9 の既定の値では「1」が 1 割広い）。和文の字はなく、Google が別のゴシックで描く（1 字 0.92 em ほど。1 で見込む）
+DM_SANS_EM = dict(zip(ASCII_EM, (
+    .27, .25, .29, .80, .58, .79, .73, .16, .37, .37, .48, .55, .18, .54, .20, .39, .68, .31, .58, .59, .61, .61, .63, .53, .61, .63, .20, .23, .55, .55,
+    .55, .52, 1.00, .66, .60, .72, .69, .56, .54, .76, .68, .23, .50, .58, .53, .84, .69, .77, .58, .77, .59, .58, .56, .66, .67, .97, .60, .58, .54, .31,
+    .39, .31, .62, .66, .21, .54, .63, .57, .63, .57, .34, .56, .57, .24, .24, .50, .22, .89, .57, .59, .63, .63, .37, .50, .39, .57, .53, .76, .50, .56,
+    .46, .43, .23, .43, .55)))
+FONT_EM = {FONT: ASCII_EM, "DM Sans": DM_SANS_EM}  # 英数字の幅を測った書体。テーマの font には、JP_FONTS とこれが書ける。ほかの JP_FONTS は Noto Sans JP の幅で見込む
+TEXT_EM = ASCII_EM  # 組む・見るデッキの書体の英数字の幅（use_font。ponytail: 1 つずつ組む前提の大域の値）
+
+
+def use_font(f):
+    """字幅の見積もり（em_width）を、本文の書体 f の幅にする。組む側（theme_of、テンプレートの見本は template.py）と見る側（lint_slides）が呼ぶ。"""
+    global TEXT_EM
+    TEXT_EM = FONT_EM.get(f, ASCII_EM)
 
 
 def em_width(s, mono=False):
-    """文字の幅の見積もり（em）。全角と、矢印・丸数字・× などの記号（U+2100 から上と ×÷±…※†‡）は 1、英数字と記号は ASCII_EM（mono なら MONO_EM）、ほかは 0.57。"""
-    return sum(1.0 if ord(c) >= 0x2100 or c in "×÷±…※†‡" else MONO_EM if mono and c in ASCII_EM else ASCII_EM.get(c, 0.57) for c in s)
+    """文字の幅の見積もり（em）。全角と、矢印・丸数字・× などの記号（U+2100 から上と ×÷±…※†‡）は 1、英数字と記号は TEXT_EM（mono なら MONO_EM）、ほかは 0.57。"""
+    return sum(1.0 if ord(c) >= 0x2100 or c in "×÷±…※†‡" else MONO_EM if mono and c in TEXT_EM else TEXT_EM.get(c, 0.57) for c in s)
 
 
 def wrap_lines(s, avail, size, mono=False):
@@ -928,10 +943,10 @@ def use_theme(t):
 
 
 def theme_font(t):
-    """テーマの表 t（[slides.themes]・[docs.themes]）の本文の書体。書いていなければ FONT。和文を描けると確かめた書体（JP_FONTS）でなければ止める
-    （ほかの書体は、和文が別の書体になるか、描けない。deck_font も FONT に戻す）。"""
-    if not isinstance(f := t.get("font", FONT), str) or f not in JP_FONTS:
-        sys.exit(f"テーマの font {f!r} は、和文を描けると確かめた書体（slides.py の JP_FONTS）にない。deck-template の SKILL.md の「書体」から選ぶ")
+    """テーマの表 t（[slides.themes]・[docs.themes]）の本文の書体。書いていなければ FONT。和文を描けると確かめた書体（JP_FONTS）か、英数字の幅を測った
+    欧文の書体（FONT_EM の DM Sans。和文は Google が別のゴシックで描く）でなければ止める（ほかの書体は、和文が別の書体になるか、描けない。deck_font も FONT に戻す）。"""
+    if not isinstance(f := t.get("font", FONT), str) or f not in JP_FONTS | set(FONT_EM):
+        sys.exit(f"テーマの font {f!r} は、和文を描けると確かめた書体（slides.py の JP_FONTS）にも、字幅を測った欧文の書体（FONT_EM）にもない。deck-template の SKILL.md の「書体」から選ぶ")
     return f
 
 
@@ -966,9 +981,11 @@ def need_mark(want, mark):
 
 
 def theme_of(pid):
-    """プレゼン（かテンプレート）pid のテーマの名前（deck_theme）。表紙・扉の文字の幅（use_layouts）も決める。"""
-    p = request("GET", f"{SLIDES}/{pid}?fields=masters(pageElements(description)),layouts(objectId,pageElements(description))")
+    """プレゼン（かテンプレート）pid のテーマの名前（deck_theme）。表紙・扉の文字の幅（use_layouts）と、字幅の見積もりの書体（use_font）も決める。
+    書体は factory.toml でなくマスターから引く（build・lint と同じ deck_font。url だけで指す共有テーマは、factory.toml に font がない）。"""
+    p = request("GET", f"{SLIDES}/{pid}?fields=masters(pageElements(description,shape)),layouts(objectId,pageElements(description))")
     use_layouts(p)
+    use_font(deck_font(p))
     return deck_theme(p)
 
 
@@ -978,7 +995,7 @@ def build(pid, deck, force=False):
     if not force:
         gapi.guard(pid, revision(pid), STAMP, "pages.py")
     p = request("GET", f"{SLIDES}/{pid}?fields=slides(objectId),layouts(objectId,layoutProperties(displayName),pageElements(description,shape(placeholder))),"
-                       "masters(pageElements(shape))")
+                       "masters(pageElements(description,shape))")  # description は deck_font が見るテーマの名前
     kinds = {l["objectId"]: f"@{k.upper()}{n}" for (k, n), l in deck_layouts(p).items()}  # 表紙・扉のパターンのレイアウト（template.py が残したもの）
     ls = [l for l in p["layouts"] if is_blank(l) and l["objectId"] not in kinds]  # 会社のテンプレートから作ったものは、template.py が残した Blank が 1 つだけ（名前は会社のもの）
     layout = next((l["objectId"] for l in ls if l["layoutProperties"]["displayName"] == BLANK), ls[0]["objectId"] if len(p["layouts"]) == len(kinds) + 1 and ls else None)
@@ -1027,11 +1044,13 @@ def is_blank(layout):
 
 def deck_font(p):
     """デッキの書体。テンプレートのマスターのプレースホルダーの書体（template.py が書く。本文の枠を先に見る）のうち、JP_FONTS にあるもの。
+    欧文の書体（FONT_EM の DM Sans）は、template.py が書いたテーマの名前（deck_theme）があるデッキだけ。
     なければ FONT（社内資料の複製など、マスターが欧文の書体のデッキは FONT で組み、lint も FONT と比べる）。pages.py は FONT で組み、build が置き換える。"""
+    fonts = JP_FONTS | set(FONT_EM) if deck_theme(p) else JP_FONTS
     els = [e for m in p.get("masters", []) for e in m.get("pageElements", []) if "placeholder" in e.get("shape", {})]
     for e in sorted(els, key=lambda e: e["shape"]["placeholder"].get("type") != "BODY"):
         for t in e["shape"].get("text", {}).get("textElements", []):
-            if (f := t.get("textRun", {}).get("style", {}).get("fontFamily")) in JP_FONTS:
+            if (f := t.get("textRun", {}).get("style", {}).get("fontFamily")) in fonts:
                 return f
     return FONT
 
@@ -1176,6 +1195,8 @@ def selftest():
     ph = lambda t, f: {"shape": {"placeholder": {"type": t}, "text": {"textElements": [{"textRun": {"style": {"fontFamily": f}}}]}}}
     assert deck_font({"masters": [{"pageElements": [ph("TITLE", "BIZ UDPGothic")]}]}) == "BIZ UDPGothic" and deck_font({"masters": [{}]}) == FONT  # 書体はテンプレートのマスターから
     assert deck_font({"masters": [{"pageElements": [ph("TITLE", "DM Sans")]}]}) == FONT  # 欧文の書体のマスター（社内資料の複製）は FONT
+    marked = lambda f: {"masters": [{"pageElements": [ph("TITLE", f), {"description": "ai-deck-factory theme=acme", **ph("SLIDE_NUMBER", f)}]}]}
+    assert deck_font(marked("DM Sans")) == "DM Sans" and deck_font(marked("Inter")) == FONT  # template.py が DM Sans で組んだテーマのデッキは DM Sans。測っていない欧文の書体は FONT
     assert deck_font({"masters": [{"pageElements": [ph("TITLE", "Noto Serif JP"), ph("BODY", "BIZ UDPGothic")]}]}) == "BIZ UDPGothic"  # 本文の枠を先に見る
     assert refont([{"style": {"fontFamily": FONT}}, {"insertText": {"text": FONT}}], "X") == [{"style": {"fontFamily": "X"}}, {"insertText": {"text": FONT}}]
     assert is_blank({"pageElements": [{"shape": {"placeholder": {"type": "SLIDE_NUMBER"}}}]}) and not is_blank({"pageElements": [ph("TITLE", FONT)]})
@@ -1387,6 +1408,13 @@ def selftest():
     assert {"opaqueColor": {"rgbColor": rgb("37352F")}} in [r["updateTextStyle"]["style"].get("foregroundColor") for r in t.reqs if "updateTextStyle" in r]
     use_theme({"mono": "IBM Plex Mono"})  # テーマの等幅の書体で組む（字の幅の見込みは MONO_EM のまま）
     assert {r["updateTextStyle"]["style"]["fontFamily"] for r in mono_reqs("e", "a あ b")} == {"IBM Plex Mono"}
+    noto, dm = .56 + .35 + .56 + .22 + 1, .31 + .54 + .31 + .27 + 1  # 「1-1 あ」の幅
+    real, globals()["request"] = request, lambda *a, **k: marked("DM Sans")  # url だけで指す共有テーマ: factory.toml に font がなくても、マスターの DM Sans の幅で組む
+    assert theme_of("x") == "acme"
+    assert abs(em_width("1-1 あ") - dm) < 1e-9 and em_width("ab", mono=True) == 2 * MONO_EM  # 英数字の幅は本文の書体のもの（和文と等幅は変わらない）
+    globals()["request"] = real
+    use_font(FONT)
+    assert abs(em_width("1-1 あ") - noto) < 1e-9
     # テーマは factory.toml の url で指し、そのテンプレートが持つ値（template_meta）に factory.toml の値を重ねる。共有テーマのフォルダは、factory.toml にないものを探すときだけ
     def gone(*_):
         raise gapi.ApiError("404 GET x")

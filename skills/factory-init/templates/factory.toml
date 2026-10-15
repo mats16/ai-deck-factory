@@ -30,7 +30,7 @@ default_theme = "visual"  # 説明で決まらないときのテーマ。テー�
 
 # [slides.themes.acme]  # 会社のテンプレートから作るテーマ（deck-template）。font は書体、色は役割の名前（visual.md の 1）。template.py check acme で測る
 # description = "アクメの会社の色。顧客向けの提案と、社外の登壇"  # どの資料・聞き手に使うか。エージェントが資料ごとに選ぶときに読む（slides.py themes）
-# font = "Noto Sans JP"
+# font = "Noto Sans JP"  # 和文のある書体（slides.py の JP_FONTS）か、欧文の DM Sans（和文は Google が選ぶゴシック）。書かなければ Noto Sans JP
 # NAVY = "002B5C"
 # mono = "Cascadia Mono"  # コードの等幅。どのテーマにも書ける。書かなければ Cascadia Mono（deck-template の「書体」）
 # TEXT = "303F47"  # テーマに入れない色（TEXT・RULE・RED_SOFT・STAGE_TEXT・DECOR）と名前で書く役割（HEAD・CARD・SUB_ON_NAVY・ON_RED）。どのテーマにも書ける。書かなければ visual.md の 1 の値
