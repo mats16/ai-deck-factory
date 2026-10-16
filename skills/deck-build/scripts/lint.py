@@ -67,6 +67,7 @@ NO_COVER = "1 枚目が表紙（濃紺の地）でない"
 ARROW_MID = "横向きの矢印が、両側の箱の上下の中央にない"
 LINE_GRID = "格子を線で組んでいる（標準の表にできないか）"
 NO_NOTES = "ノートがない"
+NO_SOURCE = "数字に出典の行がない"
 TWO_LINES = "見出しかリードが 2 行の見込み"  # 見出しは 1 行、リードは 1 文（visual.md の 1）
 HEAD_PERIOD, BULLET_PERIOD = "見出しの句点", "箇条書きの句点の混在"  # content.md の 6。名前は Docs の規則と同じ（Docs は見出しのスタイル、箇条書きのリストごと）
 # [lint-023] 見出しは短い名詞句。言い切りは判断を頼むページと数字の結論のページの 2〜3 枚だけ（content.md の 4・6、visual_doc.md の 2）
@@ -97,6 +98,7 @@ MONO = MONO_DEFAULT  # 見ている資料の等幅の書体。lint_slides がデ
 FONT_NG = f"書体が {FONT} でない"  # スライドはテンプレートの書体（deck_font）と比べる。Google Fonts にない書体は、API が受け付けても黙って別の書体で描かれる（slides.md の 5）。英数字だけの MONO（コード）は通す
 MONO_NG = f"等幅の {MONO_DEFAULT} に和文"  # 名前は既定の書体のまま（台帳と lint_runs.jsonl が名前で数える）。テーマの mono なら指摘にその名前を出す。MONO に和文の字形はなく、Google が別の書体で描く。和文は FONT にする（slides.py の mono_reqs。visual.md の 2）
 DECK_WIDE = {NO_COVER, NO_DIVIDER, SHORT_CH, MANY_BANDS, HEAD_CLAIMS}  # デッキ全体を見て出す規則。lint_slides の only で絞らない（ページの番号が付いていても、ほかのページで決まる）
+PAGE_ONLY = {NO_NOTES, NO_SOURCE, NO_LINK, TALK, TWO_LINES, HEAD_PERIOD, HEAD_POLITE, EMPTY_BELOW, EMPTY_HOLE}  # ページを見て出す規則。部品だけを見るときは出さない
 ESTIMATE = {TWO_LINES, BODY_LINES, PHRASE_BREAK, EMPTY_BELOW, EMPTY_BOX, EMPTY_HOLE}  # 字幅と行の高さの見積もりから出す指摘。Google が描いた画像で確定する（ほかは JSON で決まる）
 HARD_NAMES = set(HARD) | {HEAD_PERIOD, HEAD_POLITE, f"{MIN_PT}pt 未満の文字", f"{DOC_MIN_PT}pt 未満の文字", COPYRIGHT_NG, FONT_NG, MONO_NG, "用紙が A4 でない", "追跡の印の付いたリンク"}
 INS = INSET * 72  # 文字の枠の内側の余白（pt）。Slides API の既定は 0.1 in で、変えられない
@@ -493,6 +495,7 @@ class Report:
     def __init__(self):
         self.hits = defaultdict(list)
         self.extra_hard = set()  # ワークスペースの点検（checks.py の HARD）の要修正の名前（workspace_checks が足す）
+        self.where = lambda hit: ""  # 指摘の後ろに付ける、作ったものの中の場所（slides.py lint が JSON のページの部品の場所を引く）
 
     def scan(self, where, text, rules):
         text = URL.sub("", text).strip()
@@ -506,13 +509,13 @@ class Report:
         print(f"\n== {title}: {n}" + (f"（うち見積もり {est}。画像で確定する）" if est else "") + " ==")
         for k in names:
             for line in self.hits[k][:6]:
-                print(f"[{k}] {line}" + ("（見積もり）" if k in ESTIMATE else ""))
+                print(f"[{k}] {line}" + self.where(line) + ("（見積もり）" if k in ESTIMATE else ""))
             if len(self.hits[k]) > 6:
                 print(f"[{k}] ほか {len(self.hits[k]) - 6} 件")
         return n
 
 
-def lint_slides(p, r, reuse=False, talk=False, only=None):
+def lint_slides(p, r, reuse=False, talk=False, only=None, scope="deck"):
     """p は presentations.get の JSON。reuse は社内資料の差し替え用（元の大きさのままなので 11pt の下限と表紙を見ない）。
     only（ページの番号の集合）を渡すと、そのページの指摘・見出し・字数だけを出す（slides.py lint --pages）。デッキ全体の規則（DECK_WIDE）と、
     ワークスペースの点検（ページをまたいで見るものがありうる）は絞らない。"""
@@ -676,7 +679,7 @@ def lint_slides(p, r, reuse=False, talk=False, only=None):
                 r.hits[EMPTY_HOLE].append(f"p{i}: " + "、".join(f"{w} {(z - a) / EMU:.1f} in（{a / EMU:.2f}〜{z / EMU:.2f} in）" for w, a, z in holes)
                                           + "。箱を中身に合わせて縮め、間を詰める。上下の中央に置いた図ならそのままでよい（画像で見る）")
         if nums and not has_src:
-            r.hits["数字に出典の行がない"].append(f"p{i}: 「{nums[0][:30]}」")
+            r.hits[NO_SOURCE].append(f"p{i}: 「{nums[0][:30]}」")
         note = note_text(s)
         if not note.strip() and not reuse:
             r.hits[NO_NOTES].append(f"p{i}")
@@ -711,17 +714,24 @@ def lint_slides(p, r, reuse=False, talk=False, only=None):
                 kept.append(t)
         titles = kept
         chars = [c for c in chars if on(c)]
+    if scope != "deck":  # ページか部品だけを見るときは、デッキ全体の規則を出さない（slides.py lint のページ・部品のファイル）
+        for k in DECK_WIDE:
+            r.hits.pop(k, None)
+    if scope == "component":  # 部品だけのときは、ページの規則（見出し・ノート・出典・ページの空き・字数）も出さない。部品の中の規則は出す
+        for k in PAGE_ONLY:
+            r.hits.pop(k, None)
+        titles, chars = [], []
     if (mp := mid_phrase(wraps)) is None:
         print(f"（uv か BudouX が使えないので、「{PHRASE_BREAK}」は数えていない）")
     r.hits[PHRASE_BREAK] += mp or []
-    if foot_secret:
+    if foot_secret and scope == "deck":
         r.hits["社外秘の表示"].append(f"フッター: {len(foot_secret)} ページ（p{foot_secret[0]}〜p{foot_secret[-1]}）。社内向けなら意図どおり、顧客向けなら外す")
     print("== 見出し（各ページでいちばん大きい文字）とリード（字下げ）。順に読んで話が通るか ==")
     print("\n".join(titles))
     print(f"\n== 本文の字数（見出し・リード・出典・フッターを除く。話す資料は {TALK_MAX} 字まで） ==")
     print(" / ".join(chars))
     hard = r.show(list(HARD) + [f"{MIN_PT}pt 未満の文字", COPYRIGHT_NG, FONT_NG, MONO_NG, HEAD_PERIOD, HEAD_POLITE], "要修正")
-    r.show(list(WARN) + list(SLIDE_ONLY) + list(NOTES_ONLY) + ["数字に出典の行がない", NO_LINK, BODY_LINES, TWO_LINES, HEAD_CLAIMS, BULLET_PERIOD, TALK, NO_NOTES, ARROW_MID, LINE_GRID, EMPTY_BELOW, EMPTY_BOX, EMPTY_HOLE, PAD_NG, NUM_NO_UNIT, OPEN_HEAD, PHRASE_BREAK, COL_SHIFT, DASH_ROUND, STAGE_NG, CODE_NOT_MONO, BLOCK_ON_NAVY, MANY_BANDS, NO_COVER, NO_DIVIDER, SHORT_CH], "要確認")
+    r.show(list(WARN) + list(SLIDE_ONLY) + list(NOTES_ONLY) + [NO_SOURCE, NO_LINK, BODY_LINES, TWO_LINES, HEAD_CLAIMS, BULLET_PERIOD, TALK, NO_NOTES, ARROW_MID, LINE_GRID, EMPTY_BELOW, EMPTY_BOX, EMPTY_HOLE, PAD_NG, NUM_NO_UNIT, OPEN_HEAD, PHRASE_BREAK, COL_SHIFT, DASH_ROUND, STAGE_NG, CODE_NOT_MONO, BLOCK_ON_NAVY, MANY_BANDS, NO_COVER, NO_DIVIDER, SHORT_CH], "要確認")
     hard += workspace_checks("slides", p, r)
     print("\n== 文字サイズ（pt: run の数） ==")
     print(", ".join(f"{k:g}: {v}" for k, v in sorted(sizes.items())))

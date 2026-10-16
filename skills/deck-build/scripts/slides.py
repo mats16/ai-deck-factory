@@ -1,22 +1,27 @@
 #!/usr/bin/env python3
 """Google Slides を Slides API で直接組む（2026-10-07 に pptx から切り替えた。組み方と落とし穴は ../slides.md）。
 資料ごとの build/pages.py に NAME（資料名・秘密区分）と、ページの関数・共通の関数と定数・make(d) だけを書き、部品は Deck のメソッドを使う。
-usage（資料の build/ で。pages.py は今いるフォルダのもの）:
+JSON のページ（build/deck.json と、そこから指すページのファイル）でも書ける（Deck.spec。../slides.md の slides-034）。
+usage（資料の build/ で。pages.py・deck.json は今いるフォルダのもの）:
   slides.py new <Drive のフォルダの URL か ID> <Drive 上の名前> [--theme <テーマ>]   テンプレートを複製して組む（テーマは factory.toml の [slides.themes.<名前>]。その url のテンプレートを複製する）
   slides.py build <URL か ID> [--force]   組み直す（中身の変わったページだけを作り直し、順をそろえる。URL は変わらない）。前に組んだあとに画面で直されているか、
                                           未解決のコメントがあれば止まる。直しを pages.py に入れてから --force で組み直す（--force は全ページを作り直す）。
                                           作り直したページを /tmp/slides_<ID の頭 8 字>/changed.json に、工程ごとの秒を標準エラーに出す
   slides.py lint [<ファイル>] [<URL か ID>] [--pages 3,5 | --all] [--talk]   組まずに、組む要求を手元で presentations.get の形にして lint をかける（テストの unit。
                                           直すたびに回す）。既定は前に回したときから変わったページ（と要修正が残ったページ。デッキか規則が変わったら全ページ）。URL を省くと既定のテーマのテンプレートで見る
-  slides.py dry [<ファイル>] [<URL か ID>]   組まずに make を走らせ、組むときの警告・枚数・ノートのないページを出す（既定は pages.py。子が書いた build/pages_<担当>.py を確かめる。
+  slides.py dry [<ファイル>] [<URL か ID>]   組まずに make を走らせ、組むときの警告・枚数・ノートのないページを出す（既定は pages.py。子が書いた build/pages_<担当>.py か、JSON のページの .json を確かめる。
                                           URL を渡すと、表紙・扉のパターンとテーマをそのデッキから読む（読むだけ）。../slides.md の 2）
+  slides.py resolve [<ファイル>.json] [<URL か ID>]   JSON のページを解いた形（in の位置とすべての値。Deck のメソッドの呼び出し）を出す（../slides.md の slides-034）
+  slides.py schema   JSON のページの書く形の JSON Schema を出す
+  slides.py stats   JSON のページの形の外の書き方（raw）を、キーごとに使った資料の数で出す（ワークスペースの .factory/spec_raw.jsonl。形に足す候補）
+  slides.py upgrade <ファイル>...   JSON のページの raw のうち、形のキーで書けるものを書き換える
   slides.py themes   テーマの名前・説明・テンプレートがあるか・既定か。資料ごとに選ぶ（../../deck-practices/SKILL.md の「作業の始め方」の 5）。
                      [drive] shared_themes と [drive] factory の下の Themes の、factory.toml にないテンプレートも候補に出す
   slides.py merge <ファイル>...   子が別のファイルに書いたページの関数を pages.py に合わせる（組まない。../../deck-review/SKILL.md の手順 5）
   slides.py --selftest
 テンプレートの管理は template.py。色は下の「色の役割」の名前で渡す。役割の名前はテーマの色（マスターの配色）を指すので、テンプレートを替えると色が変わる。
 見た目の決まりは ../../deck-practices/visual.md の 1。"""
-import ast, atexit, contextlib, functools, hashlib, importlib, io, itertools, json, math, os, re, shutil, subprocess, sys, tempfile, time, tomllib, urllib.error, urllib.parse, urllib.request
+import ast, atexit, contextlib, functools, hashlib, importlib, inspect, io, itertools, json, math, os, re, shutil, subprocess, sys, tempfile, time, tomllib, types, urllib.error, urllib.parse, urllib.request
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -195,6 +200,13 @@ def card_h(w, head=None, body=None, items=None, step=None, bullets=False, size=1
     return top + (est_h(s, avail, size, 125) + 2 * INSET if s else 0) + 0.15  # 最終行と下端の間を、白いカードの決まり（box_pad の 0.28 in）より広く
 
 
+def table_h(widths, rows, size=11, row_h=0.36, header=True, mono_cols=()):
+    """d.table の高さの見込み（in）。行は文字に合わせて伸びる（row_h は最小。行ごとの並びでもよい）。"""
+    hs = list(row_h) if isinstance(row_h, (list, tuple)) else [row_h] * len(rows)
+    return sum(max(hs[r], 0.16 + max([1] + [est_lines(s, widths[c] - 2 * INSET, size, c in mono_cols and not (header and r == 0)) for c, s in enumerate(row)])
+                   * size * 1.2 * 1.2 / 72) for r, row in enumerate(rows))
+
+
 def cols(n, gap=0.24, x0=X, w=W):
     """幅 w を n 列に分けた (左端, 幅) の並び。"""
     cw = (w - gap * (n - 1)) / n
@@ -279,6 +291,24 @@ def fixed(c):
     return _SWAP.get(c.upper(), c) if isinstance(c, str) else c
 
 
+PALETTE = dict(THEMES["visual"])  # 組むデッキの配色（テーマの色の枠 → 6 桁。use_palette がマスターから読む）。アイコンの色を役割の名前で書くため
+
+
+def use_palette(p):
+    """デッキ p のマスターの配色を PALETTE にする（theme_of・slides.py lint が読んだもの）。マスターが書いていない枠は既定の配色（前のデッキの色を残さない）。"""
+    PALETTE.clear()
+    PALETTE.update(THEMES["visual"])
+    for c in (p.get("masters") or [{}])[0].get("pageProperties", {}).get("colorScheme", {}).get("colors", []):
+        if (v := c.get("color", {}).get("rgbColor")) is not None:  # 0 の成分は省かれる
+            PALETTE[c["type"]] = "".join(f"{round(v.get(k, 0) * 255):02X}" for k in ("red", "green", "blue"))
+
+
+def hex_of(c):
+    """役割の名前か 6 桁の色を、組むデッキの 6 桁にする（paint と同じ引き方）。"""
+    c = _NAMED[c] if c in _NAMED else fixed(NAMED.get(c, c))
+    return PALETTE.get(c, c)
+
+
 def paint(c):  # 役割の名前ならテーマの色、6 桁ならその色（固定の色はテーマの値）。NAMED はテーマが書いた値、書いていなければ既定の色
     c = _NAMED[c] if c in _NAMED else fixed(NAMED.get(c, c))
     return {"themeColor": c} if c in SLOTS else {"rgbColor": rgb(c)}
@@ -353,6 +383,9 @@ class Deck:
         self.round_groups = []  # 角丸・正円の背景と文字の枠を、文字を書き終わってから 1 つにまとめる
         self.warnings = []   # 組むときの見込みの警告（折り返し、見出しを縮めた、など）
         self.run = new_run()  # 組み直すときに、前の ID（残したページのものも）とぶつけない
+        self.page_names = {}  # JSON のページのファイル名（拡張子なし）→ ページの ID。[名前](#p12) のリンク先
+        self.resolved, self.spec_index, self.spec_esc = [], {}, []  # JSON のページ（spec）の解いた形、ページごとの (部品の場所, 文字)（lint の指摘に場所を付ける）、
+        # 形の外の書き方（ページ, 場所, キー）
 
     def oid(self):
         self.n += 1
@@ -396,6 +429,11 @@ class Deck:
 
     def note(self, sid, text):
         self.notes[sid] = text
+
+    def spec(self, src):
+        """JSON で書いたページ（ファイルのパス、dict、その並び、deck.json、部品 1 つ）を解いて組み、ページの ID の並びを返す。
+        書き方は ../slides.md の slides-034。解いた形は self.resolved に残る（slides.py resolve）。"""
+        return [spec_page(self, p, base, loc, name) for p, base, loc, name in spec_files(src)]
 
     # ---- 図形と文字 ----
     def _shape(self, sid, x, y, w, h, fill=None, line=None, kind="RECTANGLE", sx=1, sy=1, dash=False, weight=0.75):
@@ -540,7 +578,7 @@ class Deck:
                 style, fields = run_style(st, color)
                 req = {"updateTextStyle": {"objectId": e, "textRange": {"type": "FIXED_RANGE", "startIndex": i, "endIndex": i + u16(s)},
                                            "style": style, "fields": fields}}
-                if isinstance(st.get("link"), int):
+                if isinstance(st.get("link"), (int, dict)):  # ページの番号か、JSON のページの名前（{"page": "p12"}）
                     self.links.append((req, st["link"]))
                 else:
                     self.reqs.append(req)
@@ -613,12 +651,16 @@ class Deck:
             self.text(sid, x + PAD, top, w - 2 * PAD, h - (top - y) - 0.1, body, spacing=125, bullets=bullets)
         return y + h
 
-    def table(self, sid, x, y, widths, rows, size=11, row_h=0.36, header=True, first_col=True, zebra=True, align=None, mono_cols=()):
+    def table(self, sid, x, y, widths, rows, size=11, row_h=0.36, header=True, first_col=True, zebra=True, align=None, mono_cols=(), fills=()):
         """rows は文字列の 2 次元の並び（1 行目が見出し）。セルの中の改行は \\n。縦の罫線なし、横の罫線は RULE（visual.md の 5）。
         見出しの行は濃紺に白の太字、1 列目は HEAD の太字（first_col）、行は 1 行おきに PANEL（zebra）、ほかは CARD。align は列ごとの "l"・"c"・"r"（金額は右）。
         行は文字に合わせて伸びる（row_h は最小）。戻りは表の下端の見込み（in。下に置く要素の位置に使う）。
-        mono_cols の列は、見出しの行を除いて英数字を等幅の MONO にする（コマンドの一覧など。visual.md の 2）。"""
+        mono_cols の列は、見出しの行を除いて英数字を等幅の MONO にする（コマンドの一覧など。visual.md の 2）。
+        row_h は行ごとの並びでもよい。fills は (行, 列, 色) の並び（0 始まり。行か列が None ならその列か行の全部）で、1 行おきの塗りの上に塗る（強調するセル）。"""
         t, nr, nc = self.oid(), len(rows), len(widths)
+        hs = list(row_h) if isinstance(row_h, (list, tuple)) else [row_h] * nr
+        if len(hs) != nr:
+            raise ValueError(f"row_h の数（{len(hs)}）が行の数（{nr}）と違う")
         whole = {"location": {"rowIndex": 0, "columnIndex": 0}, "rowSpan": nr, "columnSpan": nc}
 
         def rng(r, c, rs=1, cs=1):
@@ -634,24 +676,25 @@ class Deck:
                                                   "tableCellProperties": {"tableCellBackgroundFill": {"solidFill": {"color": paint(color)}}},
                                                   "fields": "tableCellBackgroundFill"}}
 
-        self.reqs += [{"createTable": {"objectId": t, "rows": nr, "columns": nc, "elementProperties": place(sid, x, y, sum(widths), row_h * nr)}},
+        self.reqs += [{"createTable": {"objectId": t, "rows": nr, "columns": nc, "elementProperties": place(sid, x, y, sum(widths), sum(hs))}},
                       border("ALL", 0), border("INNER_HORIZONTAL", 1), border("BOTTOM", 1),
                       {"updateTableCellProperties": {"objectId": t, "tableRange": whole, "tableCellProperties": {"contentAlignment": "MIDDLE"},
                                                      "fields": "contentAlignment"}},
-                      {"updateTableRowProperties": {"objectId": t, "rowIndices": list(range(nr)), "tableRowProperties": {"minRowHeight": emu(row_h)}, "fields": "minRowHeight"}}]
+                      *[{"updateTableRowProperties": {"objectId": t, "rowIndices": [r for r in range(nr) if hs[r] == h], "tableRowProperties": {"minRowHeight": emu(h)},
+                                                      "fields": "minRowHeight"}} for h in dict.fromkeys(hs)]]
         self.reqs += [{"updateTableColumnProperties": {"objectId": t, "columnIndices": [j], "tableColumnProperties": {"columnWidth": emu(w)}, "fields": "columnWidth"}}
                       for j, w in enumerate(widths)]
         self.reqs += [fill(r, NAVY if header and r == 0 else PANEL if zebra and (r - header) % 2 else CARD) for r in range(nr)]
-        bottom = y
+        self.reqs += [{"updateTableCellProperties": {"objectId": t, "tableRange": rng(0 if r is None else r, 0 if c is None else c, nr if r is None else 1, nc if c is None else 1),
+                                                     "tableCellProperties": {"tableCellBackgroundFill": {"solidFill": {"color": paint(color)}}}, "fields": "tableCellBackgroundFill"}}
+                      for r, c, color in fills]
         for r, row in enumerate(rows):
             head = header and r == 0
-            lines = 1
             for c, s in enumerate(row):
                 avail, mono = widths[c] - 2 * INSET, c in mono_cols and not head
                 for ln in s.split("\n"):
                     if ln and est_lines(ln, avail, size, mono) > 1:
                         self.warn(f"表のセルが折り返す見込み「{ln}」（列の幅 {widths[c]:.2f} in）")
-                lines = max(lines, est_lines(s, avail, size, mono))
                 if not s:
                     continue
                 loc = {"rowIndex": r, "columnIndex": c}
@@ -667,8 +710,7 @@ class Deck:
                                                         "fields": "lineSpacing,spaceAbove,spaceBelow,alignment"}}]
                 if mono:
                     self.reqs += mono_reqs(t, s, loc)
-            bottom += max(row_h, 0.16 + lines * size * 1.2 * 1.2 / 72)
-        return bottom
+        return y + table_h(widths, rows, size, hs, header, mono_cols)
 
     def arrow(self, sid, x1, y1, x2, y2, color=SUB, head=True, dash=False, weight=1.25):
         """細い線。横の矢印は、両側の箱の上下の中央に引く（visual.md の 4。lint が見る）。dash で点線（「できるが手間」などの意味）、weight は太さ（pt）。"""
@@ -698,10 +740,10 @@ class Deck:
 
     def icon(self, sid, name, x, y, size, color=TEXT):
         """アイコンを size（in）の正方形に置く。name は Iconify の名前（"tabler:database"。URL のまま貼る。既定）か、react-icons の名前
-        （"TbDatabase"。組むときに手元で PNG にして carry で貼る。前の pages.py のため）。color は 6 桁（1 色のアイコンにだけ効く）。代替テキストは名前。"""
-        if not re.fullmatch(r"[0-9A-Fa-f]{6}", str(color)):  # テーマの色（NAVY は "DARK1"）は画像の色にできず、透明の画像になる。lint も気づかない
-            sys.exit(f"アイコンの色は 6 桁で渡す: {name} に {color!r}。テーマの色（NAVY・SUB など）は使えないので、TEXT か 6 桁にする")
-        color = fixed(color)
+        （"TbDatabase"。組むときに手元で PNG にして carry で貼る。前の pages.py のため）。color は役割の名前か 6 桁（1 色のアイコンにだけ効く）。代替テキストは名前。"""
+        color = hex_of(color)  # 役割の名前（NAVY は "DARK1"）は、デッキの配色の 6 桁にする（画像の色はテーマの色を指せない）
+        if not re.fullmatch(r"[0-9A-Fa-f]{6}", str(color)):
+            sys.exit(f"アイコンの色は役割の名前か 6 桁で渡す: {name} に {color!r}")
         return self.image(sid, iconify(name, color) if ":" in name else render_icon(name, color), x, y, size, size, alt=name)
 
     # ---- 1 枚の型（visual.md の 1） ----
@@ -777,9 +819,15 @@ class Deck:
             if sid != self.slides[0]:  # 前のテンプレート（ページ番号が 11pt）から作ったデッキも、組み直せばそろう
                 self.reqs += number_style(sid + "_n", c)
         for req, n in self.links:
-            if not 1 <= n <= len(self.slides):
+            if isinstance(n, dict):
+                if n["page"] not in self.page_names:
+                    sys.exit(f"リンク先のページ「{n['page']}」がない（このデッキの JSON のページ: {'・'.join(self.page_names) or 'なし'}）")
+                target = self.page_names[n["page"]]
+            elif not 1 <= n <= len(self.slides):
                 raise ValueError(f"リンク先の p.{n} がない（{len(self.slides)} 枚）")
-            req["updateTextStyle"]["style"]["link"] = {"pageObjectId": self.slides[n - 1]}
+            else:
+                target = self.slides[n - 1]
+            req["updateTextStyle"]["style"]["link"] = {"pageObjectId": target}
             self.reqs.append(req)
         for bg, e, gid in self.round_groups:
             self.reqs.append({"groupObjects":{"groupObjectId":gid,"childrenObjectIds":[bg,e]}})
@@ -792,6 +840,874 @@ def make_deck(make, name):
     make(d)
     d.finish()
     return d
+
+
+# ---- JSON のページ（Deck.spec。../slides.md の slides-034） ----
+# 書く形（LLM が書く。並べ方と意味だけ）→ 解く（spec_page。並べ方・記法・ID・既定の値・画像のパス）→ 解いた形（d.resolved。in の絶対位置で、
+# Deck のメソッドの引数をすべて持つ。slides.py resolve が出す）→ 要求（Deck）。
+# 形の版は k8s にならい、ファイルの頭の apiVersion と kind で持つ。上げるのは、キーの意味が変わるときだけ（足すときは上げない。../slides.md の slides-035）
+API_VERSION = "slides/v1"
+KINDS = ("Deck", "Page", "Component")
+COLOR_NAMES = ("NAVY", "BG", "RED_ON_NAVY", "PANEL", "NAVY_BLOCK", "GA", "RED_TEXT", "PREVIEW", "SUB", "OSS", "RED", "WHITE", "PUBLIC_PREVIEW",
+               "TEXT", "RULE", "RED_SOFT", "STAGE_TEXT", "DECOR", "HEAD", "CARD", "SUB_ON_NAVY", "ON_RED")
+ON_FILL = {"NAVY": ("WHITE", "RED_ON_NAVY"), "NAVY_BLOCK": ("WHITE", "RED_ON_NAVY"), "RED": ("ON_RED", "ON_RED"), "OSS": ("WHITE", "WHITE")}  # 濃い塗り → (文字の色, ***強調*** の色)。ほかの地は TEXT・RED_TEXT
+ALIGN = {"left": "START", "center": "CENTER", "right": "END"}
+VALIGN = {"top": "TOP", "middle": "MIDDLE", "bottom": "BOTTOM"}
+# 図形の形（Slides API の shapeType を小文字に）。過去の資料で使った形と、矢羽根の段の頭（home_plate）だけ。ほかは使われたら足す（slides-035）
+SHAPES = {k.lower(): k for k in ("RECTANGLE", "ROUND_RECTANGLE", "ELLIPSE", "CHEVRON", "HOME_PLATE", "FOLDED_CORNER", "CAN")}
+GAP_BODY, GAP, GAP_ARROW, ARROW_PAD = 0.3, 0.24, 0.6, 0.08  # 本文の部品の間、stack・row・grid の間、arrows の row の間、矢印と箱の間（in）
+# 印のあるカード（過去の資料の node・icard・ncard。2026-10-16）: 印の大きさ（アイコン・番号／画像）、カードの端から印、印から文字、文字の上、最終行と下端（in）
+MARK, MARK_IMG, MARK_IN, MARK_GAP, CARD_TOP, CARD_BOTTOM = 0.36, 0.5, 0.18, 0.14, 0.16, 0.28
+STAT_PAD, HEAD_GAP = 0.2, 0.06  # 数字の強調の箱の端と文字の間、印のあるカードの見出しと本文の間（in）
+# キーの型。s 文字列、md 記法つきの文字（spec_md）、n 数、i 整数、b 真偽、c 色、els 部品の並び、pt ID か [x, y]、ほかは SPEC_OK
+_GEO = {"id": "s", "w": "w", "h": "p", "x": "n", "y": "n"}  # どの部品にも書ける（x・y は frame の中だけ、w の "fit" は label だけ）
+_ESC = {"raw": "raw"}  # 形の外の書き方（どの部品にも書ける。lint が要確認に出し、build が数を残す。slides-035）
+_BOX = {"fill": "c", "line": "c", "dash": "b", "weight": "p", "shape": tuple(SHAPES), "radius": "n"}
+_TEXT = {"size": "p", "color": "c", "bold": "b", "align": tuple(ALIGN), "mono": "b", "pad": "n", "spacing": "p", "para_gap": "n"}
+SPEC_EL = {  # type → (要るキー, 書けるキー)
+    "text": ({"text": "md"}, {**_TEXT, **_BOX, "valign": tuple(VALIGN)}),
+    "label": ({"text": "md"}, {k: _TEXT[k] for k in ("size", "color", "bold", "align", "mono", "pad")} | {"fill": "c", "radius": "n"}),
+    "card": ({}, {"head": "s", "text": "md", "items": "items", "fill": "c", "line": "c", "step": "p",
+                  "icon": "s", "num": "ns", "image": "s", "align": ("left", "center"), "valign": ("top", "middle")}),  # icon・num・image は印（どれか 1 つ）
+    "stat": ({"value": "s"}, {"unit": "s", "label": "s", "sub": "s", "size": "p", "color": "c", "fill": "c", "line": "c", "align": ("left", "center")}),  # 数字の強調
+    "code": ({"text": "s"}, {"hot": "ints", "size": "p"}),
+    "table": ({"rows": "rows"}, {"widths": "nums", "header": "b", "first_col": "b", "zebra": "b", "align": "lcr", "mono_cols": "ints", "size": "p",
+                                 "row_h": "nh", "fills": "fills"}),
+    "image": ({"src": "s"}, {"alt": "s"}),
+    "icon": ({"name": "s"}, {"size": "p", "color": "c"}),
+    "num": ({"n": "ns"}, {"size": tuple(NUM), "fill": "c"}),
+    "box": ({}, _BOX),
+    "arrow": ({"from": "pt", "to": "pt"}, {"color": "c", "head": "b", "dash": "b", "weight": "p"}),
+    "row": ({"items": "kids"}, {"gap": "n", "widths": "nums", "arrows": "b"}),
+    "stack": ({"items": "kids"}, {"gap": "n"}),
+    "grid": ({"items": "kids", "cols": "pi"}, {"gap": "n"}),
+    "frame": ({"items": "kids", "h": "p"}, {}),
+}
+NO_SIZE = ("icon", "num", "arrow")  # w・h を書かない（大きさは size、矢印は両端）
+CONTAINERS = ("row", "stack", "grid", "frame")  # 並べ方の箱（中の部品を置くだけで、Deck を呼ばない）
+NO_H = ("row", "stack", "grid")  # h を書かない（高さは中身から決まる。中身より小さい h は次の部品と重なる。frame だけは h が要る）
+STRETCH = ("card", "stat", "box", "label", "code", "frame", "stack")  # row・grid で行の高さまで伸ばす（text は塗りか枠線のあるときだけ）
+SPEC_PAGE = {
+    "page": ({"title": "s"}, {"lead": "s", "kicker": "s", "body": "els", "band": "band", "source": "md", "note": "s"}),
+    "cover": ({"title": "s", "kicker": "s"}, {"sub": "s", "variant": "pi", "note": "s"}),
+    "divider": ({"num": "s", "title": "s"}, {"sub": "s", "variant": "pi", "note": "s"}),
+    "slide": ({}, {"bg": "c", "foot": "b", "body": "els", "source": "md", "note": "s"}),
+}
+SPEC_DECK = ({"name": "s", "pages": "pages"}, {"theme": "s"})  # theme はいちばん上のデッキのファイルのもの（slides.py themes の名前）
+# raw に書いた Deck の引数のうち、形のキーで書けるもの（type, 引数 → 形のキー）。lint が知らせ、slides.py upgrade が書き換える。形に足したらここにも足す
+# 同じ名前で同じ意味のもの（数え始めや単位の違う mono_cols・hot・fills・widths と、stat の size・color〔数字の大きさと色〕は入れない。2026-10-16 のレビュー）
+_SAME = {"text": "size color bold align valign mono fill line dash weight radius pad spacing", "label": "size color fill bold align mono pad radius",
+         "card": "head fill line step", "code": "size", "table": "size header first_col zebra align row_h", "image": "alt", "icon": "size color",
+         "num": "size fill", "box": "fill line dash weight radius", "arrow": "color head dash weight", "stat": "fill line align"}
+SPEC_PROMOTED = {(t, k): k for t, ks in _SAME.items() for k in ks.split()} | {("text", "gap"): "para_gap", ("text", "kind"): "shape", ("box", "kind"): "shape"}
+MD = re.compile(r"\\([\\*`\[\]<{}])|\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\{(\d+(?:\.\d+)?):(.+?)\}|`([^`]+)`|\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)|<br>")  # URL の中の 1 段の () も読む
+
+
+def _num(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _int(v):
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+def _strs(v, n=None):
+    return isinstance(v, list) and all(isinstance(y, str) for y in v) and (n is None or len(v) == n)
+
+
+def _color(v):
+    return v in COLOR_NAMES or isinstance(v, str) and bool(re.fullmatch(r"[0-9A-Fa-f]{6}", v))
+
+
+_pos = lambda v: _num(v) and v > 0  # 大きさ・太さ・行間など、0 だと描けないもの
+SPEC_OK = {"s": lambda v: isinstance(v, str), "md": lambda v: isinstance(v, str), "n": lambda v: _num(v) and v >= 0, "p": _pos, "i": _int,
+           "pi": lambda v: _int(v) and v >= 1, "b": lambda v: isinstance(v, bool), "c": _color,
+           "w": lambda v: _pos(v) or v == "fit", "nh": lambda v: _pos(v) or isinstance(v, list) and bool(v) and all(map(_pos, v)),
+           "els": lambda v: isinstance(v, list), "kids": lambda v: isinstance(v, list) and bool(v),  # 並べ方の箱の中は 1 つ以上
+           "pages": lambda v: isinstance(v, list) and bool(v) and all(isinstance(x, str) and x.endswith(".json") for x in v),
+           "pt": lambda v: isinstance(v, str) or isinstance(v, list) and len(v) == 2 and all(map(_num, v)),
+           "items": lambda v: isinstance(v, list) and all(_strs(x, 2) for x in v),
+           "rows": lambda v: isinstance(v, list) and bool(v) and all(_strs(x) and x for x in v),
+           "nums": lambda v: isinstance(v, list) and all(_num(x) and x > 0 for x in v), "ints": lambda v: isinstance(v, list) and all(_int(x) and x > 0 for x in v),
+           "fills": lambda v: isinstance(v, list) and all(isinstance(x, list) and len(x) == 3 and _int(x[0]) and _int(x[1]) and x[0] >= 0 and x[1] >= 0 and _color(x[2]) for x in v),
+           "lcr": lambda v: isinstance(v, str) and bool(re.fullmatch(r"[lcr]+", v)), "ns": lambda v: isinstance(v, str) or _int(v),
+           "band": lambda v: isinstance(v, str) or isinstance(v, dict) and isinstance(v.get("text"), str) and set(v) <= {"text", "sub"} and isinstance(v.get("sub", ""), str),
+           "raw": lambda v: isinstance(v, dict) and bool(v)}
+
+
+def spec_ok(v, t):
+    """v が型 t（SPEC_OK の名前か、選ぶものの並び）に合うか。"""
+    return SPEC_OK[t](v) if isinstance(t, str) else v in t
+
+
+def spec_check(o, schema, loc, extra=None):
+    """o（dict）が schema の (要るキー, 書けるキー) と extra（キー → 型）に合うか。合わなければ場所を付けて止める。"""
+    need, opt = schema
+    known = {"type": "s", **need, **opt, **(extra or {})}
+    if not isinstance(o, dict):
+        sys.exit(f"{loc}: {{…}} で書く")
+    if bad := [k for k in o if k not in known]:
+        sys.exit(f"{loc}: 知らないキー {', '.join(bad)}（書けるもの: {'・'.join(known)}。新しい形のキーなら、プラグインを update する）")
+    if lack := [k for k in need if k not in o]:
+        sys.exit(f"{loc}: {', '.join(lack)} がない")
+    for k, v in o.items():
+        if not spec_ok(v, known[k]):
+            t = known[k]
+            sys.exit(f"{loc}.{k}: {v!r} は書けない（{'・'.join(t) if isinstance(t, tuple) else SPEC_TYPES[t]}）")
+
+
+SPEC_TYPES = {"s": "文字列", "md": "記法つきの文字列", "n": "0 以上の数", "p": "0 より大きい数", "i": "整数", "pi": "1 以上の整数", "b": "true か false", "c": f"色の名前（{'・'.join(COLOR_NAMES)}）か 6 桁",
+              "w": '0 より大きい数（in）か "fit"（label だけ。中身の文字の幅にする）', "nh": "0 より大きい数（in）か、行ごとのその並び",
+              "els": "部品の並び", "kids": "1 つ以上の部品の並び", "pages": "ページかデッキのファイルのパス（.json）の並び", "pt": "部品の id か [x, y]", "items": '[["見出し", "説明"], …]',
+              "rows": '[["見出しの行", …], ["セル", …], …]', "nums": "正の数の並び", "ints": "1 から始まる番号の並び", "lcr": '列ごとの l・c・r（"lrr"）',
+              "fills": '[[行, 列, 色], …]（rows の何番目かで、見出しの行が 1 行目・いちばん左の列が 1 列目。0 はその列か行の全部）', "ns": "文字列か整数", "band": '"文字" か {"text": …, "sub": …}',
+              "raw": "Deck のメソッドの引数（{\"zebra\": false} など）"}
+
+
+def spec_color(c):
+    return globals()[c] if c in COLOR_NAMES else c
+
+
+def spec_md(s, emph=RED_TEXT, loc=""):
+    """記法つきの文字を Deck の parts にする。**太字**、***赤の太字***（emph の色）、{32:文字}（32pt）、[名前](URL)、[名前](#p12)（p12.json のページへのリンク）、
+    <br>（段落の中の改行）、\\n（段落）。太字・赤・大きさの中には、ほかの書式とリンクを入れられる（**{32:48}**）。
+    `コード` は ` を外して本文の書体のまま（地の文の中のコマンド名は等幅にしない。visual-014）。記号そのものは \\* のように \\ を付ける。"""
+    out = []
+
+    def add(t, st=None):
+        if not t:
+            return
+        if st:
+            out.append((t, st))
+        elif out and isinstance(out[-1], str):
+            out[-1] += t
+        else:
+            out.append(t)
+
+    def inner(t, st):  # 中を読み、外の書式を重ねる（中の書式が勝つ）
+        parts = spec_md(t, emph, loc)
+        for p in [parts] if isinstance(parts, str) else parts:
+            if isinstance(p, str):
+                add(p, st)
+            else:
+                add(p[0], {**st, **p[1]})
+    i = 0
+    for m in MD.finditer(s):
+        add(s[i:m.start()])
+        esc, red, bold, size, sized, code, name, url = m.groups()
+        if esc:
+            add(esc)
+        elif red:
+            inner(red, {"bold": True, "color": emph})
+        elif bold:
+            inner(bold, {"bold": True})
+        elif size:
+            inner(sized, {"size": float(size) if "." in size else int(size)})
+        elif code:
+            add(code)
+        elif name:
+            if url.startswith("#") and not re.fullmatch(r"#[\w.-]+", url):
+                sys.exit(f"{loc}: ページへのリンクは [名前](#<ページのファイル名>) の形（p12.json なら #p12）: {url}")
+            inner(name, {"link": {"page": url[1:]} if url.startswith("#") else url})
+        else:
+            add("\v")
+        i = m.end()
+    add(s[i:])
+    return out[0] if len(out) == 1 and isinstance(out[0], str) else out
+
+
+def spec_plain(parts):
+    return parts if isinstance(parts, str) else "".join(p if isinstance(p, str) else p[0] for p in parts)
+
+
+def spec_bullets(s, loc=""):
+    """段落がすべて「- 」で始まるなら、頭を外して箇条書きにする。「- 」の段落とほかの段落が交ざっていたら止める
+    （箇条書きは枠の全部の段落に付くので、交ぜると「- 」がそのまま出る。2026-10-16 の sandbox で起きた）。"""
+    ps = [p for p in s.split("\n") if p.strip()]
+    marked = [p.startswith("- ") for p in ps]
+    if any(marked) and not all(marked):
+        sys.exit(f"{loc}: 「- 」で始まる段落（箇条書き）とほかの段落が交ざっている。箇条書きと地の文は、別の text に分ける")
+    if ps and all(marked):  # 箇条の間の空の段落は落とす（空の箇条になる。間を空けるなら para_gap）
+        return "\n".join(p[2:] for p in ps), True
+    return s, False
+
+
+def image_ratio(path):
+    """手元の画像の幅 / 高さ（PNG・GIF・JPEG・SVG）。読めなければ None。"""
+    b = Path(path).read_bytes()
+    if b[:8] == b"\x89PNG\r\n\x1a\n":
+        w, h = int.from_bytes(b[16:20], "big"), int.from_bytes(b[20:24], "big")
+    elif b[:6] in (b"GIF87a", b"GIF89a"):
+        w, h = int.from_bytes(b[6:8], "little"), int.from_bytes(b[8:10], "little")
+    elif b[:2] == b"\xff\xd8":
+        i, w = 2, 0
+        while i + 9 < len(b) and b[i] == 0xFF:
+            if b[i + 1] == 0xFF:  # 印の前の詰めの FF
+                i += 1
+                continue
+            if 0xC0 <= b[i + 1] <= 0xCF and b[i + 1] not in (0xC4, 0xC8, 0xCC):  # SOF の印に高さと幅がある
+                h, w = int.from_bytes(b[i + 5:i + 7], "big"), int.from_bytes(b[i + 7:i + 9], "big")
+                break
+            i += 2 + int.from_bytes(b[i + 2:i + 4], "big")
+        if not w:
+            return None
+    elif m := re.search(rb'viewBox="[\d.\-]+[ ,]+[\d.\-]+[ ,]+([\d.]+)[ ,]+([\d.]+)"', b[:4096]):
+        w, h = float(m.group(1)), float(m.group(2))
+    elif (mw := re.search(rb'<svg[^>]*\swidth="([\d.]+)(?:px)?"', b[:4096])) and (mh := re.search(rb'<svg[^>]*\sheight="([\d.]+)(?:px)?"', b[:4096])):
+        w, h = float(mw.group(1)), float(mh.group(1))  # viewBox のない SVG
+    else:
+        return None
+    return w / h if h else None
+
+
+def spec_text_h(parts, avail, size, spacing=None, gap=0, mono=False):
+    """parts の文字の高さの見込み（in）。段落ごとに、行の高さはその段落でいちばん大きい文字で見る（Deck.text と同じく、行間を省けば 2 行以上で 125、
+    基準の 2 倍以上の大きさの段落は 100）。gap は段落の間（pt）。mono は英数字を等幅の幅で見る（Deck.text の mono と同じ）。
+    ponytail: 大きさの違う文字が交ざる段落は、幅を足して割るだけで、語の送りは見ない"""
+    paras = [[]]
+    for p in [parts] if isinstance(parts, str) else parts:
+        t, sz = (p, size) if isinstance(p, str) else (p[0], p[1].get("size", size))
+        for k, piece in enumerate(t.split("\n")):
+            if k:
+                paras.append([])
+            paras[-1].append((piece.replace("\v", "\n"), sz))
+    full = "\n".join("".join(t for t, _ in q) for q in paras)
+    sp = spacing or (125 if est_lines(full.strip("\n"), avail, size, mono) > 1 else 100)
+    h = 0
+    for q in paras:
+        big = max([sz for t, sz in q if t] or [size])
+        if len({sz for t, sz in q if t}) > 1:  # 大きさの違う文字が交ざる段落は、文字ごとの幅を足して行数を見る（行の高さはいちばん大きい文字）
+            n = max(1 + sum(t.count("\n") for t, _ in q), math.ceil(sum(em_width(t, mono) * sz / 72 for t, sz in q) / avail))
+        else:
+            n = est_lines("".join(t for t, _ in q) or " ", avail, big, mono)
+        h += n * big * 1.2 * (100 if big >= 2 * size else sp) / 100 / 72
+    return h + gap / 72 * (len(paras) - 1)
+
+
+class SpecPage:
+    """1 ページを解く。部品を in の絶対位置に置き、Deck の呼び出し（解いた形）を out に貯める。"""
+
+    def __init__(self, base, bg=None):
+        self.bg = bg  # ページの地（slide の bg）。塗りのない文字の色を地から決める
+        self.base, self.out, self.ids, self.arrows, self.index, self.esc = base, [], {}, [], [], []  # 画像のパスの起点、解いた形、id → (x, y, w, h)、
+        # あとで引く矢印、(場所, 文字)、形の外の書き方（場所, キー）
+        self.warns, self.placed = [], []  # 組むときの警告（spec_page が d.warn に出す）、置いた部品の (種類, 場所, 位置, 塗りの箱か, 塗りのない文字か)
+
+    def emit(self, call, loc, e=None, **kw):
+        """Deck の呼び出しを解いた形に足す。部品 e の raw は同じメソッドの引数に重ねる。"""
+        if e and (raw := e.get("raw")):
+            ps = [n for n in inspect.signature(getattr(Deck, call)).parameters if n not in ("self", "sid")]
+            if bad := [k for k in raw if k not in ps]:
+                sys.exit(f"{loc}（{e['type']}）.raw: {call} の引数にない {', '.join(bad)}（書けるもの: {'・'.join(ps)}）")
+            kw |= {k: spec_color(v) if k in ("fill", "line", "color", "bg") else v for k, v in raw.items()}
+            self.esc += [(loc, f"{e['type']}.raw.{k}") for k in raw]
+        self.out.append({"call": call, "loc": loc, **{k: round(v, 4) if isinstance(v, float) else v for k, v in kw.items()}})
+
+    def check(self, e, loc, in_frame):
+        """部品 e と、その中の部品を確かめ、type を返す。x・y は frame の中だけに書ける。"""
+        kind = e.get("type") if isinstance(e, dict) else None
+        if kind not in SPEC_EL:
+            sys.exit(f"{loc}: 部品は {{\"type\": …}} で書き、type は {'・'.join(SPEC_EL)}")
+        geo = {k: t for k, t in _GEO.items() if not (kind in NO_SIZE and k in ("w", "h")) and not (kind in NO_H and k == "h") and (in_frame or k not in ("x", "y"))}
+        spec_check(e, SPEC_EL[kind], f"{loc}（{kind}）", geo | ({} if kind in CONTAINERS else _ESC))  # 並べ方の箱は Deck を呼ばないので raw は効かない
+        if kind == "table":  # 列の数がそろうかは、高さを見込む前に見る（table_h が列の幅を引く）
+            self.table_check(e, loc)
+        if e.get("w") == "fit" and kind != "label":
+            sys.exit(f"{loc}（{kind}）.w: \"fit\"（中身の幅）は label だけ")
+        if in_frame and kind != "arrow" and ("x" not in e or "y" not in e or "w" not in e and kind not in NO_SIZE):
+            sys.exit(f"{loc}（{kind}）: frame の中の部品には x・y{'・w' if kind not in NO_SIZE else ''} を書く（frame の左上からの in）")
+        for i, c in enumerate(e.get("items", []) if kind in ("row", "stack", "grid", "frame") else []):
+            if self.check(c, f"{loc}.items[{i}]", kind == "frame") == "arrow" and kind in ("row", "grid"):
+                sys.exit(f"{loc}.items[{i}]: row・grid の中の矢印は、row の \"arrows\": true で引く")
+        return kind
+
+    def table_check(self, e, loc):
+        rows = e["rows"]
+        if bad := next((c for r in rows for c in r if re.search(r"\*\*|`|\]\(|<br>", c)), None):
+            sys.exit(f"{loc}（table）: 表のセルには記法を書けない（セルの改行は \\n）: {bad!r}")
+        if len({len(r) for r in rows}) > 1:
+            sys.exit(f"{loc}（table）: 行ごとのセルの数がそろっていない")
+        n = len(rows[0])
+        if len(e.get("widths", [1] * n)) != n or len(e.get("align", "l" * n)) != n:
+            sys.exit(f"{loc}（table）: widths・align の数が列の数（{n}）と違う")
+        if isinstance(e.get("row_h"), list) and len(e["row_h"]) != len(rows):
+            sys.exit(f"{loc}（table）.row_h: 行ごとに書くなら、行の数（{len(rows)}）だけ並べる")
+        if bad := [f for f in e.get("fills", []) if f[0] > len(rows) or f[1] > n]:
+            sys.exit(f"{loc}（table）.fills: 表にない行か列 {bad}（{len(rows)} 行 {n} 列。1 から数え、0 はその列か行の全部）")
+        if bad := [f for f in e.get("fills", []) if f[2] in ON_FILL]:  # セルの文字の色は地で替えないので、濃い地では読めない
+            sys.exit(f"{loc}（table）.fills: 濃い色 {bad} はセルの強調に使えない。淡い色（RED_SOFT・PANEL など）にする")
+
+    # ---- 大きさ ----
+    def fixed_w(self, e):
+        if e.get("w") == "fit":  # 札の幅を中身の文字に合わせる（左右に 1 字分）
+            size = e.get("size", 11)
+            mono = e.get("mono", False)
+            return max(em_width(ln, mono) for ln in spec_plain(spec_md(e["text"])).replace("\v", "\n").split("\n")) * size / 72 + 2 * size / 72 + 0.06
+        return e.get("w") or (NUM[e.get("size", "M")][0] if e["type"] == "num" else e.get("size", 0.5) if e["type"] == "icon" else None)
+
+    def slot_w(self, e, w):
+        """縦に並べるときの幅。書いた幅か決まった幅、なければ並びの幅（超えない）。"""
+        return min(self.fixed_w(e) or w, w)
+
+    def widths(self, e, w, loc):
+        items = [c for c in e["items"] if c.get("type") != "arrow"]
+        gap = e.get("gap", GAP_ARROW if e.get("arrows") else GAP)
+        if e["type"] == "grid":
+            return [(w - gap * (e["cols"] - 1)) / e["cols"]] * len(items), gap
+        free = w - gap * (len(items) - 1)
+        if r := e.get("widths"):
+            if len(r) != len(items):
+                sys.exit(f"{loc}: widths の数（{len(r)}）が items の数（{len(items)}）と違う")
+            return [free * x / sum(r) for x in r], gap
+        fixed = [self.fixed_w(c) for c in items]
+        flex, rest = sum(f is None for f in fixed), free - sum(f for f in fixed if f)
+        if rest < 0 or flex and rest <= 0.3:
+            sys.exit(f"{loc}: 幅が足りない（{w:.2f} in に、決まった幅の部品が {sum(f for f in fixed if f):.2f} in と間が {gap * (len(items) - 1):.2f} in）")
+        return [f if f is not None else rest / flex for f in fixed], gap
+
+    def rows_of(self, e):
+        items = [c for c in e["items"] if c.get("type") != "arrow"]
+        n = e["cols"] if e["type"] == "grid" else len(items)
+        return [items[i:i + n] for i in range(0, len(items), n)]
+
+    def measure(self, e, w, loc):
+        """幅 w に置いたときの高さ（in）。"""
+        kind, size = e["type"], e.get("size", 11)
+        if "h" in e:  # frame は h が要る
+            return e["h"]
+        if kind in ("text", "label"):
+            s, bul = spec_bullets(e["text"], f"{loc}（text）") if kind == "text" else (e["text"], False)
+            boxed = kind == "label" or e.get("fill") or e.get("line")
+            center = e.get("align", "center" if kind == "label" else "left") == "center"
+            inner = max((size / 72 if e.get("pad") is None else e["pad"]) - INSET, 0) if boxed and not center and e.get("shape") != "ellipse" else 0  # Deck.text と同じ
+            avail = (w - 2 * INSET - 2 * inner if boxed else w) - (size * 1.3 / 72 if bul else 0)
+            body = spec_text_h(spec_md(s, loc=loc), avail, size, e.get("spacing"), e.get("para_gap", 0), e.get("mono", False))
+            if kind == "label":
+                return max(0.4, body + 2 * size / 72)
+            return body + (2 * size / 72 + 0.1 if boxed else 0.02)  # 塗りか枠線があれば、上下に 1 字分（visual-027）
+        if kind == "card" and (self.mark(e) or self.dark_card(e, loc)):
+            return self.marked(e, 0, 0, w, None, loc)["h"]
+        if kind == "stat":
+            parts, kw = self.stat_parts(e)
+            inner = 0 if e.get("align") == "center" else STAT_PAD - INSET
+            return spec_text_h(parts, w - 2 * INSET - 2 * inner, 11, 110, 2) + 2 * STAT_PAD + 0.1
+        if kind == "card":
+            if "step" in e:
+                return card_h(w, e.get("head"), items=[tuple(x) for x in e.get("items", [])], step=e["step"])
+            body, bul = self.card_body(e, loc)  # card_h は本文をすべて 11pt で数えるので、文字ごとの大きさを見る spec_text_h で、d.card の本文の枠と同じ幅に見込む
+            avail = w - 2 * PAD - 2 * INSET - (11 * 1.3 / 72 if bul else 0)
+            return (0.5 if e.get("head") else 0.1) + (spec_text_h(body, avail, 11, 125) + 2 * INSET if body else 0) + 0.15
+        if kind == "code":
+            return sum(est_lines(ln, w - 0.4, size, True) for ln in e["text"].split("\n")) * size * 1.2 * 1.1 / 72 + 0.28
+        if kind == "table":
+            ws = [w * r / sum(e["widths"]) for r in e["widths"]] if e.get("widths") else [w / len(e["rows"][0])] * len(e["rows"][0])
+            return table_h(ws, e["rows"], size, e.get("row_h", 0.36), e.get("header", True), [c - 1 for c in e.get("mono_cols", [])])
+        if kind == "image":
+            src = self.src(e, loc)
+            if src.startswith("http") or not (r := image_ratio(src)):
+                sys.exit(f"{loc}（image）: 画像の縦横の比が分からないので h を書く（URL の画像と、読めない形式の手元の画像）")
+            return w / r
+        if kind in ("icon", "num"):
+            return self.fixed_w(e)
+        if kind == "box":
+            return 0
+        if kind == "stack":
+            hs = [self.measure(c, self.slot_w(c, w), f"{loc}.items[{i}]") for i, c in enumerate(e["items"]) if c["type"] != "arrow"]
+            return sum(hs) + e.get("gap", GAP) * max(len(hs) - 1, 0)
+        ws, gap = self.widths(e, w, loc)
+        it = iter(ws)
+        return sum(max(self.measure(c, next(it), loc) for c in row) for row in self.rows_of(e)) + gap * (len(self.rows_of(e)) - 1)
+
+    def mark(self, e):
+        """カードの印（icon・num・image のどれか）。2 つ以上なら止める。"""
+        ms = [k for k in ("icon", "num", "image") if k in e]
+        if len(ms) > 1:
+            sys.exit(f"カードの印は icon・num・image のどれか 1 つ: {'・'.join(ms)}")
+        return ms[0] if ms else None
+
+    def dark_card(self, e, loc):
+        """濃い地（NAVY など）の印のないカード。d.card は見出しと本文の色を地で替えないので、印のあるカードと同じく marked で組む（印なし）。"""
+        if e.get("fill") not in ON_FILL:
+            return False
+        if "step" in e:
+            sys.exit(f"{loc}（card）: 濃い地（{e['fill']}）のカードに step は使えない（文字の色を地に合わせられない）。地を CARD・PANEL にするか、step を外す")
+        return True
+
+    def marked(self, e, x, y, w, h, loc):
+        """印のあるカード。印を左（align left）か上の中央（center）に置き、見出し（太字 12pt）と本文を横か下に置く。h が None なら置かずに高さを返す。
+        白いカードの最終行と下端の間は 0.28 in（visual-027）。valign middle は、印と文字を上下の中央にそろえる（1〜2 行の小さな箱）。"""
+        m, fill = self.mark(e), e.get("fill", "CARD")
+        on, emph = (spec_color(c) for c in ON_FILL.get(fill, ("TEXT", "RED_TEXT")))
+        size = 0 if m is None else MARK_IMG if m == "image" else MARK  # 印のない濃い地のカード（dark_card）は印の場所を取らない
+        center, middle = e.get("align") == "center", e.get("valign") == "middle"
+        if center and middle:
+            sys.exit(f"{loc}（card）: 印を上に置く align center と、valign middle は一緒に使えない")
+        body, bul = self.card_body(e, loc, emph)
+        head = [(e["head"], {"bold": True, "size": 12, "color": spec_color("WHITE" if fill in ON_FILL else "HEAD")})] if e.get("head") else []
+        tw = w - 2 * MARK_IN if center or m is None else w - 2 * MARK_IN - size - MARK_GAP
+        hh = spec_text_h(head, tw, 12, 100) if head else 0  # 見出しと本文は別の枠（箇条書きが見出しに付かないように。d.card と同じ）
+        bh = spec_text_h(body, tw - (11 * 1.3 / 72 if bul else 0), 11, 125) if body else 0
+        th = hh + (HEAD_GAP if head and body else 0) + bh
+        need = (CARD_TOP + size + MARK_GAP + th + CARD_BOTTOM if center else max(th + 0.4, size + 0.36) if middle else
+                max(CARD_TOP + th + CARD_BOTTOM, MARK_IN + size + MARK_IN))
+        if h is None:
+            return {"h": need}
+        self.index.append((loc, spec_plain(head) + spec_plain(body or "")))
+        self.emit("card", loc, e, x=x, y=y, w=w, h=h, fill=spec_color(fill), line=spec_color(e.get("line", "RULE" if fill == "CARD" else None)))
+        mx = x + (w - size) / 2 if center else x + MARK_IN
+        my = y + (h - size) / 2 if middle else y + (CARD_TOP + 0.04 if center else MARK_IN)
+        if m is None:
+            pass
+        elif m == "icon":
+            self.emit("icon", f"{loc}.icon", name=e["icon"], x=mx, y=my, size=size, color=hex_of(on))
+        elif m == "num":
+            self.emit("num", f"{loc}.num", n=e["num"], cx=mx + size / 2, cy=my + size / 2, size="M", fill=RED)  # 地によらず赤の円（数字は ON_RED）
+        else:
+            self.emit("image", f"{loc}.image", src=self.src({"src": e["image"]}, loc), x=mx, y=my, w=size, h=size, alt=e.get("head"))
+        tx = x + MARK_IN if center or m is None else mx + size + MARK_GAP
+        ty = my + size + MARK_GAP if center else y + (h - th) / 2 if middle else y + CARD_TOP
+        align = "CENTER" if center else "START"
+        if head:
+            self.emit("text", f"{loc}.head", x=tx, y=ty, w=tw, h=max(hh, 0.2), parts=head, size=12, color=on, spacing=100, edge=True, align=align)
+        if body:
+            self.emit("text", f"{loc}.text", x=tx, y=ty + hh + (HEAD_GAP if head else 0), w=tw, h=max(bh, 0.2), parts=body, size=11, color=on, spacing=125,
+                      edge=True, bullets=bul, align=align)
+
+    def stat_parts(self, e):
+        """数字の強調（過去の資料の stat・bignum）: 大きな数字（size、既定 32pt の太字）と単位（半分の大きさ）、何の数か（太字 12pt）、補足（SUB）。"""
+        fill = e.get("fill", "CARD")
+        dark = fill in ON_FILL
+        num = spec_color(e.get("color", ON_FILL[fill][1] if dark else "RED_TEXT"))
+        vs = e.get("size", 32)
+        parts = [(e["value"], {"size": vs, "bold": True, "color": num})] + ([(" " + e["unit"], {"size": round(vs / 2), "bold": True, "color": num})] if e.get("unit") else [])
+        parts += [("\n" + e["label"], {"size": 12, "bold": True, "color": spec_color("WHITE" if dark else "HEAD")})] if e.get("label") else []
+        parts += [("\n" + e["sub"], {"color": spec_color("SUB_ON_NAVY" if dark else "SUB")})] if e.get("sub") else []
+        return parts, dict(fill=spec_color(fill), line=spec_color(e.get("line", "RULE" if fill == "CARD" else None)), color=spec_color(ON_FILL[fill][0] if dark else "TEXT"))
+
+    def card_body(self, e, loc, emph=RED_TEXT):
+        if e.get("text") and e.get("items"):
+            sys.exit(f"{loc}（card）: text と items はどちらか 1 つ")
+        if any(not b.strip() for _, b in e.get("items", [])):  # 2026-10-16 の sandbox で、説明のない項目を並べて、太字の項目の間が空いた
+            sys.exit(f"{loc}（card）: items に説明のない項目がある。見出しと説明の組でないなら、text の箇条書き（- ）にする")
+        if e.get("items"):  # d.card の items と同じ形（見出しは太字、項目の間に空行）を、記法つきで作る
+            parts = []
+            for i, (h2, b) in enumerate(e["items"]):
+                b = spec_md(b, loc=loc)
+                parts += [(h2 + "\n", {"bold": True}), *([b] if isinstance(b, str) else b), *(["\n\n"] if i < len(e["items"]) - 1 else [])]
+            return parts, False
+        s, bul = spec_bullets(e.get("text", ""), f"{loc}（card）")
+        return (spec_md(s, emph, loc) if s else None), bul
+
+    def src(self, e, loc):
+        s = e["src"]
+        if s.startswith("asset:"):
+            return asset(s[6:])
+        if re.match(r"https?://", s):
+            return png(s) if re.search(r"\.svg($|[?#])", s, re.I) else s
+        path = (self.base / s).resolve()  # 手元の画像は、JSON のファイルのあるフォルダから。組むとき（build の carry）に上げる
+        if not path.is_file():
+            sys.exit(f"{loc}（image）: 画像がない: {path}")
+        return str(path)
+
+    # ---- 置く ----
+    def flow(self, items, x, y, w, gap, loc, frame=None):
+        """items を上から順に gap を空けて並べ、下端を返す。frame（frame の高さ）を渡すと、部品の x・y を (x, y) からの位置にし、frame の幅 w と高さに収まるかを見る。
+        矢印は場所を取らず、ほかの部品を置き終えてから引く（[x, y] の端は (x, y) からの位置）。"""
+        origin, bottom, spans, arrows = (x, y), y, [], False
+        for i, e in enumerate(items):
+            l = f"{loc}[{i}]"
+            if self.check(e, l, frame is not None) == "arrow":
+                self.arrows.append((e, l, origin, (w, frame) if frame else None))
+                arrows = True
+                continue
+            ew = self.fixed_w(e) if frame else self.slot_w(e, w)
+            eh = self.measure(e, ew, l)
+            if frame and (e["x"] + ew > w + 0.01 or e["y"] + eh > frame + 0.01):  # frame の外に描くと、ページの下端の見込みにも入らない
+                sys.exit(f"{l}（{e['type']}）: frame の外に出る（右端 {e['x'] + ew:.2f} in・下端 {e['y'] + eh:.2f} in。frame は幅 {w:.2f} in・高さ {frame:.2f} in）")
+            self.place(e, x + e["x"] if frame else x, y + e["y"] if frame else y, ew, eh, l)
+            if frame:
+                spans.append((e["y"], e["y"] + eh))
+            else:
+                bottom = y + eh
+                y = bottom + gap
+        if frame and arrows and len(spans) >= 3 and max(a for a, _ in spans) < min(b for _, b in spans):  # どの部品も同じ高さの帯にかかる = 横 1 列
+            self.warns.append(f"{loc}: 横 1 列に並べて矢印でつないだ図は、row の \"arrows\": true に印のあるカードか label を並べて書ける（幅を本文いっぱいに使い、"
+                              "高さと矢印の位置がそろう。slides.md の slides-034 の「自由に置く図」）")
+        return bottom
+
+    def lone_text(self):
+        """塗りの箱の中に、ほかの部品がなく、塗りのない文字が 1 つだけ入っていたら止める（札は図形と文字を 1 つにする。角丸と箱の端と文字の間がそろう。
+        visual.md の 4。2026-10-16 の sandbox で、構成図の箱を box と text を重ねて組んでいた）。見出しとカードを入れた囲みは、ほかの部品が入るので通る。"""
+        inside = lambda a, b: a[0] >= b[0] - 0.02 and a[1] >= b[1] - 0.02 and a[0] + a[2] <= b[0] + b[2] + 0.02 and a[1] + a[3] <= b[1] + b[3] + 0.02
+        for kind, loc, r, filled, _ in self.placed:
+            if filled and len(ins := [p for p in self.placed if p[1] != loc and inside(p[2], r)]) == 1 and ins[0][4]:
+                sys.exit(f"{ins[0][1]}（text）: {loc} の塗りの箱の中に、文字だけを重ねた。塗りの箱と文字は、1 つの label か、fill のある text にする（アイコンも置くなら印のあるカード）")
+
+    def place(self, e, x, y, w, h, loc):
+        kind = e["type"]
+        if kind in ("icon", "num"):  # 決まった大きさで置く。grid や比で分けた row の列の幅に広げない（measure と同じ大きさ）
+            w = h = self.fixed_w(e)
+        if (i := e.get("id")) is not None:
+            if i in self.ids:
+                sys.exit(f"{loc}: id「{i}」が 2 つある")
+            self.ids[i] = (x, y, w, h)
+        fill = e.get("fill")
+        ground = fill or (self.bg if kind == "text" else None)  # 文字の下の地。塗りのない文字（枠線だけの箱も）はページの地
+        on, emph = (spec_color(c) for c in ON_FILL.get(ground, ("TEXT", "RED_TEXT")))
+        if kind not in ("row", "stack", "grid", "frame"):
+            self.placed.append((kind, loc, (x, y, w, h), kind == "box" and bool(fill), kind == "text" and not (fill or e.get("line"))))
+        if e.get("shape") == "rectangle" and (fill or kind == "label"):
+            self.warns.append(f"{loc}: 塗りの箱を四角（shape: rectangle）にした。塗りの箱は、書かなければ角丸（visual.md の 4）。四角にする理由がなければ shape を外す")
+        if kind in ("text", "label"):
+            s, bul = spec_bullets(e["text"], f"{loc}（text）") if kind == "text" else (e["text"], False)
+            parts = spec_md(s, emph, loc)
+            self.index.append((loc, spec_plain(parts)))
+            kw = dict(size=e.get("size", 11), color=spec_color(e.get("color", "HEAD" if kind == "label" and not fill else on)),
+                      align=ALIGN[e.get("align", "center" if kind == "label" else "left")], mono=e.get("mono", False),
+                      fill=spec_color(fill or ("PANEL" if kind == "label" else None)),
+                      **{k2: e[k] for k, k2 in (("bold", "bold"), ("pad", "pad"), ("radius", "radius"), ("spacing", "spacing"), ("para_gap", "gap")) if k in e})
+            if kind == "label":
+                return self.emit("label", loc, e, x=x, y=y, w=w, h=h, v=parts, **kw)
+            boxed = fill or e.get("line")
+            return self.emit("text", loc, e, x=x, y=y, w=w, h=h, parts=parts, line=spec_color(e.get("line")), bullets=bul, edge=not boxed,
+                             valign=VALIGN[e.get("valign", "middle" if boxed else "top")], dash=e.get("dash", False), weight=e.get("weight"),
+                             **({"kind": SHAPES[e["shape"]]} if "shape" in e else {}), **kw)
+        if kind == "card" and (self.mark(e) or self.dark_card(e, loc)):
+            return self.marked(e, x, y, w, h, loc)
+        if kind == "stat":
+            parts, kw = self.stat_parts(e)
+            self.index.append((loc, spec_plain(parts)))
+            return self.emit("text", loc, e, x=x, y=y, w=w, h=h, parts=parts, size=11, valign="MIDDLE", spacing=110, gap=2, pad=STAT_PAD,
+                             align=ALIGN[e.get("align", "left")], **kw)
+        if kind == "card":
+            if (e.get("align") or e.get("valign")) and not self.mark(e):
+                sys.exit(f"{loc}（card）: align・valign は、印（icon・num・image）のあるカードで使う")
+            colors = dict(fill=spec_color(e.get("fill", "CARD")), line=spec_color(e.get("line", "RULE" if e.get("fill", "CARD") == "CARD" else None)))
+            if "step" in e:  # 項目を決まった間隔で置く（左右のカードで項目の上端をそろえる）。d.card の items のまま渡すので、記法は書けない
+                if not e.get("items") or any(re.search(r"\*\*|\]\(|<br>|\{\d", b) for _, b in e["items"]):
+                    sys.exit(f"{loc}（card）: step は items と使い、items に記法を書かない")
+                self.index.append((loc, (e.get("head") or "") + "".join(a + b for a, b in e["items"])))
+                return self.emit("card", loc, e, x=x, y=y, w=w, h=h, head=e.get("head"), items=[tuple(i) for i in e["items"]], step=e["step"], **colors)
+            body, bul = self.card_body(e, loc)
+            self.index.append((loc, (e.get("head") or "") + spec_plain(body or "")))
+            return self.emit("card", loc, e, x=x, y=y, w=w, h=h, head=e.get("head"), body=body, bullets=bul, **colors)
+        if kind == "code":
+            self.index.append((loc, e["text"]))
+            return self.emit("code", loc, e, x=x, y=y, w=w, h=h, lines=e["text"].split("\n"), hot=[n - 1 for n in e.get("hot", [])], size=e.get("size", 11))
+        if kind == "table":
+            rows, n = e["rows"], len(e["rows"][0])
+            ws = [w * r / sum(e["widths"]) for r in e["widths"]] if e.get("widths") else [w / n] * n
+            self.index.append((loc, " ".join(c for r in rows for c in r)))
+            return self.emit("table", loc, e, x=x, y=y, widths=ws, rows=rows, size=e.get("size", 11), header=e.get("header", True), first_col=e.get("first_col", True),
+                             zebra=e.get("zebra", True), align=e.get("align"), mono_cols=[c - 1 for c in e.get("mono_cols", [])], row_h=e.get("row_h", 0.36),
+                             fills=[(r - 1 if r else None, c - 1 if c else None, spec_color(col)) for r, c, col in e.get("fills", [])])
+        if kind == "image":
+            return self.emit("image", loc, e, src=self.src(e, loc), x=x, y=y, w=w, h=h, alt=e.get("alt"))
+        if kind == "icon":
+            return self.emit("icon", loc, e, name=e["name"], x=x, y=y, size=w, color=hex_of(spec_color(e.get("color", "TEXT"))))
+        if kind == "num":
+            return self.emit("num", loc, e, n=e["n"], cx=x + w / 2, cy=y + w / 2, size=e.get("size", "M"), fill=spec_color(e.get("fill", "RED")))
+        if kind == "box":
+            if h <= 0:
+                sys.exit(f"{loc}（box）: h がない（row・grid の中なら行の高さになる）")
+            return self.emit("box", loc, e, x=x, y=y, w=w, h=h, fill=spec_color(fill), line=spec_color(e.get("line")), dash=e.get("dash", False), weight=e.get("weight"),
+                             **({"kind": SHAPES[e["shape"]]} if "shape" in e else {}), **({"radius": e["radius"]} if "radius" in e else {}))
+        if kind == "frame":
+            return self.flow(e["items"], x, y, w, 0, f"{loc}.items", frame=h)
+        if kind == "stack":
+            return self.flow(e["items"], x, y, w, e.get("gap", GAP), f"{loc}.items")
+        # row・grid: 列の幅を決め、行ごとに高さをそろえる
+        ws, gap = self.widths(e, w, loc)
+        it, cy, k = iter(ws), y, 0
+        for row in self.rows_of(e):
+            cw = [next(it) for _ in row]
+            rh = max(self.measure(c, cw[j], f"{loc}.items[{k + j}]") for j, c in enumerate(row))
+            cx = x
+            for j, c in enumerate(row):
+                l = f"{loc}.items[{k + j}]"
+                grow = "h" not in c and (c["type"] in STRETCH or c["type"] == "text" and (c.get("fill") or c.get("line")))
+                self.place(c, cx, cy, cw[j], rh if grow else self.measure(c, cw[j], l), l)
+                if e.get("arrows") and j < len(row) - 1:
+                    self.emit("arrow", f"{loc}.arrows[{k + j}]", x1=cx + cw[j] + ARROW_PAD, y1=cy + rh / 2, x2=cx + cw[j] + gap - ARROW_PAD, y2=cy + rh / 2)
+                cx += cw[j] + gap
+            k += len(row)
+            cy += rh + gap
+
+    def link(self, e, loc, origin, bounds=None):
+        """ID か [x, y] の両端から矢印を引く。ID なら、箱の向き合う辺の間に、重なる範囲の中央で引く（visual-025）。"""
+        def end(v, k):
+            if isinstance(v, list):
+                if bounds and not (0 <= v[0] <= bounds[0] + 0.01 and 0 <= v[1] <= bounds[1] + 0.01):  # frame の部品と同じく、frame の外を指さない
+                    sys.exit(f"{loc}（arrow）.{k}: {v} は frame の外（frame は幅 {bounds[0]:.2f} in・高さ {bounds[1]:.2f} in）")
+                return (origin[0] + v[0], origin[1] + v[1], 0, 0)
+            if v not in self.ids:
+                sys.exit(f"{loc}（arrow）.{k}: id「{v}」の部品がない（このページにあるもの: {'・'.join(self.ids) or 'なし'}）")
+            return self.ids[v]
+        (ax, ay, aw, ah), (bx, by, bw, bh) = end(e["from"], "from"), end(e["to"], "to")
+        pa, pb = (ARROW_PAD if aw or ah else 0), (ARROW_PAD if bw or bh else 0)  # [x, y] の端はその点まで
+        if not (aw or ah or bw or bh):
+            x1, y1, x2, y2 = ax, ay, bx, by
+        elif bx >= ax + aw or ax >= bx + bw:  # 左右に離れている。向き合う辺の中央どうしを結ぶ（中央が同じ高さなら横の矢印。違えば斜め。
+            # 重なる範囲の中央に横に引くと、どちらの箱の中央にも付かない。2026-10-16 の見本で 0.25 in ずれた）
+            y1, y2 = ay + ah / 2, by + bh / 2
+            x1, x2 = (ax + aw + pa, bx - pb) if bx >= ax + aw else (ax - pa, bx + bw + pb)
+        elif by >= ay + ah or ay >= by + bh:
+            x1, x2 = ax + aw / 2, bx + bw / 2
+            y1, y2 = (ay + ah + pa, by - pb) if by >= ay + ah else (ay - pa, by + bh + pb)
+        else:
+            sys.exit(f"{loc}（arrow）: 両端の部品が重なっているので引けない")
+        self.emit("arrow", loc, e, x1=x1, y1=y1, x2=x2, y2=y2, color=spec_color(e.get("color", "SUB")), head=e.get("head", True), dash=e.get("dash", False), weight=e.get("weight", 1.25))
+
+
+def spec_files(src, base=None, where=None, file=False):
+    """src（ファイルのパス、dict、そのどちらかの並び）から (ページ, 画像のパスの起点, 場所, 名前) を順に出す。デッキのページのファイルは、デッキのファイルのあるフォルダから読む。
+    名前はページのファイル名（拡張子なし。[名前](#p12) のリンク先）で、ファイルでないページは None。
+    ファイルの頭には apiVersion と kind（Deck・Page・Component）が要る。Python から渡した dict は、書いていなければ中身から kind を決める。"""
+    base = base or Path.cwd()
+    if isinstance(src, (str, Path)):
+        path, where = base / src, where or str(src)
+        try:
+            src = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as e:
+            sys.exit(f"{where}: 読めない（{e}）")
+        yield from spec_files(src, path.parent, where, True)
+        return
+    where = where or "spec"
+    if isinstance(src, list) and not file:
+        for i, p in enumerate(src):
+            yield from spec_files(p, base, None if isinstance(p, str) else f"{where}[{i}]")
+        return
+    if not isinstance(src, dict):
+        sys.exit(f'{where}: ファイルの頭は {{"apiVersion": "{API_VERSION}", "kind": "Deck"・"Page"・"Component", …}}')
+    if file or "apiVersion" in src or "kind" in src:
+        if (v := src.get("apiVersion")) != API_VERSION:
+            sys.exit(f'{where}: ' + (f'apiVersion がない（頭に "apiVersion": "{API_VERSION}" を書く）' if v is None else
+                                     f"apiVersion {v!r} は読めない（この slides.py は {API_VERSION}。新しい形ならプラグインを update する）"))
+        if (kind := src.get("kind")) not in KINDS:
+            sys.exit(f"{where}: kind {kind!r} はない（{'・'.join(KINDS)}）")
+    else:
+        kind = "Deck" if "pages" in src else "Component" if src.get("type") in SPEC_EL else "Page"
+    src = {k: v for k, v in src.items() if k not in ("apiVersion", "kind")}
+    if kind == "Deck":
+        spec_check(src, SPEC_DECK, f"{where}（Deck）")
+        for p in src["pages"]:
+            yield from spec_files(p, base, p)
+    elif kind == "Component":  # 部品 1 つだけのファイルは、型のないページに置く
+        yield {"type": "slide", "body": [src]}, base, where, None
+    else:
+        yield src, base, where, Path(where).stem if file else None
+
+
+def spec_page(d, p, base, loc, name=None):
+    kind = p.get("type", "page") if isinstance(p, dict) else None
+    if kind not in SPEC_PAGE:
+        sys.exit(f"{loc}: type「{kind}」はない（ページは {'・'.join(SPEC_PAGE)}、部品は {'・'.join(SPEC_EL)}）")
+    spec_check(p, SPEC_PAGE[kind], f"{loc}（{kind}）")
+    kw = {k: spec_color(v) if k == "bg" else v for k, v in p.items() if k not in ("type", "body", "band", "source", "note")}
+    sid = getattr(d, kind)(**kw)
+    if name:
+        if name in d.page_names:
+            sys.exit(f"{loc}: ページの名前「{name}」が 2 つある（ファイル名をページの名前にする。同じファイルを 2 回並べない）")
+        d.page_names[name] = sid
+    sp = SpecPage(base, p.get("bg"))
+    sp.index += [(f"{loc}.{k}", p[k]) for k in ("title", "lead", "kicker", "sub") if k in p]
+    bottom = sp.flow(p.get("body", []), X, Y_BODY if p.get("lead") else Y_BODY_NOLEAD, W, GAP_BODY, f"{loc}.body")
+    sp.lone_text()
+    for e, l, origin, bounds in sp.arrows:
+        sp.link(e, l, origin, bounds)
+    for w in sp.warns:
+        d.warn(w)
+    for c in sp.out:
+        getattr(d, c["call"])(sid, **{k: v for k, v in c.items() if k not in ("call", "loc")})
+    band = p.get("band")
+    if band:
+        b = {"text": band} if isinstance(band, str) else band
+        top = d.band(sid, b["text"], b.get("sub"))
+        sp.index.append((f"{loc}.band", b["text"] + b.get("sub", "")))
+    if p.get("body") and bottom > (limit := top - 0.2 if band else Y_SRC - 0.08) + 0.01:
+        d.warn(f"本文が{'結論バンド' if band else '出典の行'}に重なる見込み（{loc}.body の下端 {bottom:.2f} in > {limit:.2f} in）。中身を減らすか、ページを分ける")
+    if src := p.get("source"):
+        d.source(sid, parts := spec_md(src, SUB, f"{loc}.source"))
+        sp.index.append((f"{loc}.source", "出典: " + spec_plain(parts)))
+    if p.get("note"):
+        d.note(sid, p["note"])
+    d.spec_index[sid] = sp.index
+    d.spec_esc += [(sid, l, k) for l, k in sp.esc]
+    d.resolved.append({"type": kind, "loc": loc, **kw, "els": sp.out, **({"band": band} if band else {}), **({"source": p["source"]} if "source" in p else {}),
+                       **({"note": p["note"]} if "note" in p else {})})
+    return sid
+
+
+def spec_where(deck):
+    """lint の指摘（「p3: …「文」…」）が引いている文から、JSON の部品の場所を引く（lint.Report.where）。ponytail: 文の頭の 12 字で探す。文を引かない指摘には付かない。
+    同じ文で始まる部品が 2 つ以上なら、候補をすべて出す"""
+    def where(hit):
+        n, q = re.match(r"p(\d+)", hit), re.search(r"「(.+?)」", hit)
+        if not n or not q or int(n.group(1)) > len(deck.slides):
+            return ""
+        t = re.sub(r"[\s\v⏎]", "", q.group(1).split(" / ")[0]).strip("…")[:12]
+        locs = [loc for loc, s in deck.spec_index.get(deck.slides[int(n.group(1)) - 1], []) if t and t in re.sub(r"[\s\v]", "", s)]
+        return f"（{'・'.join(dict.fromkeys(locs))}）" if locs else ""  # 同じ文で始まる部品が 2 つ以上なら、どれかを決めずに全部出す
+    return where
+
+
+def spec_schema():
+    """書く形の JSON Schema（slides.py schema が出す）。SPEC_EL・SPEC_PAGE・SPEC_DECK から作る。structured outputs やエディタの確かめに渡す。"""
+    md = ("記法: **太字** ***赤の太字*** {32:文字}（32pt） [名前](URL) [名前](#p12) <br>（段落の中の改行）。太字・赤・大きさの中に書式を入れられる（**{32:48}**）。"
+          "\\n で段落、どの段落も「- 」で始めると箇条書き。`コード` は ` を外して本文の書体のまま")
+    color = {"anyOf": [{"enum": list(COLOR_NAMES)}, {"type": "string", "pattern": "^[0-9A-Fa-f]{6}$"}]}
+    num, pos = {"type": "number"}, {"type": "number", "exclusiveMinimum": 0}
+    t = {"s": {"type": "string"}, "md": {"type": "string", "description": md}, "n": {"type": "number", "minimum": 0}, "p": pos, "i": {"type": "integer"},
+         "pi": {"type": "integer", "minimum": 1}, "b": {"type": "boolean"}, "c": color,
+         "w": {"anyOf": [pos, {"const": "fit"}], "description": "幅（in）。label は \"fit\" で中身の文字の幅"},
+         "nh": {"anyOf": [pos, {"type": "array", "items": pos}], "description": "行の高さの最小（in）。行ごとに並べてもよい"},
+         "els": {"type": "array", "items": {"$ref": "#/$defs/element"}}, "kids": {"type": "array", "items": {"$ref": "#/$defs/element"}, "minItems": 1}, "pages": {"type": "array", "items": {"type": "string", "pattern": "\\.json$"}, "minItems": 1, "description": "ページかデッキのファイルのパス"},
+         "pt": {"anyOf": [{"type": "string", "description": "部品の id"}, {"type": "array", "items": num, "minItems": 2, "maxItems": 2}]},
+         "items": {"type": "array", "items": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 2, "description": "[見出し, 説明（記法つき）]"}},
+         "rows": {"type": "array", "items": {"type": "array", "items": {"type": "string"}, "minItems": 1}, "minItems": 1, "description": "1 行目が見出しの行。セルに記法は書けない"},
+         "nums": {"type": "array", "items": {"type": "number", "exclusiveMinimum": 0}, "description": "比"},
+         "ints": {"type": "array", "items": {"type": "integer", "minimum": 1}, "description": "1 から始まる番号"},
+         "fills": {"type": "array", "items": {"type": "array", "prefixItems": [{"type": "integer", "minimum": 0}, {"type": "integer", "minimum": 0}, color], "minItems": 3, "maxItems": 3},
+                   "description": "[行, 列, 色]。rows の何番目かで数え、見出しの行が 1 行目、いちばん左の列が 1 列目。0 はその列か行の全部（[3, 0, \"RED_SOFT\"] は見出しの次の次の行）"},
+         "lcr": {"type": "string", "pattern": "^[lcr]+$"}, "ns": {"type": ["string", "integer"]},
+         "band": {"anyOf": [{"type": "string"}, {"type": "object", "properties": {"text": {"type": "string"}, "sub": {"type": "string"}}, "required": ["text"], "additionalProperties": False}]},
+         "raw": {"type": "object", "description": "形の外の書き方: Deck のメソッドの引数（lint が要確認に出す）"}}
+    unit = {"w": "幅（in）", "h": "高さ（in）", "x": "frame の左上からの位置（in。frame の中だけ）", "y": "frame の左上からの位置（in。frame の中だけ）", "size": "pt（icon は in、num は S・M・L）",
+            "gap": "部品の間（in）", "id": "矢印の from・to で指す名前", "spacing": "行間（%）", "para_gap": "段落の間（pt）", "pad": "箱の端と文字の間（in）",
+            "radius": "角の丸み（in）", "step": "項目の間隔（in）"}
+    head = {"apiVersion": {"const": API_VERSION}}
+
+    def obj(kind, schema, extra=None, need_type=True, k8s="Component"):
+        need, opt = schema
+        props = {"type": {"const": kind}, **head, "kind": {"const": k8s}}
+        for k, v in {**need, **opt, **(extra or {})}.items():
+            props[k] = dict(t[v] if isinstance(v, str) else {"enum": list(v)}) | ({"description": unit[k]} if k in unit and "description" not in t.get(v, {}) else {})
+        return {"type": "object", "properties": props, "required": ([] if not need_type else ["type"]) + list(need), "additionalProperties": False}
+    defs = {f"el_{k}": obj(k, v, {g: x for g, x in _GEO.items() if not (k in NO_SIZE and g in ("w", "h")) and not (k in NO_H and g == "h")} | ({} if k in CONTAINERS else _ESC))
+            for k, v in SPEC_EL.items()}
+    defs |= {f"page_{k}": obj(k, v, need_type=k != "page", k8s="Page") for k, v in SPEC_PAGE.items()}
+    defs |= {"element": {"oneOf": [{"$ref": f"#/$defs/el_{k}"} for k in SPEC_EL]}, "page": {"anyOf": [{"$ref": f"#/$defs/page_{k}"} for k in SPEC_PAGE]},
+             "deck": obj("deck", SPEC_DECK, need_type=False, k8s="Deck")}
+    defs["deck"]["properties"].pop("type")
+    root = lambda ref, k8s: {"allOf": [{"$ref": f"#/$defs/{ref}"}], "properties": {"kind": {"const": k8s}}, "required": ["apiVersion", "kind"]}
+    return {"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": f"https://github.com/mats16/ai-deck-factory/{API_VERSION}", "title": f"AI Deck Factory のページ（{API_VERSION}）",
+            "anyOf": [root("deck", "Deck"), root("page", "Page"), root("element", "Component")], "$defs": defs}
+
+
+SPEC_OUT = "JSON の形の外の書き方（raw）"
+
+
+def spec_promoted(kind, k):
+    """raw に書いた Deck の引数 k を書ける、形のキー（SPEC_PROMOTED にあるものだけ。同じ名前でも意味の違うキーがある）。なければ None。"""
+    return SPEC_PROMOTED.get((kind, k))
+
+
+DECK_ENUM = {"START": "left", "CENTER": "center", "END": "right", "TOP": "top", "MIDDLE": "middle", "BOTTOM": "bottom"}  # Deck の揃えの値 → 形の値
+
+
+def spec_from_deck(kind, key, v):
+    """raw に書いた Deck の値 v を、形のキー key の値に直す（揃えは小文字の名前、形は小文字、色はテーマの枠の名前を役割の名前に）。形の型に合わなければ None。"""
+    if key in ("align", "valign"):
+        v = DECK_ENUM.get(v, v)
+    elif key == "shape" and isinstance(v, str):
+        v = v.lower()
+    elif key in ("fill", "line", "color", "bg") and isinstance(v, str) and not _color(v):
+        v = next((n for n in COLOR_NAMES if globals()[n] == v), v)  # "DARK1" → "NAVY"
+    need, opt = SPEC_EL.get(kind, ({}, {}))
+    t = {**need, **opt, **_GEO}.get(key)
+    return v if t and spec_ok(v, t) else None
+
+
+def spec_out_hits(deck):
+    """形の外の書き方（raw）を、lint の要確認の行にする。形のキーで書ける raw には、そのキーを添える。"""
+    pages = {s: i for i, s in enumerate(deck.slides, 1)}
+    out = []
+    for sid, loc, key in deck.spec_esc:
+        t, _, k = key.partition(".raw.")
+        hint = (f"。形の {spec_promoted(t, k)} で書ける（slides.py upgrade で書き換える）" if spec_promoted(t, k) else
+                "。ほかの資料でも要るなら、形に足す提案にする（slides.py stats）")
+        out.append(f"p{pages[sid]}: {key}（{loc}）{hint}")
+    return out
+
+
+def spec_log_path():
+    return gapi.factory_path().parent / ".factory" / "spec_raw.jsonl"
+
+
+def spec_record(deck, pid):
+    """組んだ JSON のページのデッキの形の外の書き方の数を、ワークスペースの .factory/spec_raw.jsonl に 1 行で残す（slides.py stats が数える。raw がなくても残し、前の数を 0 にする）。資料の文は残さず、キーと数だけ。
+    名前に tmp の入った資料と、factory-kaizen の検証の資料（FACTORY_VERIFY）は数えない（lint_runs.jsonl と同じ）。"""
+    if not deck.resolved or os.environ.get("FACTORY_VERIFY") or "tmp" in deck.name.lower():  # JSON のページのデッキは、raw がなくても残す（前の数を 0 にする）
+        return
+    path = spec_log_path()
+    try:  # 組み終えたあとの記録。書けなくても組んだデッキは止めない
+        path.parent.mkdir(exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "deck": pid, "uses": dict(Counter(k for _, _, k in deck.spec_esc))},
+                               ensure_ascii=False) + "\n")
+    except OSError as e:
+        print(f"警告: 形の外の書き方の数を {path} に残せなかった（{e}）", file=sys.stderr)
+
+
+def spec_stats(path=None):
+    """形の外の書き方を、キーごとに、使った資料の数と使った数で出す（資料ごとに最後に組んだときの数）。2 本以上の資料で使ったキーは、形に足す候補（factory-kaizen）。"""
+    path, last, bad = Path(path or spec_log_path()), {}, 0
+    for line in path.read_text(encoding="utf-8").splitlines() if path.is_file() else []:
+        try:
+            d = json.loads(line)
+            last[d["deck"]] = dict(d["uses"])
+        except (ValueError, KeyError, TypeError):  # 途中で切れた行・手で直した行は飛ばす
+            bad += line.strip() != ""
+    if bad:
+        print(f"警告: {path} の読めない {bad} 行を飛ばした", file=sys.stderr)
+    rows = defaultdict(lambda: [0, 0])
+    for uses in last.values():
+        for k, n in uses.items():
+            rows[k][0] += 1
+            rows[k][1] += n
+    print(f"資料 {len(last)} 本\nキー\t資料\t使った数")
+    for k, (a, n) in sorted(rows.items(), key=lambda x: (-x[1][0], -x[1][1])):
+        print(f"{k}\t{a}\t{n}")
+    return dict(rows)
+
+
+def spec_upgrade(paths):
+    """JSON のページのファイルの raw のうち、形のキーで書けるもの（spec_promoted）を、そのキーに書き換える。書き換えた数を返す。
+    書き換えたファイルは、JSON を整え直して書く（手で付けた改行の位置は残らない。標準ライブラリだけで書き方を保つと、JSON の書き換えの仕組みが要る）。
+    形の版（apiVersion）を上げたときの書き換えも、ここに足す（slides-035）。"""
+    total = 0
+    for path in paths:
+        try:
+            o, n = json.loads(Path(path).read_text()), 0
+        except (OSError, json.JSONDecodeError) as e:
+            sys.exit(f"{path}: 読めない（{e}）")
+
+        def walk(x):
+            nonlocal n
+            if isinstance(x, list):
+                for v in x:
+                    walk(v)
+                return
+            if not isinstance(x, dict):
+                return
+            raw = x.get("raw")
+            for k in list(raw) if isinstance(raw, dict) else []:
+                key = spec_promoted(x.get("type"), k)
+                v = spec_from_deck(x.get("type"), key, raw[k]) if key else None  # 形の型に直せない値は raw に残す
+                if key and key not in x and v is not None:
+                    x[key] = v
+                    del raw[k]
+                    n += 1
+            if isinstance(raw, dict) and not raw:
+                del x["raw"]
+            for k in ("body", "items", "pages"):
+                walk(x.get(k))
+        walk(o)
+        if n:
+            Path(path).write_text(json.dumps(o, ensure_ascii=False, indent=1) + "\n")
+        print(f"{path}: {n} 個を形のキーに書き換えた")
+        total += n
+    return total
 
 
 def carry(paths):
@@ -1016,8 +1932,9 @@ def need_mark(want, mark):
 def theme_of(pid):
     """プレゼン（かテンプレート）pid のテーマの名前（deck_theme）。表紙・扉の文字の幅（use_layouts）と、字幅の見積もりの書体（use_font）も決める。
     書体は factory.toml でなくマスターから引く（build・lint と同じ deck_font。url だけで指す共有テーマは、factory.toml に font がない）。"""
-    p = request("GET", f"{SLIDES}/{pid}?fields=masters(pageElements(description,shape)),layouts(objectId,pageElements(description))")
+    p = request("GET", f"{SLIDES}/{pid}?fields=masters(pageElements(description,shape),pageProperties),layouts(objectId,pageElements(description))")
     use_layouts(p)
+    use_palette(p)
     use_font(deck_font(p))
     return deck_theme(p)
 
@@ -1360,12 +2277,54 @@ def load_pages(name="pages"):
     return importlib.import_module(name)
 
 
+def load_make(path):
+    """ファイルの NAME と make。JSON のページ（.json）は d.spec で組み、NAME は deck.json の name。"""
+    if not path.endswith(".json"):
+        return load_pages(Path(path).stem)
+    try:
+        data = json.loads(Path(path).read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        sys.exit(f"{path}: 読めない（{e}）")
+    deck = isinstance(data, dict) and data.get("kind") == "Deck"
+    return types.SimpleNamespace(NAME=data["name"] if deck and "name" in data else "dry", THEME=data.get("theme") if deck else None, make=lambda d: d.spec(path))
+
+
+def declared_theme(path):
+    """デッキのファイル（deck.json）に書いた theme。pages.py は読み込まない（読み込むと slides の値を、テーマを決める前に写す）。"""
+    return load_make(path).THEME if path.endswith(".json") else None
+
+
+def lint_scope(path):
+    """slides.py lint が見る単位。deck.json・pages.py はデッキ全体、部品 1 つのファイル（kind Component）は部品、ほかはページ（子の担当のファイルも）。"""
+    if path in ("pages.py", "deck.json"):
+        return "deck"
+    if path.endswith(".json") and (lambda d: isinstance(d, dict) and d.get("kind") == "Component")(json.loads(Path(path).read_text())):
+        return "component"
+    return "page"
+
+
+def need_deck_theme(want, mark):
+    """deck.json に書いた theme と、組むデッキ（new はテンプレート）のテーマが同じか。違えば止める（テーマを替えるなら new で作り直す）。"""
+    if want and mark and want != mark:
+        sys.exit(f"deck.json の theme は {want} だが、デッキのテーマは {mark}。テーマを替えるなら、slides.py new で作り直す（slides.md の 3）")
+
+
+def default_pages():
+    """組むデッキのファイル。今いるフォルダの pages.py か deck.json（JSON だけで書いたデッキ）。両方あれば止める。"""
+    have = [f for f in ("pages.py", "deck.json") if Path(f).is_file()]
+    if len(have) == 2:
+        sys.exit("pages.py と deck.json の両方がある。どちらか 1 つにする（pages.py から JSON のページを呼ぶなら、d.spec(\"pages.json\") のように別の名前にする）")
+    if not have:
+        sys.exit("今いるフォルダに deck.json（か前の資料の pages.py）がない。資料の build/ で回す（../slides.md の 2）")
+    return have[0]
+
+
 def missing_notes(deck):
     """ノートのないページの番号（1 始まり）。"""
     return [i for i, s in enumerate(deck.slides, 1) if not deck.notes.get(s)]
 
 
-def dry(path="pages.py", url=None):
+def dry(path="pages.py", url=None, show=False):
     """[slides_py-015] 組まずに path の make(d) を走らせ、組むときの警告・枚数・ノートのないページを出す（Google には書かない。アイコンの名前だけは確かめる）。
     子が担当のページを別のファイルに書いたとき、親が組む前に子が自分で確かめる（../slides.md の 2）。番号は担当の中の何枚目。finish は呼ばない（ページへのリンクは、親が組むときに確かめる）。
     url（組んだデッキ）を渡すと、build と同じく表紙・扉のパターンとテーマをデッキから読む（読むだけ）。渡さなければパターンは 1 だけで、variant=2 などは止まる。"""
@@ -1374,8 +2333,10 @@ def dry(path="pages.py", url=None):
     if url:
         use_theme(theme_table(theme_of(file_id(url))))
     d = Deck("dry")
-    load_pages(Path(path).stem).make(d)
-    print(json.dumps({"file": path, "slides": len(d.slides), "pages_without_notes": missing_notes(d), "warnings": len(d.warnings)}, ensure_ascii=False))
+    load_make(path).make(d)
+    if show:  # slides.py resolve: JSON のページの解いた形
+        print(json.dumps(d.resolved, ensure_ascii=False, indent=1))
+    print(json.dumps({"file": path, "slides": len(d.slides), "pages_without_notes": missing_notes(d), "warnings": len(d.warnings)}, ensure_ascii=False), file=sys.stderr if show else sys.stdout)
     return d
 
 
@@ -1406,16 +2367,19 @@ def lint_local(path="pages.py", url=None, talk=False, pages=None):
     デッキ全体の規則（扉・結論バンドの数など）とワークスペースの点検はいつも全ページを見る。組んで画像を取るのは区切りだけにする（../slides.md の 1）。"""
     if Path(path).parent != Path("."):
         sys.exit(f"lint はファイルのあるフォルダ（build/）で、名前だけを渡して回す: {path}")
-    src = file_id(url) if url else template_id()
+    want = declared_theme(path)
+    src = file_id(url) if url else template_id(want)  # URL がなければ、deck.json の theme（なければ既定）のテンプレートで見る
     p = request("GET", f"{SLIDES}/{src}?fields=title,masters,layouts")
+    need_deck_theme(want, deck_theme(p))
     use_layouts(p)
+    use_palette(p)
     use_font(deck_font(p))
     use_theme(theme_table(deck_theme(p)))
-    m = load_pages(Path(path).stem)
+    m = load_make(path)
     with contextlib.redirect_stderr(io.StringIO()) as err:  # 組むときの警告は、見るページのものだけを出す
         deck = Deck(getattr(m, "NAME", "dry"))
         m.make(deck)
-        if Path(path).stem != "pages":  # 子のファイルのページへのリンクは、全体の番号を指すので、親が組むときに確かめる（dry と同じ）
+        if path not in ("pages.py", "deck.json"):  # 子のファイルと JSON のページの、ページへのリンクは、全体の番号を指すので、親が組むときに確かめる（dry と同じ）
             deck.links.clear()
         deck.finish()
     reqs = json.loads(resolved(deck, p))
@@ -1435,7 +2399,11 @@ def lint_local(path="pages.py", url=None, talk=False, pages=None):
     q = local_json(reqs, deck, p)
     import lint
     r = lint.Report()
-    hard = lint.lint_slides(q, r, "差し替え用" in q["title"], talk, pages)
+    r.where = spec_where(deck)  # JSON のページなら、指摘に部品の場所を付ける
+    hard = lint.lint_slides(q, r, "差し替え用" in q["title"], talk, pages, lint_scope(path))
+    if out := [h for h in spec_out_hits(deck) if lint.hit_page(h) in pages]:
+        r.hits[SPEC_OUT] = out
+        r.show([SPEC_OUT], "要確認（JSON の形の外の書き方）")
     bad = {lint.hit_page(h) for k in lint.HARD_NAMES | r.extra_hard for h in r.hits.get(k, [])}
     state.write_text(json.dumps(sorted(clean_after(clean, [digest[s] for s in deck.slides], pages, bad))))
     warnings = sum(int(re.match(r"\[p(\d+)\]", w).group(1)) in pages for w in deck.warnings)
@@ -1669,9 +2637,15 @@ def selftest():
         raise AssertionError("SVG の URL を通した")
     except SystemExit:
         pass
+    assert hex_of(NAVY) == hex_of(HEAD) == PALETTE["DARK1"] and hex_of(TEXT) == fixed(TEXT)  # アイコンの役割の名前は、デッキの配色の 6 桁にする
+    use_palette({"masters": [{"pageProperties": {"colorScheme": {"colors": [{"type": "DARK1", "color": {"rgbColor": {"red": 1}}}, {"type": "ACCENT1", "color": {"rgbColor": {}}}]}}}]})
+    assert PALETTE["DARK1"] == "FF0000" and PALETTE["ACCENT1"] == "000000"  # 0 の成分は省かれる
+    use_palette({"masters": [{"pageProperties": {"colorScheme": {"colors": [{"type": "DARK1", "color": {"rgbColor": {"blue": 1}}}]}}}]})
+    assert PALETTE["DARK1"] == "0000FF" and PALETTE["ACCENT1"] == THEMES["visual"]["ACCENT1"]  # 前のデッキの色を残さない
+    PALETTE.update(THEMES["visual"])
     try:
-        make_deck(lambda d: d.icon(d.page("t"), "tabler:database", 0, 0, 0.4, NAVY), "foot")
-        raise AssertionError("アイコンにテーマの色を通した")
+        make_deck(lambda d: d.icon(d.page("t"), "tabler:database", 0, 0, 0.4, "navy"), "foot")
+        raise AssertionError("アイコンに名前でも 6 桁でもない色を通した")
     except SystemExit:
         pass
     # テーマの名前はマスターかレイアウトの代替テキストから読む。名前がなければ None
@@ -1870,7 +2844,350 @@ def selftest():
                 sys.modules.pop(k, None)
             sys.path[:] = [x for x in sys.path if Path(x).resolve() != Path(t).resolve()]
     selftest_diff()
+    selftest_spec()
+    selftest_sample()
     print("selftest ok")
+
+
+def selftest_sample():
+    """JSON のページの見本（../samples/json）は、形のすべての型とキーを使い（キーを足したら見本にも足す）、警告なしに組む要求まで作れる。
+    見た目は sandbox でこの見本を組んで画像で見る（AGENTS.md の「直すときの決まり」）。"""
+    root = Path(__file__).resolve().parent.parent / "samples" / "json"
+    used, kinds, geo = defaultdict(set), set(), set()
+
+    def el(e):
+        used[e["type"]] |= set(e) - {"type"} - set(_ESC)
+        geo.update(set(e) & set(_GEO))
+        for c in e["items"] if e["type"] in ("row", "stack", "grid", "frame") else []:
+            el(c)
+    for f in root.glob("*.json"):
+        o = json.loads(f.read_text())
+        kinds.add(o["kind"])
+        if o["kind"] == "Deck":
+            used["Deck"] |= set(o) - {"apiVersion", "kind"}
+        elif o["kind"] == "Page":
+            used["page:" + o.get("type", "page")] |= set(o) - {"apiVersion", "kind", "type"}
+            for e in o.get("body", []):
+                el(e)
+        else:
+            el({k: v for k, v in o.items() if k not in ("apiVersion", "kind")})
+    want = {t: set(n) | set(o) for t, (n, o) in SPEC_EL.items()} | {f"page:{t}": set(n) | set(o) for t, (n, o) in SPEC_PAGE.items()}
+    want["Deck"] = set(SPEC_DECK[0]) | set(SPEC_DECK[1])
+    miss = {t: sorted(k - used[t]) for t, k in want.items() if k - used[t]}
+    assert not miss and geo == set(_GEO) and kinds == set(KINDS), ("見本に足りない型とキー", miss, set(_GEO) - geo, set(KINDS) - kinds)
+    real = {k: globals()[k] for k in ("iconify", "asset")}
+    globals()["iconify"] = lambda name, color=TEXT, w=512: f"https://x/{name}.png"  # アイコンの名前を問い合わせない
+    globals()["asset"] = lambda path: str(Path(__file__).resolve().parent.parent / "assets" / path)  # factory.toml のないところでも回す
+    try:
+        with contextlib.redirect_stderr(io.StringIO()):
+            d = make_deck(lambda x: x.spec(root / "deck.json"), "見本")
+            c = make_deck(lambda x: x.spec(root / "component.json"), "部品")
+    finally:
+        globals().update(real)
+    assert len(d.slides) == 8 and not d.warnings and not c.warnings, d.warnings + c.warnings
+    assert not missing_notes(d) and "diagram" in d.page_names
+
+
+def selftest_spec():
+    """JSON のページ（Deck.spec）: 記法、並べ方、ID の矢印、frame、地に合わせた文字の色、手元の画像、deck.json、誤りの止め方、lint の場所、Schema。"""
+    md = spec_md("a**b**c***d***`e`[f](https://x)[g](#p2)<br>h\\*", emph="E")
+    assert md == ["a", ("b", {"bold": True}), "c", ("d", {"bold": True, "color": "E"}), "e", ("f", {"link": "https://x"}), ("g", {"link": {"page": "p2"}}), "\vh*"], md
+    assert spec_md("注*") == "注*" and spec_bullets("- a\n- b") == ("a\nb", True) and spec_bullets("a\nb")[1] is False and spec_bullets("- a\n\n- b\n") == ("a\nb", True)
+    assert spec_md("[a](https://x/(y))") == [("a", {"link": "https://x/(y)"})]  # URL の中の () も読む
+
+    near = lambda a, b: abs(a - b) < 1e-3  # 解いた形は 4 桁に丸める
+
+    def run(src):
+        d = Deck("spec")
+        d.spec(src)
+        d.finish()
+        return d, d.resolved[0]["els"]
+    body = ["Bronze は届いたまま", "Silver は型をそろえて重複を外し、結合できる形にする", "Gold"]
+    page = {"title": "見出し", "lead": "リード", "note": "話すこと", "source": "[公式](https://docs.databricks.com/)", "band": {"text": "結論", "sub": "補足"},
+            "body": [{"type": "row", "items": [{"type": "card", "head": h, "text": b, "id": h} for h, b in zip(("B", "S", "G"), body)]},
+                     {"type": "text", "text": "下の文は ***強調*** と `uv run` を含む", "fill": "PANEL"},
+                     {"type": "arrow", "from": "B", "to": "S"}]}
+    d, els = run(page)
+    cards, (txt,), (arr,) = [e for e in els if e["call"] == "card"], [e for e in els if e["call"] == "text"], [e for e in els if e["call"] == "arrow"]
+    h = max(card_h(w, hd, body=b) for (_, w), hd, b in zip(cols(3), "BSG", body))
+    assert all(near(c["x"], x) and near(c["w"], w) and near(c["h"], h) for c, (x, w) in zip(cards, cols(3))) and cards[0]["y"] == Y_BODY  # 列は cols、高さは最大にそろえる
+    assert near(txt["y"], Y_BODY + h + GAP_BODY) and txt["valign"] == "MIDDLE" and txt["parts"][1] == ("強調", {"bold": True, "color": RED_TEXT})
+    assert not any(r.get("updateTextStyle", {}).get("style", {}).get("fontFamily") == MONO for r in d.reqs)  # `コード` は地の文のまま（visual-014）
+    assert arr["y1"] == arr["y2"] and near(arr["y1"], Y_BODY + h / 2) and near(arr["x1"], cards[0]["x"] + cards[0]["w"] + ARROW_PAD)  # 箱の上下の中央に横に引く
+    assert els[-1]["call"] == "arrow" and d.notes and json.dumps(d.resolved)  # 矢印は最後に引く。解いた形は JSON にできる
+    assert any(r.get("insertText", {}).get("text") == "出典: 公式" for r in d.reqs)
+    assert spec_where(d)("p1: 「下の文は強調と uv」の") == f"（spec.body[1]）" and spec_where(d)("p1: 12 個") == ""  # lint の指摘に部品の場所を付ける
+    two = Deck("x")
+    two.slides, two.spec_index = ["s"], {"s": [("a", "同じ文で始まる一つ目"), ("b", "同じ文で始まる二つ目")]}
+    assert spec_where(two)("p1: 「同じ文で始まる」") == "（a・b）"  # 候補が 2 つなら両方
+
+    _, els = run({"type": "slide", "body": [{"type": "stack", "items": [{"type": "box", "h": 1, "id": "a", "fill": "PANEL"}, {"type": "box", "h": 1, "id": "b", "fill": "PANEL"}]},
+                                            {"type": "arrow", "from": "a", "to": "b"},
+                                            {"type": "frame", "h": 1.2, "items": [{"type": "text", "text": "x", "x": 1, "y": 0.5, "w": 2, "fill": "NAVY", "id": "f"},
+                                                                                {"type": "arrow", "from": [0, 0], "to": [1, 0.5]}]},
+                                            {"type": "row", "arrows": True, "items": [{"type": "num", "n": 1}, {"type": "label", "text": "工程"}]}]})
+    a, b, arrows = els[0], els[1], [e for e in els if e["call"] == "arrow"]
+    assert near(b["y"], a["y"] + 1 + GAP) and near(arrows[-2]["x1"], a["x"] + a["w"] / 2) and near(arrows[-2]["y1"], a["y"] + 1 + ARROW_PAD)  # 縦に離れていれば縦に引く
+    f = next(e for e in els if e["call"] == "text")
+    assert near(f["x"], X + 1) and near(f["y"], b["y"] + 1 + GAP_BODY + 0.5) and f["color"] == WHITE  # frame の中は左上からの位置。濃紺の地の文字は白
+    assert spec_md("***x***", ON_FILL["NAVY"][1])[0][1]["color"] == "RED_ON_NAVY" and f["valign"] == "MIDDLE"
+    assert near(arrows[-1]["x1"], X) and near(arrows[-1]["y1"], f["y"] - 0.5)  # [x, y] の端は frame の左上から
+    _, diag = run({"title": "t", "body": [{"type": "frame", "h": 2, "items": [{"type": "box", "id": "a", "x": 0, "y": 1, "w": 1, "h": 0.5, "fill": "PANEL"},
+                                                                            {"type": "box", "id": "b", "x": 3, "y": 0, "w": 1, "h": 0.5, "fill": "PANEL"}]},
+                                         {"type": "arrow", "from": "a", "to": "b"}]})
+    arr = diag[-1]
+    assert near(arr["y1"], Y_BODY_NOLEAD + 1.25) and near(arr["y2"], Y_BODY_NOLEAD + 0.25)  # 上下が重ならなければ、向き合う辺の中央どうしを斜めに
+    n = next(e for e in els if e["call"] == "num")
+    lab = next(e for e in els if e["call"] == "label")
+    assert near(lab["x"], X + NUM["M"][0] + GAP_ARROW) and near(n["cx"], X + NUM["M"][0] / 2)  # 番号は決まった幅、残りを label に
+
+    with tempfile.TemporaryDirectory() as t:
+        (Path(t) / "img").mkdir()
+        (Path(t) / "img" / "a.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\0" * 8 + (200).to_bytes(4, "big") + (100).to_bytes(4, "big"))
+        (Path(t) / "sub").mkdir()
+        head = {"apiVersion": API_VERSION}
+        (Path(t) / "sub" / "p.json").write_text(json.dumps({**head, "kind": "Page", "title": "画像", "body": [{"type": "image", "src": "../img/a.png", "w": 4}]}))
+        (Path(t) / "pages_a.json").write_text(json.dumps({**head, "kind": "Deck", "name": "a", "pages": ["sub/p.json"]}))  # 子が担当のページを並べたもの
+        (Path(t) / "cover.json").write_text(json.dumps({**head, "kind": "Page", "type": "cover", "title": "表紙", "kicker": "k", "note": "[画像のページ](#p)"}))
+        (Path(t) / "deck.json").write_text(json.dumps({**head, "kind": "Deck", "name": "資料", "theme": "visual", "pages": ["pages_a.json", "cover.json"]}))
+        for bad, want in [({"kind": "Page", "title": "t"}, "apiVersion がない"), ({"apiVersion": "slides/v2", "kind": "Page", "title": "t"}, "apiVersion 'slides/v2' は読めない"),
+                          ({**head, "kind": "Slide", "title": "t"}, "kind 'Slide' はない"), ([{"title": "t"}], "ファイルの頭は")]:
+            (Path(t) / "bad.json").write_text(json.dumps(bad))
+            try:
+                make_deck(lambda x: x.spec(Path(t) / "bad.json"), "x")
+                raise AssertionError(f"通した: {bad}")
+            except SystemExit as e:
+                assert want in str(e), (want, str(e))
+        here = os.getcwd()
+        os.chdir(t)
+        try:
+            m = load_make("deck.json")
+            d = make_deck(m.make, m.NAME)
+            assert m.THEME == "visual" and declared_theme("deck.json") == "visual" and declared_theme("pages.py") is None
+            try:
+                need_deck_theme("visual", "company")
+                raise AssertionError("deck.json と違うテーマのデッキに組んだ")
+            except SystemExit as e:
+                assert "new で作り直す" in str(e)
+            (Path(t) / "cover.json").write_text(json.dumps({**head, "kind": "Page", "type": "page", "title": "目次", "body": [{"type": "text", "text": "[画像のページ](#p) へ"}]}))
+            dl = make_deck(m.make, m.NAME)
+            link = next(r["updateTextStyle"]["style"]["link"] for r in dl.reqs if "link" in r.get("updateTextStyle", {}).get("style", {}))
+            assert link == {"pageObjectId": dl.page_names["p"]} == {"pageObjectId": dl.slides[0]}  # リンクはページのファイル名で指す（並べ替えてもずれない）
+            (Path(t) / "cover.json").write_text(json.dumps({**head, "kind": "Page", "title": "目次", "body": [{"type": "text", "text": "[x](#nai)"}]}))
+            try:
+                make_deck(m.make, m.NAME)
+                raise AssertionError("ないページへのリンクを通した")
+            except SystemExit as e:
+                assert "「nai」がない" in str(e)
+            (Path(t) / "deck.json").write_text(json.dumps({**head, "kind": "Deck", "name": "資料", "pages": ["sub/p.json", "pages_a.json"]}))
+            try:
+                make_deck(load_make("deck.json").make, "x")
+                raise AssertionError("同じページを 2 回並べた")
+            except SystemExit as e:
+                assert "「p」が 2 つ" in str(e)
+            assert len(make_deck(lambda x: x.spec(["sub/p.json"]), "x").slides) == 1  # ページのファイルの並び
+        finally:
+            os.chdir(here)
+        img = d.resolved[0]["els"][0]
+        assert m.NAME == "資料" and len(d.slides) == 2 and list(d.page_names) == ["p", "cover"] and img["h"] == 2 and img["src"] == str((Path(t) / "img" / "a.png").resolve())  # 比から高さ。パスは JSON のファイルから
+        assert d.images == [img["src"]]  # 組むとき（carry）に上げる
+    d, _ = run({"type": "label", "text": "札"})
+    assert len(d.slides) == 1  # 部品 1 つだけは型のないページ
+    d, _ = run({"title": "t", "body": [{"type": "box", "h": 5, "fill": "PANEL"}]})
+    assert any("重なる見込み" in w for w in d.warnings)  # 本文が出典の行まで届く
+    assert spec_md("**{32:48}** モデル") == [("48", {"bold": True, "size": 32}), " モデル"]  # 大きさは太字の中にも書ける
+    assert spec_md("***[a](#p3)***", "E") == [("a", {"bold": True, "color": "E", "link": {"page": "p3"}})] and spec_md("\\{1:x}") == "{1:x}"
+    big = spec_text_h(spec_md("{32:48}<br>モデル"), 3, 11)
+    assert big > spec_text_h("48<br>モデル".replace("<br>", "\v"), 3, 11)  # 大きな文字の段落は高く見込む
+    d, els = run({"title": "t", "body": [
+        {"type": "row", "items": [{"type": "label", "text": "GA", "w": "fit"}, {"type": "text", "text": "説明", "bold": True, "spacing": 110, "para_gap": 4, "shape": "chevron", "fill": "PANEL"}]},
+        {"type": "table", "rows": [["a", "b"], ["c", "d"], ["e", "f"]], "row_h": [0.5, 0.4, 0.4], "fills": [[2, 0, "RED_SOFT"], [3, 2, "PANEL"]],
+         "raw": {"zebra": False}},
+        {"type": "card", "head": "h", "items": [["a", "b"]], "step": 0.6},
+        {"type": "box", "h": 0.5, "fill": "PANEL", "shape": "ellipse", "raw": {"radius": 0.2}}]})
+    lab, txt, tab, card, box = [e for e in els if e["call"] != "arrow"]
+    assert near(lab["w"], em_width("GA") * 11 / 72 + 2 * 11 / 72 + 0.06) and txt["kind"] == "CHEVRON" and txt["bold"] and txt["spacing"] == 110 and txt["gap"] == 4
+    assert tab["row_h"] == [0.5, 0.4, 0.4] and tab["fills"] == [(1, None, RED_SOFT), (2, 1, PANEL)] and tab["zebra"] is False and card["step"] == 0.6 and box["kind"] == "ELLIPSE"
+    assert [r["updateTableRowProperties"]["rowIndices"] for r in d.reqs if "updateTableRowProperties" in r] == [[0], [1, 2]]  # 行ごとの高さ
+    hits = spec_out_hits(d)
+    assert [h.split("（")[0] for h in hits] == ["p1: table.raw.zebra", "p1: box.raw.radius"], hits
+    assert "形の radius で書ける" in hits[-1] and "形の zebra で書ける" in hits[0]
+    dd = Deck("x")
+    dd.spec_esc = [("s", "l", "table.raw.border")]
+    dd.slides = ["s"]
+    assert "slides.py stats" in spec_out_hits(dd)[0]  # 形にない引数は、形に足す提案に
+    with tempfile.TemporaryDirectory() as t:
+        log = Path(t) / "spec_raw.jsonl"
+        real_log = globals()["spec_log_path"]
+        globals()["spec_log_path"] = lambda: log
+        try:
+            spec_record(d, "deck1")
+            spec_record(d, "deck1")  # 組み直しは最後の数だけ
+            dd = Deck("資料 2")
+            dd.resolved, dd.spec_esc = [{"type": "page"}], [("s", "l", "table.raw.zebra")]
+            spec_record(dd, "deck2")
+            with contextlib.redirect_stdout(io.StringIO()):
+                rows = spec_stats(log)
+            assert rows["table.raw.zebra"] == [2, 2] and rows["box.raw.radius"] == [1, 1]
+            gone = Deck("資料 1")
+            gone.resolved = [{"type": "page"}]  # 最後の raw を外して組み直した JSON のデッキ
+            spec_record(gone, "deck1")
+            with contextlib.redirect_stdout(io.StringIO()):
+                rows = spec_stats(log)
+            assert "box.raw.radius" not in rows and rows["table.raw.zebra"] == [1, 1]  # 古い数は残らない
+            tmp = Deck("tmp_試し")
+            tmp.spec_esc = dd.spec_esc
+            spec_record(tmp, "deck3")
+            assert len(log.read_text().splitlines()) == 4  # tmp の資料は数えない
+        finally:
+            globals()["spec_log_path"] = real_log
+        f = Path(t) / "p.json"
+        f.write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Page", "title": "t", "body": [
+            {"type": "box", "h": 1, "raw": {"kind": "CAN", "radius": 0.2, "dash": True}}, {"type": "stack", "items": [{"type": "table", "rows": [["a"]], "raw": {"row_h": 0.5}}]},
+            {"type": "text", "text": "a", "raw": {"align": "CENTER", "fill": NAVY, "kind": "STAR"}},
+            {"type": "table", "rows": [["a"]], "raw": {"mono_cols": [0], "zebra": False}}]}))
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert spec_upgrade([f]) == 7
+        up = json.loads(f.read_text())
+        assert up["body"][0] == {"type": "box", "h": 1, "shape": "can", "radius": 0.2, "dash": True} and up["body"][1]["items"][0]["row_h"] == 0.5
+        assert up["body"][2] == {"type": "text", "text": "a", "raw": {"kind": "STAR"}, "align": "center", "fill": "NAVY"}  # 値を形の書き方に直す。形にない形は raw に残す
+        assert up["body"][3] == {"type": "table", "rows": [["a"]], "raw": {"mono_cols": [0]}, "zebra": False}  # 数え始めの違う mono_cols は移さない
+        log.write_text('{"deck": "d1", "uses": {"a": 1}}\n{"deck": \n')
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
+            assert spec_stats(log) == {"a": [1, 1]} and "1 行を飛ばした" in err.getvalue()  # 途中で切れた行は飛ばす
+        svg, jpg = Path(t) / "a.svg", Path(t) / "a.jpg"
+        svg.write_bytes(b'<svg xmlns="http://www.w3.org/2000/svg" width="200px" height="100">')
+        jpg.write_bytes(b"\xff\xd8\xff\xff\xc0\x00\x11\x08\x00\x64\x00\xc8" + b"\0" * 16)  # 詰めの FF のあとの SOF0（高さ 100・幅 200）
+        assert image_ratio(svg) == image_ratio(jpg) == 2
+    globals()["iconify"], real_iconify = (lambda name, color=TEXT, w=512: f"https://x/{name}.png"), iconify  # アイコンの名前を問い合わせない
+    try:
+        d, els = run({"title": "t", "body": [{"type": "row", "items": [
+        {"type": "card", "icon": "tabler:database", "head": "表", "text": "取り込んだ表"},
+        {"type": "card", "num": 2, "head": "段", "text": "整える"},
+        {"type": "card", "image": "https://x/a.png", "head": "製品", "text": "ロゴ", "align": "center"},
+        {"type": "stat", "value": "16", "unit": "モデル", "label": "本番の数", "sub": "2026 年 9 月"}]},
+        {"type": "card", "icon": "tabler:server", "head": "名前", "valign": "middle", "fill": "NAVY", "w": 3}]})
+    finally:
+        globals()["iconify"] = real_iconify
+    cards = [e for e in els if e["call"] == "card"]
+    icon, num, img = (next(e for e in els if e["call"] == c) for c in ("icon", "num", "image"))
+    assert len({c["h"] for c in cards[:3]}) == 1 and cards[0]["line"] == RULE and cards[3]["line"] is None  # 列の高さをそろえる。濃い地のカードは枠線なし
+    assert near(icon["x"], cards[0]["x"] + MARK_IN) and near(num["cx"], cards[1]["x"] + MARK_IN + MARK / 2) and near(img["x"], cards[2]["x"] + (cards[2]["w"] - MARK_IMG) / 2)
+    by = {e["loc"]: e for e in els}
+    h0, b1 = by["spec.body[0].items[0].head"], by["spec.body[0].items[1].text"]
+    assert h0["parts"] == [("表", {"bold": True, "size": 12, "color": "HEAD"})] and near(h0["x"], icon["x"] + MARK + MARK_GAP) and by["spec.body[0].items[2].head"]["align"] == "CENTER"
+    assert b1["bullets"] is False and not by["spec.body[0].items[1].head"].get("bullets")  # 見出しは本文と別の枠
+    stat = by["spec.body[0].items[3]"]
+    assert stat["parts"][:2] == [("16", {"size": 32, "bold": True, "color": RED_TEXT}), (" モデル", {"size": 16, "bold": True, "color": RED_TEXT})] and stat["fill"] == CARD
+    dark = by["spec.body[1].head"]
+    assert dark["color"] == WHITE and dark["parts"][0][1]["color"] == WHITE and near(dark["y"], cards[3]["y"] + (cards[3]["h"] - max(dark["h"], 0.2)) / 2)  # 上下の中央
+    assert any(r.get("updateTextStyle", {}).get("style", {}).get("foregroundColor") == {"opaqueColor": paint(WHITE)} for r in d.reqs)
+    _, sl = run({"type": "slide", "bg": "NAVY", "body": [{"type": "text", "text": "***地の文***"}, {"type": "text", "text": "枠", "line": "RULE"}]})
+    assert sl[0]["color"] == sl[1]["color"] == WHITE and sl[0]["parts"][0][1]["color"] == RED_ON_NAVY  # 濃い地のページの文字。枠線だけの箱も地を塗らない
+    _, dk = run({"title": "t", "body": [{"type": "card", "fill": "NAVY", "head": "見出し", "text": "***強調***"}]})
+    dh, dt = (next(e for e in dk if e["loc"] == f"spec.body[0].{k}") for k in ("head", "text"))
+    assert dh["color"] == WHITE and dh["parts"][0][1]["color"] == WHITE and dt["parts"][0][1]["color"] == RED_ON_NAVY  # 濃い地の印のないカードも地から色を決める
+    assert near(dt["x"], X + MARK_IN) and not any(e["call"] in ("icon", "num", "image") for e in dk)
+    globals()["iconify"], real_iconify = (lambda name, color=TEXT, w=512: f"https://x/{name}.png"), iconify
+    try:  # grid の中のアイコンと番号は、列の幅に広げず決まった大きさで置き、下の部品はその下端から
+        _, gi = run({"title": "t", "body": [{"type": "grid", "cols": 2, "items": [{"type": "icon", "name": "tabler:a", "size": 0.5}, {"type": "num", "n": 1}]},
+                                            {"type": "text", "text": "下"}]})
+    finally:
+        globals()["iconify"] = real_iconify
+    ic, nm, below = gi
+    assert ic["size"] == 0.5 and near(nm["cx"], cols(2)[1][0] + NUM["M"][0] / 2) and near(below["y"], Y_BODY_NOLEAD + 0.5 + GAP_BODY)
+    _, bc = run({"title": "t", "body": [{"type": "card", "text": "{64:48}"}, {"type": "text", "text": "下"}]})
+    assert bc[0]["h"] > 64 * 1.2 / 72 and near(bc[-1]["y"], bc[0]["y"] + bc[0]["h"] + GAP_BODY)  # 印のないカードも文字ごとの大きさで高さを見込む
+    _, mo = run({"title": "t", "body": [{"type": "text", "text": "i" * 80, "w": 1, "mono": True}, {"type": "label", "text": "iiii", "w": "fit", "mono": True}]})
+    assert near(mo[0]["h"], est_lines("i" * 80, 1, 11, True) * 11 * 1.2 * 1.25 / 72 + 0.02)  # 等幅の字幅で行数を見る
+    assert near(mo[1]["w"], 4 * MONO_EM * 11 / 72 + 2 * 11 / 72 + 0.06)
+    for bad, want in [({"type": "card", "icon": "a:b", "num": 1}, "どれか 1 つ"), ({"type": "card", "head": "h", "align": "center"}, "印（icon・num・image）のあるカード"),
+                      ({"type": "card", "icon": "a:b", "align": "center", "valign": "middle"}, "一緒に使えない")]:
+        try:
+            make_deck(lambda x: x.spec({"title": "t", "body": [bad]}), "x")
+            raise AssertionError(f"通した: {bad}")
+        except SystemExit as e:
+            assert want in str(e), (want, str(e))
+    with tempfile.TemporaryDirectory() as t:
+        here = os.getcwd()
+        os.chdir(t)
+        try:
+            Path("c.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Component", "type": "stat", "value": "3"}))
+            Path("p.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Page", "title": "t"}))
+            Path("c.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Component", "type": "label", "text": "札"}))
+            real_dp, real_argv = default_pages, sys.argv
+            globals()["default_pages"] = lambda: (_ for _ in ()).throw(AssertionError("ファイルを渡したのに default_pages を呼んだ"))
+            sys.argv = ["slides.py", "dry", "c.json"]
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    main()  # pages.py も deck.json もないフォルダで、渡したファイルだけを見る
+            finally:
+                globals()["default_pages"], sys.argv = real_dp, real_argv
+            Path("c.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Component", "type": "stat", "value": "3"}))
+            Path("l.json").write_text("[]")
+            assert [lint_scope(f) for f in ("deck.json", "pages.py", "c.json", "p.json", "pages_a.py", "l.json")] == ["deck", "deck", "component", "page", "page", "page"]
+        finally:
+            os.chdir(here)
+    d, _ = run({"title": "t", "body": [{"type": "frame", "h": 2, "items": [  # 囲みの中に見出しとカードを入れるのはよい。横 1 列の流れは row を勧める
+        {"type": "box", "x": 0, "y": 0, "w": 6, "h": 2, "fill": "PANEL"}, {"type": "text", "text": "囲みの見出し", "x": 0.2, "y": 0.1, "w": 3},
+        {"type": "label", "text": "A", "id": "a", "x": 0.2, "y": 1, "w": 1}, {"type": "label", "text": "B", "id": "b", "x": 2, "y": 1, "w": 1},
+        {"type": "label", "text": "C", "id": "c", "x": 4, "y": 1, "w": 1}, {"type": "arrow", "from": "a", "to": "b"}, {"type": "arrow", "from": "b", "to": "c"}]}]})
+    assert not any("横 1 列" in w for w in d.warnings)  # 囲みの見出しがあるので 1 列ではない
+    d, _ = run({"title": "t", "body": [{"type": "frame", "h": 1, "items": [
+        {"type": "label", "text": "A", "id": "a", "x": 0, "y": 0, "w": 1}, {"type": "label", "text": "B", "id": "b", "x": 2, "y": 0.1, "w": 1},
+        {"type": "label", "text": "C", "id": "c", "x": 4, "y": 0, "w": 1}, {"type": "arrow", "from": "a", "to": "b"}, {"type": "arrow", "from": "b", "to": "c"}]}]})
+    assert any("横 1 列" in w for w in d.warnings)
+    d, _ = run({"title": "t", "body": [{"type": "box", "h": 0.5, "fill": "PANEL", "shape": "rectangle"}, {"type": "box", "h": 0.5, "line": "RULE", "shape": "rectangle"}]})
+    assert sum("四角（shape: rectangle）" in w for w in d.warnings) == 1  # 塗りの箱だけ知らせる（枠線だけの箱は四角が既定）
+    schema = spec_schema()
+    assert {f"el_{k}" for k in SPEC_EL} <= set(schema["$defs"]) and json.dumps(schema, ensure_ascii=False)
+    assert schema["$defs"]["el_text"]["properties"]["fill"] == {"anyOf": [{"enum": list(COLOR_NAMES)}, {"type": "string", "pattern": "^[0-9A-Fa-f]{6}$"}]}
+    assert all(c in globals() for c in COLOR_NAMES)
+    for bad, want in [({"title": "t", "body": [{"type": "card", "titel": "x"}]}, "spec.body[0]（card）: 知らないキー titel"),
+                      ({"title": "t", "body": [{"type": "text"}]}, "text がない"),
+                      ({"title": "t", "body": [{"type": "text", "text": "a", "fill": "NAVYY"}]}, "spec.body[0]（text）.fill"),
+                      ({"title": "t", "body": [{"type": "text", "text": "a", "x": 1}]}, "知らないキー x"),
+                      ({"title": "t", "body": [{"type": "frame", "h": 1, "items": [{"type": "text", "text": "a"}]}]}, "x・y・w を書く"),
+                      ({"title": "t", "body": [{"type": "box", "h": 1, "id": "a"}, {"type": "box", "h": 1, "id": "a"}]}, "id「a」が 2 つ"),
+                      ({"title": "t", "body": [{"type": "arrow", "from": "a", "to": "b"}]}, "id「a」の部品がない"),
+                      ({"title": "t", "body": [{"type": "row", "items": [{"type": "arrow", "from": "a", "to": "b"}]}]}, "arrows"),
+                      ({"title": "t", "body": [{"type": "table", "rows": [["**a**"]]}]}, "記法を書けない"),
+                      ({"title": "t", "body": [{"type": "image", "src": "nai.png", "h": 1}]}, "画像がない"),
+                      ({"title": "t", "body": [{"type": "image", "src": "https://x/a.png"}]}, "h を書く"),
+                      ({"type": "chart"}, "type「chart」はない"),
+                      ({"title": "t", "source": "[a](#)"}, "[名前](#<ページのファイル名>)"),
+                      ({"title": "t", "body": [{"type": "text", "text": "a", "w": "fit"}]}, "label だけ"),
+                      ({"title": "t", "body": [{"type": "box", "h": 1, "raw": {"nai": 1}}]}, "box の引数にない nai"),
+                      ({"title": "t", "body": [{"type": "table", "rows": [["a"]], "fills": [[3, 1, "PANEL"]]}]}, "表にない行か列"),
+                      ({"title": "t", "body": [{"type": "card", "items": [["a", "**b**"]], "step": 1}]}, "step は items と使い"),
+                      ({"title": "t", "body": [{"type": "box", "h": 1, "shape": "star"}]}, "shape"),
+                      ({"title": "t", "body": [{"type": "grid", "cols": 0, "items": [{"type": "card", "head": "a", "text": "b"}]}]}, "1 以上の整数"),
+                      ({"title": "t", "body": [{"type": "text", "text": "a", "size": 0}]}, "0 より大きい数"),
+                      ({"title": "t", "body": [{"type": "frame", "h": 1, "items": [{"type": "box", "x": 0, "y": 0, "w": 1, "h": -1, "fill": "PANEL"}]}]}, "0 より大きい数"),
+                      ({"title": "t", "body": [{"type": "frame", "h": 1, "items": [{"type": "box", "x": 0, "y": 2.5, "w": 2, "h": 1, "fill": "PANEL"}]}]}, "frame の外に出る"),
+                      ({"title": "t", "body": [{"type": "frame", "h": 1, "items": [{"type": "box", "x": 12, "y": 0, "w": 1, "h": 1, "fill": "PANEL"}]}]}, "frame の外に出る"),
+                      ({"type": "cover", "title": "t", "kicker": "k", "variant": 0}, "1 以上の整数"),
+                      ({"title": "t", "body": [{"type": "frame", "h": 1, "items": [{"type": "arrow", "from": [0, 0], "to": [1, 3]}]}]}, "は frame の外"),
+                      ({"title": "t", "body": [{"type": "row", "items": []}]}, "1 つ以上の部品"),
+                      ({"title": "t", "body": [{"type": "table", "rows": [[]]}]}, "rows"),
+                      ({"title": "t", "body": [{"type": "grid", "cols": 2, "h": 1, "items": [{"type": "card", "head": "a", "text": "b"}]}]}, "知らないキー h"),
+                      ({"title": "t", "body": [{"type": "card", "fill": "NAVY", "items": [["a", "b"]], "step": 0.6}]}, "step は使えない"),
+                      ({"title": "t", "body": [{"type": "table", "rows": [["a"], ["b"]], "fills": [[2, 0, "NAVY"]]}]}, "濃い色"),
+                      ({"title": "t", "body": [{"type": "table", "rows": [["a", "b", "c"]], "widths": [1, 2]}]}, "列の数（3）と違う"),
+                      ({"title": "t", "body": [{"type": "table", "rows": [["a"], ["b"]], "row_h": [0.4]}]}, "行の数（2）だけ"),
+                      ({"title": "t", "body": [{"type": "row", "raw": {"gap": 0.5}, "items": [{"type": "box", "h": 1, "fill": "PANEL"}]}]}, "知らないキー raw"),
+                      ({"title": "t", "body": [{"type": "text", "text": "- a\n- b\n\n詳しくは c"}]}, "別の text に分ける"),
+                      ({"title": "t", "body": [{"type": "card", "head": "h", "text": "- a\nb"}]}, "別の text に分ける"),
+                      ({"title": "t", "body": [{"type": "card", "head": "h", "items": [["a", ""], ["b", "c"]]}]}, "説明のない項目"),
+                      ({"title": "t", "body": [{"type": "frame", "h": 1, "items": [{"type": "box", "x": 0, "y": 0, "w": 1, "h": 0.5, "fill": "PANEL"},
+                                                                                   {"type": "text", "text": "a", "x": 0, "y": 0, "w": 1, "h": 0.5}]}]}, "1 つの label か"),
+                      ({"title": "t", "body": [{"type": "frame", "h": 2, "items": [{"type": "box", "x": 0, "y": 0, "w": 1, "h": 1.4, "fill": "PANEL"},
+                                                                                   {"type": "text", "text": "a", "x": 0, "y": 0.2, "w": 1, "h": 1}]}]}, "文字だけを重ねた")]:
+        try:
+            make_deck(lambda d: d.spec(bad), "spec")
+            raise AssertionError(f"通した: {bad}")
+        except SystemExit as e:
+            assert want in str(e), (want, str(e))
 
 
 def selftest_diff():
@@ -2010,6 +3327,9 @@ def selftest_diff():
         shutil.rmtree(f"/tmp/slides_{('x' * 10)[:8]}", ignore_errors=True)
 
 
+PAGE_FILES = (".py", ".json")  # lint・dry に渡せるページのファイル（pages.py の形か、JSON のページ）
+
+
 def main():
     a = sys.argv[1:]
     if a == ["--selftest"]:
@@ -2018,8 +3338,14 @@ def main():
         return cmd_themes()
     if a[:1] == ["merge"] and len(a) >= 2:
         return print(json.dumps(merge("pages.py", a[1:]), ensure_ascii=False))
-    if a[:1] == ["dry"] and len(a) <= 3:
-        return dry(next((x for x in a[1:] if x.endswith(".py")), "pages.py"), next((x for x in a[1:] if not x.endswith(".py")), None))
+    if a == ["stats"]:
+        return spec_stats()
+    if a[:1] == ["upgrade"] and len(a) >= 2:
+        return spec_upgrade(a[1:])
+    if a == ["schema"]:
+        return print(json.dumps(spec_schema(), ensure_ascii=False, indent=1))
+    if a[:1] in (["dry"], ["resolve"]) and len(a) <= 3:
+        return dry(next((x for x in a[1:] if x.endswith(PAGE_FILES)), None) or default_pages(), next((x for x in a[1:] if not x.endswith(PAGE_FILES)), None), a[0] == "resolve")
     if a[:1] == ["lint"]:
         if bad := [x for x in a[1:] if x.startswith("--") and x not in ("--pages", "--all", "--talk")]:
             sys.exit(f"slides.py lint が知らないフラグ: {' '.join(bad)}（--pages 3,5・--all・--talk）")
@@ -2027,24 +3353,29 @@ def main():
             sys.exit("slides.py lint の --pages と --all は、どちらか 1 つだけ渡す")
         pick = page_numbers(a) if "--pages" in a else "all" if "--all" in a else None
         rest = [x for i, x in enumerate(a[1:], 1) if not x.startswith("--") and a[i - 1] != "--pages"]
-        return lint_local(next((x for x in rest if x.endswith(".py")), "pages.py"), next((x for x in rest if not x.endswith(".py")), None), "--talk" in a, pick)
+        return lint_local(next((x for x in rest if x.endswith(PAGE_FILES)), None) or default_pages(), next((x for x in rest if not x.endswith(PAGE_FILES)), None), "--talk" in a, pick)
     if not (a[:1] == ["build"] and len(a) >= 2 or a[:1] == ["new"] and len(a) >= 3):
         sys.exit(__doc__)
-    theme = a[a.index("--theme") + 1] if "--theme" in a else None
+    path = default_pages()
+    want = declared_theme(path)
+    theme = a[a.index("--theme") + 1] if "--theme" in a else want
     if a[0] == "new":
         need_theme(theme)
     src = template_id(theme) if a[0] == "new" else file_id(a[1])
     mark = theme_of(src)  # テーマはデッキ（new ならテンプレート）から読む。複製は同じ代替テキストを持つ
     if a[0] == "new":
         need_mark(theme or factory().get("slides", {}).get("default_theme", "visual"), mark)
+    need_deck_theme(want, mark)
     use_theme(theme_table(mark))
     gapi.CLOCK.lap("テーマを読む")
     need_brand()  # 複製する前に止める（build でも止まるが、作った複製をゴミ箱に移すことになる）
-    m = load_pages()
+    m = load_make(path)
     deck = make_deck(m.make, m.NAME)
     gapi.CLOCK.lap("要求を作る")
     if a[0] == "build":
-        return build(src, deck, "--force" in a)
+        out = build(src, deck, "--force" in a)
+        spec_record(deck, src)
+        return out
     pid = new(a[1], a[2], src)
     try:
         build(pid, deck, force=True)  # 複製したばかりなので、画面での直しもコメントもない
@@ -2052,6 +3383,7 @@ def main():
         trash(pid)
         print(f"組めなかったので、作った複製 {pid} をゴミ箱に移した", file=sys.stderr)
         raise
+    spec_record(deck, pid)
 
 
 if __name__ == "__main__":
