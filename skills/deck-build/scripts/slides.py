@@ -885,6 +885,7 @@ VALIGN = {"top": "TOP", "middle": "MIDDLE", "bottom": "BOTTOM"}
 # 図形の形（Slides API の shapeType を小文字に）。過去の資料で使った形と、矢羽根の段の頭（home_plate）だけ。ほかは使われたら足す（slides-035）
 SHAPES = {k.lower(): k for k in ("RECTANGLE", "ROUND_RECTANGLE", "ELLIPSE", "CHEVRON", "HOME_PLATE", "FOLDED_CORNER", "CAN")}
 GAP_BODY, GAP, GAP_ARROW, ARROW_PAD = 0.3, 0.24, 0.6, 0.08  # 本文の部品の間、stack・row・grid の間、arrows の row の間、矢印と箱の間（in）
+LABEL_GAP = 0.04  # 矢印の札と線の間（in。縦の線の右は 2 倍。文字の上には行の高さの空きがあり、横の左にはない）
 # 印のあるカード（過去の資料の node・icard・ncard。2026-10-16）: 印の大きさ（アイコン・番号／画像）、カードの端から印、印から文字、文字の上、最終行と下端（in）
 MARK, MARK_IMG, MARK_IN, MARK_GAP, CARD_TOP, CARD_BOTTOM = 0.36, 0.5, 0.18, 0.14, 0.16, 0.28
 STAT_PAD, HEAD_GAP = 0.2, 0.06  # 数字の強調の箱の端と文字の間、印のあるカードの見出しと本文の間（in）
@@ -912,7 +913,7 @@ SPEC_EL = {  # type → (要るキー, 書けるキー)
     "icon": ({"name": "s"}, {"size": "p", "color": "c"}),
     "num": ({"n": "ns"}, {"size": tuple(NUM), "fill": "c"}),
     "box": ({}, _BOX),
-    "arrow": ({"from": "pt", "to": "pt"}, {"color": "c", "head": "b", "dash": "b", "weight": "p", "route": ("straight", "bent")}),
+    "arrow": ({"from": "pt", "to": "pt"}, {"color": "c", "head": "b", "dash": "b", "weight": "p", "route": ("straight", "bent"), "label": "md"}),  # label は線の札
     "gantt": ({"cols": "cols", "rows": "grows"}, {"today": "p"}),  # 予定表（slides-010）
     "bars": ({"items": "bitems"}, {"unit": "s", "horizontal": "b", "hot": "ints"}),  # 1 系列の棒グラフ（visual.md の 5）
     "row": ({"items": "kids"}, {"gap": "n", "widths": "nums", "arrows": "b"}),
@@ -1068,6 +1069,37 @@ def spec_md(s, emph=RED_TEXT, loc=""):
     return out[0] if len(out) == 1 and isinstance(out[0], str) else out
 
 
+def widest_em(s, loc=""):
+    """記法つきの文字の、いちばん広い行の幅（em）。段落と <br> で行を分ける。"""
+    return max(em_width(ln) for ln in re.split(r"[\n\v]", spec_plain(spec_md(s, loc=loc))))
+
+
+def point_in(p, r, t=0.02):
+    """点 p が四角 r（x, y, w, h）の中か縁から t の内にあるか。"""
+    return r[0] - t <= p[0] <= r[0] + r[2] + t and r[1] - t <= p[1] <= r[1] + r[3] + t
+
+
+def rect_in(a, b, t=0.02):
+    """四角 a が四角 b の中に収まるか（縁から t のはみ出しは収まると見る）。"""
+    return point_in(a[:2], b, t) and point_in((a[0] + a[2], a[1] + a[3]), b, t)
+
+
+def seg_hits(p, q, r, m=0.03):
+    """線分 p–q が四角 r（x, y, w, h）を m だけ内に縮めた中を通るか（Liang–Barsky）。"""
+    lo, hi, t0, t1 = (r[0] + m, r[1] + m), (r[0] + r[2] - m, r[1] + r[3] - m), 0.0, 1.0
+    if lo[0] >= hi[0] or lo[1] >= hi[1]:
+        return False
+    for k in (0, 1):
+        d = q[k] - p[k]
+        if abs(d) < 1e-9:
+            if not lo[k] <= p[k] <= hi[k]:
+                return False
+            continue
+        u, v = sorted(((lo[k] - p[k]) / d, (hi[k] - p[k]) / d))
+        t0, t1 = max(t0, u), min(t1, v)
+    return t0 < t1
+
+
 def spec_plain(parts):
     return parts if isinstance(parts, str) else "".join(p if isinstance(p, str) else p[0] for p in parts)
 
@@ -1143,8 +1175,9 @@ class SpecPage:
         self.bg = bg  # ページの地（slide の bg）。塗りのない文字の色を地から決める
         self.base, self.out, self.ids, self.arrows, self.index, self.esc = base, [], {}, [], [], []  # 画像のパスの起点、解いた形、id → (x, y, w, h)、
         # あとで引く矢印、(場所, 文字)、形の外の書き方（場所, キー）
-        self.warns, self.placed = [], []  # 組むときの警告（spec_page が d.warn に出す）、置いた部品の (種類, 場所, 位置, 塗りの箱か, 塗りのない文字か)
+        self.warns, self.placed = [], []  # 組むときの警告（spec_page が d.warn に出す）、置いた部品の (種類, 場所, 位置, 塗りの箱か, 塗りのない文字か, 部品)
         self.anchors, self.body, self.room = {}, None, None  # id → 矢印をつなぐ部品の場所、本文の場所と下端の限り（最後のガントが余った高さを使う）
+        self.id_loc, self.lines = {}, []  # id → 部品の場所、引いた矢印の (場所, 折れ点, 矢じりか, 両端の部品の場所, 札の場所)（tangles が見る）
 
     def emit(self, call, loc, e=None, **kw):
         """Deck の呼び出しを解いた形に足す。部品 e の raw は同じメソッドの引数に重ねる。"""
@@ -1511,9 +1544,8 @@ class SpecPage:
     def lone_text(self):
         """塗りの箱の中に、ほかの部品がなく、塗りのない文字が 1 つだけ入っていたら止める（札は図形と文字を 1 つにする。角丸と箱の端と文字の間がそろう。
         visual.md の 4。2026-10-16 の sandbox で、構成図の箱を box と text を重ねて組んでいた）。見出しとカードを入れた囲みは、ほかの部品が入るので通る。"""
-        inside = lambda a, b: a[0] >= b[0] - 0.02 and a[1] >= b[1] - 0.02 and a[0] + a[2] <= b[0] + b[2] + 0.02 and a[1] + a[3] <= b[1] + b[3] + 0.02
-        for kind, loc, r, filled, _ in self.placed:
-            if filled and len(ins := [p for p in self.placed if p[1] != loc and inside(p[2], r)]) == 1 and ins[0][4]:
+        for kind, loc, r, filled, _, _ in self.placed:
+            if filled and len(ins := [p for p in self.placed if p[1] != loc and rect_in(p[2], r)]) == 1 and ins[0][4]:
                 sys.exit(f"{ins[0][1]}（text）: {loc} の塗りの箱の中に、文字だけを重ねた。塗りの箱と文字は、1 つの label か、fill のある text にする（アイコンも置くなら印のあるカード）")
 
     def place(self, e, x, y, w, h, loc):
@@ -1523,7 +1555,7 @@ class SpecPage:
         if (i := e.get("id")) is not None:
             if i in self.ids:
                 sys.exit(f"{loc}: id「{i}」が 2 つある")
-            self.ids[i] = (x, y, w, h)
+            self.ids[i], self.id_loc[i] = (x, y, w, h), loc
             # つなぐのは、文字の枠が見える箱と同じ大きさの四角になる部品だけ（接続点は四角の上 0・左 1・下 2・右 3）。楕円や矢羽根の図形と、
             # 左寄せ・右寄せの塗りの文字・札・数字の強調（Deck.text が文字の枠を箱の内に縮める）と、2 字以上で文字の枠が円より広がる番号
             # （Deck.text の ring）はつながない。矢印の先が箱の中か、円の外に出る
@@ -1537,7 +1569,7 @@ class SpecPage:
         ground = fill or (self.bg if kind == "text" else None)  # 文字の下の地。塗りのない文字（枠線だけの箱も）はページの地
         on, emph = (spec_color(c) for c in ON_FILL.get(ground, ("TEXT", "RED_TEXT")))
         if kind not in ("row", "stack", "grid", "frame"):
-            self.placed.append((kind, loc, (x, y, w, h), kind == "box" and bool(fill), kind == "text" and not (fill or e.get("line"))))
+            self.placed.append((kind, loc, (x, y, w, h), kind == "box" and bool(fill), kind == "text" and not (fill or e.get("line")), e))
         if e.get("shape") == "rectangle" and (fill or kind == "label"):
             self.warns.append(f"{loc}: 塗りの箱を四角（shape: rectangle）にした。塗りの箱は、書かなければ角丸（visual.md の 4）。四角にする理由がなければ shape を外す")
         if kind in ("text", "label"):
@@ -1654,6 +1686,44 @@ class SpecPage:
             self.warns.append(f"{loc}: 矢印が斜めになる。枝分かれなら、どの枝も \"route\": \"bent\" にする（中央が同じ高さの枝はまっすぐ引かれる）か、両端の箱の高さをそろえる")
         self.emit("arrow", loc, e, x1=x1, y1=y1, x2=x2, y2=y2, color=spec_color(e.get("color", "SUB")), head=e.get("head", True), dash=e.get("dash", False), weight=e.get("weight", 1.25),
                   **({"link": [a, sites[0], b, sites[1]], "bent": bent} if a and b else {}))
+        pts = [(x1, y1), (x2, y2)]
+        if bent:  # Google は横・縦・横（縦・横・縦）の真ん中で折る（見込み）
+            m = (x1 + x2) / 2 if sites[0] in (1, 3) else (y1 + y2) / 2
+            pts[1:1] = [(m, y1), (m, y2)] if sites[0] in (1, 3) else [(x1, m), (x2, m)]
+        lab = None
+        if "label" in e:  # 札は線の真ん中の区間に付ける（横なら上、縦なら右）。札を位置で置くと、線から浮くか線に重なる（2026-10-16 の deck-review で 6 件）
+            (px, py), (qx, qy) = pts[len(pts) // 2 - 1], pts[len(pts) // 2]
+            mx, my, side = (px + qx) / 2, (py + qy) / 2, abs(qx - px) >= abs(qy - py)
+            t = {"type": "text", "text": e["label"], "color": "SUB", "align": "center" if side else "left"}
+            lw = widest_em(e["label"], loc) * 11 / 72 + 0.06
+            lh = self.measure(t, lw, f"{loc}.label")
+            self.place(t, mx - lw / 2 if side else mx + 2 * LABEL_GAP, my - lh - LABEL_GAP if side else my - lh / 2, lw, lh, lab := f"{loc}.label")
+        self.lines.append((loc, pts, e.get("head", True), {self.id_loc[v] for v in (e["from"], e["to"]) if isinstance(v, str)}, lab))
+
+    def tangles(self):
+        """矢印と部品の位置を、解いた形で確かめる（組むときの警告）。frame の図で画像を見て直していたもの（線が部品の上を通る、矢じりが 1 点に集まる、
+        部品が一部だけ重なる）を、組む前に出す（2026-10-16。JSON の 1 本目の 29 枚で、1〜2 ページだけ組み直した 13 回のうち 10 回と、
+        deck-review の 2〜3 周目の画像の指摘の半分が frame の図だった）。文字の高さは見積もりなので、ぎりぎりのものは画像で確かめる。"""
+        def ink(kind, r, e):  # 塗りのない文字は、文字のあるところだけ（枠は広く取ることが多い）
+            if kind != "text" or e.get("fill") or e.get("line"):
+                return r
+            tw = min(r[2], widest_em(e["text"]) * e.get("size", 11) / 72)
+            return (r[0] + {"left": 0, "center": (r[2] - tw) / 2, "right": r[2] - tw}[e.get("align", "left")], r[1], tw, r[3])
+        rs = [(loc, kind, ink(kind, r, e)) for kind, loc, r, _, _, e in self.placed if r[2] > 0 and r[3] > 0]
+        for i, (l1, k1, a) in enumerate(rs):
+            for l2, k2, b in rs[i + 1:]:
+                if min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0]) > 0.03 and min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1]) > 0.03 and not rect_in(a, b) and not rect_in(b, a):
+                    self.warns.append(f"{l1}（{k1}）と {l2}（{k2}）が一部だけ重なる。離すか、一方をもう一方の中に収める")
+        for loc, pts, _, ends, lab in self.lines:
+            for l2, k2, r in rs:
+                if l2 not in ends and not point_in(pts[0], r) and not point_in(pts[-1], r) and any(seg_hits(p, q, r) for p, q in zip(pts, pts[1:])):
+                    self.warns.append(f"{loc}: 斜めの線の札（label）が線に重なる。両端の高さをそろえるか、折れ線にする" if l2 == lab else
+                                      f"{loc}: 矢印の線が {l2}（{k2}）の上を通る。部品か矢印の端を動かす")
+        heads = [(loc, pts[-1]) for loc, pts, head, _, _ in self.lines if head]
+        for i, (l1, p) in enumerate(heads):
+            for l2, q in heads[i + 1:]:
+                if math.dist(p, q) < 0.1:
+                    self.warns.append(f"{l1} と {l2}: 矢じりの先が 1 点に集まる（{p[0]:.2f}, {p[1]:.2f} in）。入る辺か位置をずらす")
 
 
 def spec_files(src, base=None, where=None, file=False):
@@ -1718,6 +1788,7 @@ def spec_page(d, p, base, loc, name=None):
     sp.lone_text()
     for e, l, origin, bounds in sp.arrows:
         sp.link(e, l, origin, bounds)
+    sp.tangles()
     for w in sp.warns:
         d.warn(w)
     made = {}  # 部品の場所 → 組んだ図形の ID（矢印をつなぐ先。card・code は箱）
@@ -3809,6 +3880,26 @@ def selftest_spec():
     assert any("横 1 列" in w for w in d.warnings)
     d, _ = run({"title": "t", "body": [{"type": "box", "h": 0.5, "fill": "PANEL", "shape": "rectangle"}, {"type": "box", "h": 0.5, "line": "RULE", "shape": "rectangle"}]})
     assert sum("四角（shape: rectangle）" in w for w in d.warnings) == 1  # 塗りの箱だけ知らせる（枠線だけの箱は四角が既定）
+    d, els = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [  # 位置の確かめ（tangles）。囲みの中の線と、線の両端の部品は数えない
+        {"type": "box", "x": 0, "y": 0, "w": 9, "h": 3, "fill": "PANEL"},
+        {"type": "label", "id": "a", "text": "A", "x": 0.2, "y": 1, "w": 2, "h": 0.6}, {"type": "label", "id": "m", "text": "途中", "x": 3.5, "y": 1, "w": 1.2, "h": 0.6},
+        {"type": "label", "id": "c", "text": "C", "x": 6, "y": 1, "w": 2, "h": 0.6}, {"type": "card", "head": "はみ出す", "x": 7, "y": 1.4, "w": 1.8},
+        {"type": "text", "text": "② 渡す", "x": 2.2, "y": 2.2, "w": 6, "align": "center"},
+        {"type": "arrow", "from": [2.2, 1.3], "to": [6, 1.3]}, {"type": "arrow", "from": [5, 0.1], "to": [5, 2.9]},
+        {"type": "arrow", "from": "m", "to": "c", "label": "① 要求"}]}]})
+    w = "\n".join(d.warnings)
+    assert "札（label）が線に重なる" not in w  # 横の線の札は線の上に離れる
+    assert "items[6]: 矢印の線が spec.body[0].items[2]（label）の上を通る" in w and "items[7]: 矢印の線が spec.body[0].items[5]（text）の上を通る" in w, w  # 文字のあるところだけ見る
+    assert "items[6] と spec.body[0].items[8]: 矢じりの先が 1 点に集まる" in w and "items[3]（label）と spec.body[0].items[4]（card）が一部だけ重なる" in w, w
+    assert w.count("上を通る") == 2 and w.count("重なる") == 1, w  # 囲みの box、両端の部品、自分の札は数えない
+    arr, lab = next(e for e in els if e["loc"] == "spec.body[0].items[8]"), next(e for e in els if e["loc"] == "spec.body[0].items[8].label")
+    assert lab["call"] == "text" and lab["parts"] == "① 要求" and near(lab["x"] + lab["w"] / 2, (arr["x1"] + arr["x2"]) / 2) and near(lab["y"] + lab["h"] + LABEL_GAP, arr["y1"])  # 横の線の上の中央
+    _, els = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [{"type": "label", "id": "a", "text": "A", "x": 0, "y": 0, "w": 2},
+        {"type": "label", "id": "b", "text": "B", "x": 0, "y": 2, "w": 2}, {"type": "arrow", "from": "a", "to": "b", "label": "縦"}]}]})
+    arr, lab = (e for e in els if e["call"] in ("arrow", "text"))
+    d, _ = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [{"type": "arrow", "from": [0, 0], "to": [4, 2.5], "label": "斜めの線"}]}]})
+    assert any("札（label）が線に重なる" in w for w in d.warnings), d.warnings  # 斜めの線の上の中央に置いた札は、線にかかる（fixture 04 の子が見つけた）
+    assert near(lab["x"], arr["x1"] + 2 * LABEL_GAP) and near(lab["y"] + lab["h"] / 2, (arr["y1"] + arr["y2"]) / 2)  # 縦の線は右の中ほど
     schema = spec_schema()
     assert {f"el_{k}" for k in SPEC_EL} <= set(schema["$defs"]) and json.dumps(schema, ensure_ascii=False)
     assert schema["$defs"]["el_text"]["properties"]["fill"]["enum"] == list(COLOR_NAMES)  # 色は役割の名前だけ（6 桁は書けない）
