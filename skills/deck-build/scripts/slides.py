@@ -3822,12 +3822,13 @@ def selftest_diff():
                     assert live == before, (live, before)
                     # deck.json の theme のファイルがあれば、URL を渡しても Google を読まない
                     Path(t, "d2.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Deck", "name": "d", "theme": "visual", "pages": ["p1.json"]}))
-                    req0 = globals()["request"]
+                    req0, c0 = globals()["request"], COPYRIGHT
                     globals()["request"] = lambda *a, **k: (_ for _ in ()).throw(AssertionError("Google を読んだ"))
                     try:
                         assert deck_context("d2.json", "https://docs.google.com/presentation/d/abc/edit")[0] == "visual"
                     finally:
-                        globals()["request"] = req0
+                        globals()["request"], COPYRIGHT = req0, c0  # deck_context はテーマの著作権表示で組むようにする（ここの仮の値に戻す）
+                        use_pages(p)
                     # テーマのファイルは、デッキのテーマのファイルそのものだけを受け付ける（名前が同じ別のファイルで、違う値を当てたと思わせない）
                     Path(t, "visual.json").write_text((BUILTIN_THEMES / "visual.json").read_text())
                     assert chosen([str(theme_path("visual"))], dk, "visual") == set()
