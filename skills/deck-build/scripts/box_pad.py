@@ -78,7 +78,7 @@ PARALLEL = 4  # これより多くのページは、ページごとにプロセ�
 
 def check(p, folder, pages=None, workers=None):
     """戻りは [(見出し, 1 件), …]（ページの順）。"""
-    rule, card = slides.theme_fixed(slides.theme_table(slides.deck_theme(p)))["RULE"], slides.deck_card(p)  # カードの地と枠線の色。デッキのテーマの値
+    rule, card = slides.theme_fixed(slides.mark_values(p))["RULE"], slides.deck_card(p)  # カードの地と枠線の色。デッキのテーマの値
     todo = [i for i in range(1, len(p["slides"]) + 1) if (not pages or i in pages) and os.path.exists(f"{folder}/p-{i:02d}.png")]
     if len(todo) <= PARALLEL and not workers:
         return [h for i in todo for h in page_hits(p, folder, i, rule, card)]

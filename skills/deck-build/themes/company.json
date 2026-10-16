@@ -1,0 +1,18 @@
+{
+ "apiVersion": "slides/v1",
+ "kind": "Theme",
+ "description": "Databricks の 2026 年の公式テンプレートの色。白地の本文、濃紺の表紙と扉、Lava の赤。Databricks の正式な見た目にそろえたいとき",
+ "colors": {
+  "NAVY": "1B3139",
+  "BG": "FFFFFF",
+  "RED_ON_NAVY": "FF5F46",
+  "PANEL": "EEEDE9",
+  "NAVY_BLOCK": "1B5162",
+  "GA": "00A972",
+  "RED_TEXT": "D61400",
+  "PREVIEW": "FFAB00",
+  "SUB": "506F7A",
+  "OSS": "4359FF",
+  "RED": "FF3621"
+ }
+}

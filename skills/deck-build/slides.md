@@ -17,14 +17,18 @@
 ```sh
 K=<deck-build のフォルダ>/scripts   # deck-build の SKILL.md のあるフォルダ。ほかのスキルからは、そのスキルのフォルダの ../deck-build/scripts
 cd <フォルダ>/build
-python3 $K/slides.py new <Drive のフォルダの URL> <YYYYMMDD_の名前> [--theme visual|company]   # 初めて組むとき。出た URL を構成案に書き、すぐユーザーに伝える（SKILL.md の deck-build-003）
-python3 $K/slides.py lint [pages_<担当>.py | <ページ>.json] <URL> [--pages 3,5 | --all] [--talk]   # 直すたびに。組まずに、組む要求を手元で JSON にして lint（unit。SKILL.md の deck-build-005）
-python3 $K/slides.py build <URL> [--force]          # 区切りで。同じ URL に、中身の変わったページだけを作り直す（画面で直されていたら止まる。下）
+python3 $K/slides.py new <Drive のフォルダの URL> <YYYYMMDD_の名前> [--theme <テーマ>]   # 初めて組むとき。出た URL を構成案に書き、すぐユーザーに伝える（SKILL.md の deck-build-003）
+python3 $K/slides.py lint [pages_<担当>.py | <ページ>.json] [<URL>] [--pages 3,5 | --all] [--talk]   # 直すたびに。組まずに、組む要求を手元で JSON にして lint（unit。SKILL.md の deck-build-005。Google を読まない。下の 3）
+python3 $K/slides.py lint <ワークスペース>/themes/slides/<名前>.json   # テーマのファイルだけを見る（形・書体・役割の組のコントラスト。下の 3 の slides-036）
+python3 $K/slides.py plan <URL> [<ページ>.json …]   # build が書くものを出す（書かない。下の slides-037）
+python3 $K/slides.py build <URL> [<ページ>.json …] [--force]   # 区切りで。同じ URL に、中身の変わったページだけを作り直す（ファイルを渡すとそのページだけ。画面で直されていたら止まる。下）
 python3 $K/slides.py dry [pages_<担当>.py | <ページ>.json] [<URL>]  # 組まずに make を走らせ、組むときの警告・枚数・ノートのないページを出す（既定は deck.json か pages.py。下の 2 の slides-031）
 python3 $K/slides.py resolve <ページ>.json [<URL>]   # JSON のページの解いた形（in の位置とすべての値）を出す（slides-034）
 python3 $K/slides.py schema   # JSON のページの書く形の JSON Schema
 python3 $K/slides.py stats    # JSON のページの形の外の書き方（raw）を、キーごとに使った資料の数で出す（slides-035）
 python3 $K/slides.py upgrade <ファイル>…   # raw のうち形のキーで書けるものを書き換える（slides-035）
+python3 $K/slides.py themes   # テーマの名前・説明・テンプレートがあるか・既定か（下の 3）
+python3 $K/slides.py theme <URL> [<名前>] [--force]   # テンプレートかデッキが持つテーマを themes/slides/<名前>.json に書く（下の 3）
 python3 $K/gslides.py check <URL> [--talk]          # 組んだら。lint・テキスト・変えたページの画像（/tmp/slides_<ID の頭 8 字>/）・画像で測る箱の下の余白・changed.json（e2e）
 python3 $K/gslides.py check <URL> --all             # 全ページの画像を取り直す（区切りに 1 回。/deck-review の前、ページをまたいで見るとき）
 python3 $K/gslides.py check <URL> --pages 3,5       # そのページだけ画像を取り直す（ページの数が変わったときは、自動で全ページ）
@@ -36,7 +40,8 @@ python3 $K/slides.py merge fix_a.py fix_b.py          # pages.py の資料で、
 - 部品を分けて組む・試すための一時のデッキは、名前に `tmp` を入れる（`gslides.py check` が lint の記録に数えない。確かめたらゴミ箱へ）。
 - [slides-002] **組み直すと、Google Slides の画面で直したところは消え、コメントは付け先を失う。** 直すのはページの JSON（前の資料は pages.py）と構成案。`build` は、前に組んだあとに画面で直されている（組んだときの版を Drive の appProperties に残して比べる）か、未解決のコメントがあると止まる。止まったら、直しとコメントへの対応をページの JSON（pages.py）に入れてから `--force` で組み直す（`../deck-practices/SKILL.md` の「作業の始め方」の 6 の「直すのはページの JSON と構成案」）。画面で直していないのに止まることがある（Slides の revisionId が、内容を変えずに変わる）。止まったら、Drive の `files.get` の `modifiedTime` と `revisions` を見て、前に組んだ時刻より後に直されていないことを確かめてから `--force` にする。
 - [slides-029] **pages.py の資料では、`merge` は、子が `build/fix_<担当>.py` に書いた関数を、pages.py の同じ名前の関数と置き換える**（pages.py にない関数は `make` の前に足す）。子は pages.py を書かずに別のファイルに書き、親が合わせて 1 回だけ組む（`../deck-review/SKILL.md` の deck-review-011）。合わせるのは関数だけで、import は pages.py のものを使う（子が使った名前で import にないものは、親が足す）。`make`・定数・2 つのファイルに同じ関数があると止める（共通のものとページの順は親が書く）。前の pages.py は `pages.py.bak` に残る（あれば上書きせず `pages.py.bak1` …）。足した関数を `make` が呼んでいなければ警告する。出た JSON の関数の名前が、渡した担当と合うかを見てから組む。
-- [slides-033] **`build` は、中身の変わったページだけを作り直す。** ページの ID の末尾に、そのページの要求の中身のハッシュを付け、デッキに同じハッシュのページがあれば残して並べ替えるだけにする（ページの増減・並べ替え・重複も同じ）。ノート、手元の画像の中身、表紙かどうか（1 枚目はページ番号を消す）、リンク先のページのハッシュもハッシュに入る。ページへのリンクを持つページは、リンク先を作り直すと一緒に作り直す（中身の同じページが 2 枚以上あるときも）。前の版の `build` で組んだデッキは、最初の 1 回だけ全ページを作り直す。`--force` は全ページを作り直す。作り直したページを `/tmp/slides_<ID の頭 8 字>/changed.json` に書き、`check` はその画像だけを取る。
+- [slides-033] **`build` は、中身の変わったページだけを作り直す。** ページの ID の末尾に、そのページの要求の中身のハッシュを付け、デッキに同じハッシュのページがあれば残して並べ替えるだけにする（ページの増減・並べ替え・重複も同じ）。ノート、手元の画像の中身、表紙かどうか（1 枚目はページ番号を消す）、リンク先のページのハッシュもハッシュに入る。ページへのリンクを持つページは、リンク先を作り直すと一緒に作り直す（中身の同じページが 2 枚以上あるときも）。前の版の `build` で組んだデッキは、最初の 1 回だけ全ページを作り直す。`--force` は全ページを作り直す。作り直したページを `/tmp/slides_<ID の頭 8 字>/changed.json` に書き、`check` はその画像だけを取る。マスターのテーマもそろえる（3 の slides-036）ので、全体の組み直しと部分の組み直しは、どちらも出来上がりの要求のハッシュで決まる。
+- [slides-037] **組む前に `plan` で見る。ページを選んで組める。** `plan <URL> [<ファイル>…]` は、`build` が書くもの（マスターのテーマの違い `theme`、作り直す・作るページ `rebuild`、中身が変わったが選んでいないので前のまま残すページ `frozen`、残すページの数、消す枚数、並べ替えの数、画面での直しとコメント `screen`〔あれば `build` は止まる〕）を JSON で出し、Google には書かない。`build <URL> <ファイル>…` は、渡した JSON のページ（デッキのファイルならその全ページ）だけを作り直し、ほかのページは前に組んだスライドを残す（書きかけのページがあっても、直し終えたページだけを出すために）。前のスライドは、ページの ID に入れたページのファイル名の印で探す。選んでいないページでも、作り直すページへのリンクを持つものと、前に組んでいないものは作る。テーマはデッキ全体のものなので、渡さなくても違えばそろえ、テーマのファイルだけを渡すとマスターだけを書く。テーマのファイルは、デッキのテーマのファイルそのものだけを渡せる。`--force` は、渡したページだけを作り直す（画面での直しの確かめも飛ばす）。前のまま残すページは、デッキにある前の中身のリンクで見て、作り直す・消すページを指していれば作り直す。`raw` の数（slides-035）は、全体を組んだときだけ残す。pages.py のデッキは選べない。この直しの前の `build` で組んだページには印がないので、選んでいなくても、中身が変わっていれば作り直す（一度全体を組むと印が付く）。
 - 53 枚で 1 ページだけ直したとき、`build` は 23 → 8 秒、`check` は 23 → 8 秒（中央値。前の版で 429 の待ちが入った回の `check` は 67 秒。全ページを作り直す・取るときは今も 21 秒・20 秒。2026-10-15）。`slides.py lint` は 2〜7 秒。工程ごとの秒は、`build`・`check` が標準エラーに 1 行で出す。
 - **組むときの警告**（手で改行した行が枠に収まらない、自動で折り返した最終行が 2 字以下、見出しを縮めた、リードが 2 行、表のセルが折り返す）は、標準エラーに出て、最後の行に件数が出る。見込みなので、画像で確かめてから直すか残すかを決める（前の deck.js と同じ）。
 - slides.py は素の `python3`（標準ライブラリ）で動く。手元の画像と、react-icons の名前（`Tb…`）のアイコンを貼るときだけ、グローバルの node（pptxgenjs・react-icons・sharp）を使う（6。URL の画像と Iconify のアイコンには要らない）。
@@ -65,7 +70,7 @@ python3 $K/slides.py merge fix_a.py fix_b.py          # pages.py の資料で、
 
   - **見本:** 一通りの書き方（すべての型とキー）を入れたデッキが [samples/json/](samples/json/)（`deck.json` と 8 ページ、部品 1 つの `component.json`）にある。書き方に迷ったら、同じ型の見本のページを開く。selftest が、見本が形のすべての型とキーを使っているかと、警告なしに組めるかを確かめる（形にキーを足したら、見本にも足す）。
   - **ファイルの頭:** どのファイルも頭に `"apiVersion": "slides/v1"` と `"kind"` を書く（k8s にならった。形の版は slides-035）。`kind` は `Deck`（`name` と `pages`）、`Page`（1 ページ）、`Component`（部品 1 つ。型のないページに置いて確かめる）。
-  - **デッキのファイル:** `build/deck.json`（`kind: Deck`）に資料名（`name`。社内向けは `｜Internal Only`、秘密扱いは `｜Confidential` を末尾に書く。資料名はフッターに出ず、秘密区分だけが著作権表示の末尾に残る）とページの順（`pages`）を書き、ページは 1 ページ 1 ファイルの `build/p<構成案の番号>.json`（`kind: Page`）に書く（直しの子がページごとにファイルを直せるように。slides-031）。`pages` には、ページのファイルのパスと、ほかのデッキのファイル（子の `pages_<担当>.json`）のパスだけを並べる（ページは 1 ページ 1 ファイル）。デッキに `theme`（`slides.py themes` の名前）を書くと、`new` が `--theme` を省いたときに使い、`lint` が URL を省いたときにそのテンプレートで見て、`build` はデッキのテーマと違えば止める（子の `pages_<担当>.json` には書かない）。`build/` の `deck.json` を `new`・`build`・`lint`・`dry` が読む（pages.py と両方あると止める）。pages.py から呼ぶときは、`make` の中で `d.spec("p05.json")`（ファイルの並びも dict も渡せる。Python から渡す dict は頭を省ける）。
+  - **デッキのファイル:** `build/deck.json`（`kind: Deck`）に資料名（`name`。社内向けは `｜Internal Only`、秘密扱いは `｜Confidential` を末尾に書く。資料名はフッターに出ず、秘密区分だけが著作権表示の末尾に残る）とページの順（`pages`）を書き、ページは 1 ページ 1 ファイルの `build/p<構成案の番号>.json`（`kind: Page`）に書く（直しの子がページごとにファイルを直せるように。slides-031）。`pages` には、ページのファイルのパスと、ほかのデッキのファイル（子の `pages_<担当>.json`）のパスだけを並べる（ページは 1 ページ 1 ファイル）。デッキに `theme`（`slides.py themes` の名前）を書くと、`new` が `--theme` を省いたときに使い、`lint`・`dry` がそのテーマのファイルで見て、`build` はデッキのテーマと違えば止める（子の `pages_<担当>.json` には書かない）。`build/` の `deck.json` を `new`・`build`・`lint`・`dry` が読む（pages.py と両方あると止める）。pages.py から呼ぶときは、`make` の中で `d.spec("p05.json")`（ファイルの並びも dict も渡せる。Python から渡す dict は頭を省ける）。
   - **ページ:** `type` は `page`（省いたとき。`title`・`lead`・`kicker`・`body`・`band`・`source`・`note`）、`cover`（`title`・`kicker`・`sub`・`variant`・`note`）、`divider`（`num`・`title`・`sub`・`variant`・`note`）、`slide`（型のないページ。`bg`・`foot`・`body`・`source`・`note`）。`band` は結論バンドで、`"文"` か `{"text": …, "sub": …}`。`source` は出典の行（頭の「出典: 」は付く）。
   - **並べ方:** `body` は上から順に 0.3 in ずつ空けて並べる（本文の左端と幅、リードの有無で決まる上端から）。`stack` は縦に 0.24 in ずつ、`row` は横に並べて高さを中身のいちばん高いものにそろえる（カード・箱・札・コード・塗りのある文字が伸びる）。`row` の幅は、`num`・`icon`、`w` を書いた部品と `"w": "fit"` の札はその幅、残りを等分する。`"widths": [3, 2]` なら比で分ける。`"arrows": true` で、隣どうしの間に、上下の中央に横の矢印を引く（間は 0.6 in）。`grid` は `cols` の列で折り返す。`gap` で間を変える。
   - **自由に置く図:** `frame`（`h` が要る）の中だけは、部品に `x`・`y`・`w`（frame の左上からの in）を書く。`h` を省くと中身から決める。`frame` は、`row`・`stack`・`grid` で書けない図（枝分かれ、上下にずらした箱、軸の上の点）だけに使う。横に並ぶ流れ（A → B → C）は、`row` の `"arrows": true` に、印のあるカードか `label` を並べる（幅を本文いっぱいに使い、高さと矢印の位置がそろう）。`frame` の箱も `label`（塗りの箱と文字が 1 つの図形）か、印のあるカード（アイコンを置くなら `"valign": "middle"`）で置き、塗りの `box` に文字の `text` を重ねない（塗りの箱の中に文字だけが入っていると止まる。見出しとカードを入れた囲みは置ける）。横 1 列に並べて矢印でつないだ `frame` は、組むときの警告で `row` を勧める。
@@ -80,7 +85,7 @@ python3 $K/slides.py merge fix_a.py fix_b.py          # pages.py の資料で、
     - `table`: `rows`（1 行目が見出しの行）、`widths`（比）、`align`（`"lcc"`）、`mono_cols`（列の番号）、`header`・`first_col`・`zebra`、`row_h`（行の高さの最小 in。行ごとの並びでもよい）、`fills`（`[[行, 列, 色], …]`。強調するセルの塗り（淡い色だけ。濃い色はセルの文字が読めないので止まる）。行と列は `rows` の何番目かで数え、見出しの行が 1 行目、いちばん左の列が 1 列目。0 はその列か行の全部。`[[3, 0, "RED_SOFT"]]` は、見出しの行から数えて 3 行目〔中身の 2 行目〕の全部）
     - `image`（`src`・`alt`）、`icon`（`name`・`size` in・`color`）、`num`（`n`・`size` S・M・L・`fill`）、`box`（`fill`・`line`・`dash`・`weight`・`shape`・`radius`）、`arrow`（`from`・`to`・`color`・`head`・`dash`・`weight`）
   - **文字の記法:** `**太字**`、`***赤の太字***`（visual.md の強調。濃紺の地では `RED_ON_NAVY`）、`{32:48}`（その文字だけ 32pt。大きな数字と単位など）、`[名前](URL)`、`[名前](#p12)`（`p12.json` のページへのリンク。ページはファイル名で指すので、並べ替えてもずれない）、`<br>`（段落の中の改行。JSON は `\v` を書けない）、`\n`（段落）。太字・赤・大きさの中には、ほかの書式とリンクを入れられる（`**{32:48}** モデル`）。どの段落も `- ` で始めると箇条書き（箇条の間の空行は落とす。間を空けるなら `para_gap`。1 つの `text` の中で、箇条書きの段落と地の文の段落を交ぜると止まる。箇条書きは枠の全部の段落に付くので、別の `text` に分ける）。`` `コード` `` は `` ` `` を外して本文の書体のまま組む（地の文の中のコマンド名は等幅にしない。visual-014。等幅にするのは `code`、`mono` の `text`・`label`、表の `mono_cols`）。記号そのものは `\\*`・`\\{` のように書く（JSON の文字列なので `\` を 2 つ）。表のセルには記法を書けない（止まる）。
-  - **色:** 役割の名前（`NAVY`・`PANEL`・`RED_TEXT` など。一覧は `slides.py schema` の色）か 6 桁。文字の色は塗りから決まる（`NAVY` の地なら白。塗りのない文字は、`slide` の `bg` が濃ければそれに合わせる）ので、書くのは変えたいときだけ。
+  - **色:** 役割の名前（`NAVY`・`PANEL`・`RED_TEXT` など。一覧は `slides.py schema` の色）だけ。6 桁は書けない（値はテーマのファイルが決め、どの色の組もテーマの色で測れるように。どうしても要る色は `raw` に書くと、lint が要確認に出す）。文字の色は塗りから決まる（`NAVY` の地なら白。塗りのない文字は、`slide` の `bg` が濃ければそれに合わせる）ので、書くのは変えたいときだけ。
   - **画像:** `src` は URL、JSON のファイルからのパス（`"img/a.png"`）、`"asset:gcp/bigquery.png"`（`asset()`）。手元の画像は組むときに上げる（6 の carry）。SVG の URL は PNG にする。手元の PNG・JPEG・GIF・SVG は縦横の比から高さを決め、URL の画像は `h` を書く。
   - **コマンド:** `slides.py lint p05.json <URL>`・`dry`（ほかのファイルと同じ。ページへのリンクは親が組むときに見る。`lint` は、既定では前に回したときから変わったページだけを見るので、全部の指摘を見るときは `--all`）、`slides.py resolve p05.json [<URL>]`（解いた形を出す。どこに何を置いたかを確かめる）、`slides.py schema`（書く形の JSON Schema。structured outputs やエディタに渡す）、`slides.py stats`・`upgrade`（slides-035）。
   - **止めるもの:** JSON として読めない、頭の `apiVersion`・`kind` がないか読めない、知らない `type`・キー・色・形、要るキーがない、型が違う、`id` が重なる・ない、frame の外の `x`・`y`、表のセルの記法、表にない行か列の `fills`、ない画像、比の分からない画像に `h` がない、`raw` に書いた引数がメソッドにない、範囲の外の数（大きさ・太さ・行間・`h` は 0 より大きく、間と位置は 0 以上、`cols`・`variant` は 1 以上）、`frame` の外に出る部品と矢印の端、箇条書きの段落と地の文の段落が交ざった、塗りの箱の中に文字だけを重ねた。どれも `p05.json.body[0].items[2]（card）: …` のように場所を付けて止まる。リンク先のページがない、同じページを 2 回並べたも止まる。本文が結論バンドか出典の行に重なる見込みは、組むときの警告に出る。
@@ -152,7 +157,7 @@ def make(d):
 
 ## 3. テンプレートとテーマ
 
-テンプレートは `template.py <テーマ> --from-base` が `[drive] factory`（個人の資料の根元）の下の「Themes」フォルダに作る（なければ作る。フォルダの ID や URL は持たない）。使うテンプレートは、ワークスペースの `factory.toml` の `[slides.themes.<名前>]` の `url` で 1 つずつ指し、元にするテンプレートの URL は持たず、作るときに `template.py <テーマ> --from-base <元の URL>` で渡す（会話で言われたもの。渡さなければ、白紙の pptx `assets/blank.pptx` を Google Slides に変換して上げたもの〔中身は `assets/README.md`〕から作る）。スクリプトはここを読む（この持ち主の visual・company は、前に作った「Templates」フォルダにある）。Databricks の 2026 年版の社内テンプレートを複製し、次を変えたもの（`template.py`）。
+テンプレートは `template.py <テーマ> --from-base` が `[drive] factory`（個人の資料の根元）の下の「Themes」フォルダに作る（なければ作る。フォルダの ID や URL は持たない）。使うテンプレートは、ワークスペースの `factory.toml` の `[slides.templates]` に「テーマの名前 = URL」で 1 つずつ書き（`template.py` が書き込む）、元にするテンプレートの URL は持たず、作るときに `template.py <テーマ> --from-base <元の URL>` で渡す（会話で言われたもの。渡さなければ、白紙の pptx `assets/blank.pptx` を Google Slides に変換して上げたもの〔中身は `assets/README.md`〕から作る）。スクリプトはここを読む（この持ち主の visual・company は、前に作った「Templates」フォルダにある）。Databricks の 2026 年版の社内テンプレートを複製し、次を変えたもの（`template.py`）。
 
 - マスター「Databricks Theme」と、レイアウト「Content E - Blank」だけを残した（見本のページ 98 枚、ほかのレイアウト 38 個、マスター「Simple Light」を消した）。
 - マスターの著作権の行（©2021）とロゴ、Blank の全面の四角（ページの地を覆ってしまう）を消した。フッターは slides.py が書く。
@@ -160,21 +165,26 @@ def make(d):
 - ページ番号の枠を著作権表示と同じ 9pt（`COPYRIGHT_PT`）・行間 100・補助の色（SUB）にし、右端を本文の右端（12.73 in）、上端を著作権表示の文字（7.18 in）にそろえた（この枠は内側の余白が 0）。大きさと上端が同じなので、左右の文字の高さがそろう。
 - 見本のページ（表紙、章の扉、色の早見表、部品の 2 枚）を slides.py で組んだ。部品の見本は決まり（visual.md）どおりの使い方にし、部品を直したらここで崩れを見る（2026-10-08、`Research/slides_template_review_20261008.md`）。`new` で複製すると、見本のページは消え、deck.json（pages.py）のページになる。
 
-組み込みのテーマは 2 つ。役割と色の対応は visual.md の 1。ほかの会社のテンプレートから作るテーマ（factory.toml の `[slides.themes]`。会社の書体と色）は `../deck-template/SKILL.md`。
+組み込みのテーマは 2 つ（`themes/visual.json`・`themes/company.json`）。役割と色の対応は visual.md の 1。ほかの会社のテンプレートから作るテーマ（会社の書体と色）は `../deck-template/SKILL.md`。
 
-**どのテーマで組むかは資料ごとに選ぶ**（`../deck-practices/SKILL.md` の「作業の始め方」の 5）。テーマは `factory.toml` の `[slides.themes.<名前>]` で管理する（探し方は Agent Skills にならった。名前と説明の一覧から説明で選ぶ）。
-```toml
-[slides.themes.default]   # 表の名前がテーマの名前（英数字と - _。default でもよい。既定にするのは [slides] default_theme）
-url = "https://docs.google.com/presentation/d/<テンプレート>/edit"   # このテーマのテンプレート。template.py <名前> --from-base が書き込む
-description = "アクメの会社の色のテーマ。顧客に出す提案・説明と社外の登壇に使う。社内の勉強会には使わない（visual）"
-# 会社のテンプレートから作るときだけ: font、役割ごとの色（../deck-template/SKILL.md）
-# どのテーマにも書ける: mono（コードの等幅）、テーマに入れない色（TEXT・RULE・RED_SOFT・STAGE_TEXT・DECOR）と名前で書く役割（HEAD・CARD・SUB_ON_NAVY・ON_RED）、copyright（[brand] の代わり）
-```
-- [slides-032] **全社の共有テーマ。** テーマは、共有のものでも `[slides.themes.<名前>]` の `url` で指すだけ（共有か自分のものかを分けない）。`template.py` は作ったテンプレートの Drive の説明に `description` を、Drive のプロパティ（公開。どの OAuth クライアントでも読める）にテーマの名前（`adf.theme`）と組むときに引く値（`mono`・テーマに入れない色・`copyright`。名前と値で 124 バイトを超えるもの〔社名の長い `copyright` など〕は書かずに知らせる）を書き、`slides.py` はそれに `factory.toml` の表を重ねて組む（`factory.toml` が勝つ。`factory.toml` から消した値は、`template.py <テーマ>` で合わせ直すまでテンプレートの値が効く）。役割の色と書体はテンプレートのマスターにある。`url` のテンプレートを読めない（権限・URL・認証）ときは、既定の値で黙って組まずに止まる。`[drive] shared_themes`（全社の共有テーマのフォルダ）は探すときだけ読み、`slides.py themes` が `factory.toml` の `url` が指していないテンプレートを「共有。」として URL と一緒に出す。`[drive] factory` の下の Themes（自分が作ったもの）にあって `factory.toml` に `url` のない名前も、いちばん新しいものを「個人。」として出す（ほかのワークスペースで作ったものを見つける。作り直す前の古いものは、同じ名前の `url` があるので出さない）。使うときは、出た名前の表に `url` を書く（テンプレートが持つ名前と違う名前で書くと、`new` が止まる。同じ名前の表があれば、表を足さずに `url` を替える）。管理者は、自分の `[drive] factory` の下の Themes を共有テーマのフォルダにしてよい。使う人には見る権限だけを渡す。
+- [slides-036] **テーマはテーマのファイル（`kind: Theme`）に書く。** ワークスペースの `themes/slides/<名前>.json`（ファイルの名前がテーマの名前。英数字と - _）。同じ名前の組み込みのテーマより優先する。ページの JSON と同じ `apiVersion`（slides-035）で、`slides.py schema` に形がある。ドキュメントのテーマも、あとで `themes/docs/<名前>.json` に同じ形で置く。
+  ```json
+  {"apiVersion": "slides/v1", "kind": "Theme",
+   "description": "アクメの会社の色のテーマ。顧客に出す提案・説明と社外の登壇に使う。社内の勉強会には使わない（visual）",
+   "font": "Noto Sans JP", "mono": "Cascadia Mono", "copyright": "© 2026 Acme, Inc. All rights reserved.",
+   "colors": {"NAVY": "002B5C", "RED": "E4002B", "TEXT": "303F47", "HEAD": "002B5C"},
+   "cover": ["Title Slide 1", "Title Slide 2"], "section": ["Section Break 1"]}
+  ```
+  `colors` は役割の名前（visual.md の 1）、テーマに入れない色（`TEXT`・`RULE`・`RED_SOFT`・`STAGE_TEXT`・`DECOR`）、名前で書く役割（`HEAD`・`CARD`・`SUB_ON_NAVY`・`ON_RED`）→ `#` を付けない 6 桁。書かない役割は visual の色、書かない値は既定（書体は Noto Sans JP、等幅は Cascadia Mono、`copyright` は `[brand]`）。`cover`・`section` は会社のテンプレートから残す表紙・扉のレイアウトの名前で、`template.py` が文字の幅（`w`）と地の明るさ（`tone`）を測って書き込む（`../deck-template/SKILL.md` の template-001）。見本は `samples/json/theme.json`。
+- **テーマのファイルだけを、Google を読まずに確かめる。** `python3 $K/slides.py lint themes/slides/<名前>.json` が、形・書体と、役割の組のコントラスト（届かない組には、色相と彩度を保って明るさだけを変えた直す案）を見る。ページの `lint`・`dry` も、テーマの色・書体・表紙と扉のパターンをテーマのファイルから引くので、Google を読まない（URL はテーマのファイルのないデッキだけに要る。手元のレイアウトの地は `tone` の代表の色〔dark は NAVY、accent は RED、light は BG〕で、写真や図形の地は見ない）。
+- **デッキはテーマの値をすべて持つ。** `template.py` が、テンプレートのマスターのページ番号の枠の代替テキストに `ai-deck-factory theme=<名前>` と、マスターの配色・書体・表紙と扉の目印に入らない値（`description`・`mono`・`copyright`・テーマに入れない色と名前で書く役割）の JSON を書き、複製したデッキにも残る。
+- **組むたびに、デッキのマスターをテーマのファイルにそろえる。** `slides.py build`（`new` も）は、画面での直しを確かめたあとで、デッキのマスターの配色・書体・目印がテーマのファイルと違えば書き直す（何を書いたかを標準エラーに出す）。役割の色はマスターの色を指すので、色の値だけを替えたなら、組み直すのはアイコンの色のように値を焼き込んだページだけ（中身のハッシュ。slides_py-016）。書体を替えると、全ページの文字と字幅の見込みが変わるので全ページを組み直す。表紙・扉のパターン（レイアウトの名前の並び）が違うときと、`tone` を測っていないときは止まる（図形やロゴはテンプレートのレイアウトにしかない。`template.py` で合わせ直し、`new` で作り直す）。テーマのファイルのないテーマのデッキ（ほかの人のテーマ）は、デッキが持つ値のまま組む。
+- **スライドからテーマのファイルに戻す。** `python3 $K/slides.py theme <テンプレートかデッキの URL> [<名前>]` が、マスターの配色・書体・目印から `themes/slides/<名前>.json` を書く（名前を省くとデッキの目印の名前）。画面のテーマビルダーで直した色や書体も入る。テンプレート（Drive のプロパティにテーマの名前があるもの）なら、`[slides.templates]` にも URL を書く（テンプレートは目印と同じ名前でしか写せない）。同じ名前のファイルがあって値が違えば止まる（`--force` で置き換える）。
+
+**どのテーマで組むかは資料ごとに選ぶ**（`../deck-practices/SKILL.md` の「作業の始め方」の 5）。探し方は Agent Skills にならった。`slides.py themes` が出す名前と `description` の一覧から、説明で選ぶ。
+- [slides-032] **全社の共有テーマ。** 共有のテーマも、自分のものと同じく、テーマのファイルと `[slides.templates]` の URL で使う（共有か自分のものかを分けない）。`template.py` は作ったテンプレートの Drive の説明に `description` を、Drive のプロパティ（公開。どの OAuth クライアントでも読める）にテーマの名前（`adf.theme`）を書く。組むときの値はマスターの目印にある。`[drive] shared_themes`（全社の共有テーマのフォルダ）は探すときだけ読み、`slides.py themes` が `[slides.templates]` が指していないテンプレートを「共有。」として URL と一緒に出す。`[drive] factory` の下の Themes（自分が作ったもの）にあって `[slides.templates]` にない名前も、いちばん新しいものを「個人。」として出す（ほかのワークスペースで作ったものを見つける。作り直す前の古いものは、同じ名前があるので出さない）。使うときは `slides.py theme <出た URL>` を回す（テーマのファイルを写し、`[slides.templates]` に書く。同じ名前があれば、今のテンプレートの代わりになる）。管理者は、自分の `[drive] factory` の下の Themes を共有テーマのフォルダにしてよい。使う人には見る権限だけを渡す。
 - **テンプレートのあるテーマが 2 つ以上あるのに `--theme` なしで `new` すると、一覧を出して止まる**（選び忘れを防ぐため。kaizen の検証の仮の資料は止めない）。
-- **`description` は選ぶ手がかりのすべて。** エージェントは `slides.py themes`（名前・既定か・テンプレートがあるか・`description` の一覧）だけを見て選ぶ。何のテーマか、どの資料・聞き手に使うか、使わない場面（ほかのどれにするか）を 1〜3 文で書く。資料の種類や聞き手の言葉（「顧客向けの提案」「社内の勉強会」）を入れると選びやすい。
-- 組み込みのテーマ（visual・company）は、コードに既定の説明がある。`[slides.themes.visual]` には `url`・`description` と、`mono`・テーマに入れない色・`copyright` だけを書ける（`description` を書けば既定の説明より優先する）。
-- **デッキは自分のテーマの名前を持つ。** `template.py` が、テンプレートのマスターのページ番号の枠の代替テキストに `ai-deck-factory theme=<名前>` を書き、複製したデッキにも残る。`slides.py build`（`new` はテンプレート）はそれを読み、`mono`・テーマに入れない色・`copyright` を `factory.toml`（とその `url` のテンプレートが持つ値。slides-032）から引いて組む。名前のないデッキ（合わせ直す前のテンプレートから作ったもの）と、`factory.toml` にそのテーマがないデッキは、既定の値で組む。
+- **`description` は選ぶ手がかりのすべて。** エージェントは `slides.py themes`（名前・既定か・テンプレートがあるか・`description` の一覧）だけを見て選ぶ。何のテーマか、どの資料・聞き手に使うか、使わない場面（ほかのどれにするか）を 1〜3 文で書く。資料の種類や聞き手の言葉（「顧客向けの提案」「社内の勉強会」）を入れると選びやすい。組み込みのテーマの説明は、組み込みのファイルにある（変えるなら、ワークスペースに同じ名前のファイルを写して直す）。
 
 | テーマ | 色 |
 |---|---|
@@ -182,10 +192,10 @@ description = "アクメの会社の色のテーマ。顧客に出す提案・�
 | [slides-006] `company` | 2026 年の公式テンプレートの色。本文の地は公式どおり白。役割のコントラストに届かない 2 つだけを、色相を保って暗くした（18pt 未満の赤の文字 `FF3621` → `D61400`、補助の文字 `618794` → `506F7A`。2026-10-13） |
 
 - **テンプレートが決めるのは、テーマの色、ページの大きさ（13.33 × 7.5 in）、ページ番号の位置と、会社のテンプレートから残した表紙・扉の図形（`../deck-template/SKILL.md` の template-001）だけ。** 字の大きさと配置はページ（deck.json か pages.py）が文字ごとに書き、ページ番号の大きさと行間は slides.py が組むたびに書く（文字ごとに書いた値がテンプレートより優先される）。
-- **作ったデッキは、複製した時点のテンプレートの写し。** テンプレートを直しても、作ったデッキは変わらない。デッキのテーマを替えるときは `new` で作り直す（URL が変わる）。
-- 色を変えるときは、`slides.py` の `THEMES`（会社のテーマは factory.toml の `[slides.themes]`）を直して `template.py <テーマ>` を回す（配色・書体・見本を合わせ直す。ID は変わらない）。コントラストは `gslides.py check <テンプレートの URL>` で見る。
-- 会社のテンプレートが新しくなったら、`template.py <テーマ> --from-base <新しい URL>` で作り直す。作ったテンプレートの URL は `template.py` が `factory.toml` の `[slides.themes.<テーマ>]` の `url` に書き込む（手で写さない）。前のテンプレートは消すか、名前に「旧」を付ける。共有テーマのフォルダにあるなら、フォルダから外す（名前を変えても Drive のプロパティは残り、同じ名前のテーマが 2 つ出る。factory-doctor の「共有テーマ」に出る）。
-- [slides-007] **`factory.toml`**（ワークスペースの直下。factory-init が置き、factory-doctor が確かめる）: 人ごとに変わる値だけを置く（テンプレートの URL と置き場所、既定のテーマ、quota project、Drive の置き場所の根元）。見た目の決まり（色・余白・版面）は置かない。スクリプトは今いるフォルダ、次にスクリプトのフォルダから上へたどって探し、なければ止まる。ほかの人がスクリプトを使うときは、`factory.toml` を写して自分の値にし、`template.py visual --from-base`・`template.py company --from-base` で自分のテンプレートを作る（書き方は `factory.toml` の冒頭のコメント）。
+- **作ったデッキのページは、複製した時点のテンプレートの写し。** テーマの色・書体は組み直すたびにテーマのファイルにそろう（上の「組むたびに」）が、テンプレートのレイアウトの図形は替わらない。デッキのテーマを別のテーマに替えるときは `new` で作り直す（URL が変わる）。
+- 色を変えるときは、テーマのファイル（組み込みは `themes/<名前>.json`）を直し、`slides.py lint <ファイル>` で測ってから `template.py <テーマ>` を回す（テンプレートの配色・書体・見本を合わせ直す。ID は変わらない）。作ったデッキは、組み直せばそろう。描いた色のコントラストは `gslides.py check <テンプレートの URL>` で見る。
+- 会社のテンプレートが新しくなったら、`template.py <テーマ> --from-base <新しい URL>` で作り直す。作ったテンプレートの URL は `template.py` が `factory.toml` の `[slides.templates]` に書き込む（手で写さない）。前のテンプレートは消すか、名前に「旧」を付ける。共有テーマのフォルダにあるなら、フォルダから外す（名前を変えても Drive のプロパティは残り、同じ名前のテーマが 2 つ出る。factory-doctor の「共有テーマ」に出る）。
+- [slides-007] **`factory.toml`**（ワークスペースの直下。factory-init が置き、factory-doctor が確かめる）: 人ごとに変わる値だけを置く（テンプレートの URL〔`[slides.templates]`〕と置き場所、既定のテーマ、quota project、Drive の置き場所の根元。テーマの値はテーマのファイル）。見た目の決まり（色・余白・版面）は置かない。スクリプトは今いるフォルダ、次にスクリプトのフォルダから上へたどって探し、なければ止まる。ほかの人がスクリプトを使うときは、`factory.toml` を写して自分の値にし、`template.py visual --from-base`・`template.py company --from-base` で自分のテンプレートを作る（書き方は `factory.toml` の冒頭のコメント）。
 - テンプレートは誰とも共有していない。共有するときも、自動では共有せず、`anyone` にしない。
 
 ## 4. 図形と文字の組み方
@@ -240,7 +250,7 @@ description = "アクメの会社の色のテーマ。顧客に出す提案・�
 - [slides-023] **手元の画像（`assets/`・`build/assets/`）は、組むときに Drive を経由して貼る（`slides.py` の `carry`）。** Slides API は、公開された URL の画像しか読めない（Drive の非公開のファイルの URL は「publicly accessible」でないと断られる）。`build` は、画像を pptxgenjs で 1 枚に 1 つずつ入れた pptx を作り、My Drive の直下に Google Slides として上げ、その画像の URL から貼って、上げたファイルを消す（フォルダを指定しないので、スクリプトをほかの人に渡してもそのまま動く）。共有の設定を変えて公開することはしない。Drive には S3 の署名付き URL にあたる仕組みがない（共有の期限は特定の人とグループにしか付けられず、匿名で取りに来る API には効かない）。Google Cloud Storage の署名付き URL でも貼れるが、採らない（速くなるのは画像のある build で約 4 秒だけで、バケットと署名用の SA を持ち続ける手間、ほかの人に渡すと動かないこと、sandbox に画像を置くことに見合わない。`Research/gcs_signed_url_images_20261008.md`）。Drive の `thumbnailLink` は Slides API に断られる。渡した URL は、画像の `sourceUrl` としてデッキに残る。
 - ほかの Google Slides のページをそのまま貼るときは、`thumb_url(<URL>, <ページ番号>)` を `d.image` に渡す（`../deck-practices/reuse.md` の段階 1）。
 - **顧客のロゴ**は、自社が公開している事例ページか、その会社の公式のプレスキットから取る（使ってよい範囲が確かめやすい）。落とさずに、その URL を `png()` に通して `d.image(s, png("<SVG の URL>"), …, alt="<社名>")` で貼る。Splunk のロゴは Wikimedia Commons の `Splunk_logo.svg` の PNG の URL（幅は台帳の決まった値。splunk.com の画像は直接取れなかった）。
-- [slides-024] **アイコンと製品のロゴ**は `d.icon(s, "tabler:database", x, y, 0.4)` のように Iconify の名前で置く（名前は https://icon-sets.iconify.design/ で探す。ないと、組む前に止まる）。`tabler:` は線画で、色は本文色 `303F47` の 1 色（既定）。1 色のロゴは `simple-icons:` で、`color` にブランドの色を渡す（例: `d.icon(s, "simple-icons:postgresql", x, y, 0.4, "4169E1")`）。色付きのロゴは `logos:`（マークだけなら `logos:<名前>-icon`。`color` は効かない）。代替テキストは名前が入る。`color` は 6 桁で渡す。`color` には役割の名前（`NAVY`・`SUB` など）も渡せる。画像の色はテーマの色を指せないので、`d.icon` がデッキの配色の 6 桁にする（配色は、`build`・`lint` と、URL を渡した `dry`・`resolve` がデッキのマスターから読む。読まないときは visual の配色）。前の pages.py の react-icons の名前（`TbDatabase`・`SiPostgresql`）も、そのまま組める（組むときに手元で PNG にする）。
+- [slides-024] **アイコンと製品のロゴ**は `d.icon(s, "tabler:database", x, y, 0.4)` のように Iconify の名前で置く（名前は https://icon-sets.iconify.design/ で探す。ないと、組む前に止まる）。`tabler:` は線画で、色は本文色 `303F47` の 1 色（既定）。1 色のロゴは `simple-icons:` で、`color` にブランドの色を渡す（例: `d.icon(s, "simple-icons:postgresql", x, y, 0.4, "4169E1")`）。色付きのロゴは `logos:`（マークだけなら `logos:<名前>-icon`。`color` は効かない）。代替テキストは名前が入る。`color` は 6 桁で渡す。`color` には役割の名前（`NAVY`・`SUB` など）も渡せる。画像の色はテーマの色を指せないので、`d.icon` がデッキの配色の 6 桁にする（配色は、テーマのファイルから引く。テーマのファイルのないデッキは、`build` と、URL を渡した `lint`・`dry`・`resolve` がデッキのマスターから読む。読まないときは visual の配色）。前の pages.py の react-icons の名前（`TbDatabase`・`SiPostgresql`）も、そのまま組める（組むときに手元で PNG にする）。
 - [slides-025] **自社の製品のアイコンがワークスペースの `assets/` にないときは、線画（`tabler:`）で代える前に、社内のアイコン集から探し（探す場所はワークスペースの `rules/deck-build/slides.md`）、見つかったら `assets/` とその台帳に足す。** 白い角丸の地と影の付いた画像は、地と影を外して透過にする。見つからないものだけ線画にし、構成案に書く（レビューの観点 5 の「製品を汎用の線画で代えていないか」で見る）。
 - **自社の製品のアイコン**は、ワークスペースの `assets/<会社>/` に置き、`d.image(s, asset("<会社>/<製品>.png"), …, alt="<製品>")` で置く。ほかの会社の製品は `logos:`（Snowflake・Oracle・Salesforce・Tableau・Power BI・Redshift など）。BigQuery など Google Cloud の製品は `logos:` にないか旧い絵柄なので `asset("gcp/<製品>.png")`。
 - 似た図は、過去の資料の考え方を借りて作り直す（`references_index.md` で探す）。

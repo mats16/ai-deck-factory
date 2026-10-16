@@ -197,15 +197,17 @@ def trash(fid):  # ゴミ箱に移す（30 日は戻せる）。共有ドライ�
     request("PATCH", f"{DRIVE}/files/{fid}?supportsAllDrives=true", {"trashed": True})
 
 
-def guard(fid, rev, key, src):
+def guard(fid, rev, key, src, stop=True):
     """前に組んだあとに画面で直されていたら（rev が key に残した版か指紋と違う）、または未解決のコメントがあれば、止める。
-    組み直すと画面での直しは消え、コメントは付け先を失う。src は直しを入れる先（pages.py・doc.md）。"""
+    組み直すと画面での直しは消え、コメントは付け先を失う。src は直しを入れる先（pages.py・doc.md）。stop=False なら止めずに理由の並びを返す（slides.py plan）。"""
     last = request("GET", f"{DRIVE}/files/{fid}?supportsAllDrives=true&fields=appProperties").get("appProperties", {}).get(key)
     comments = [c for c in request("GET", f"{DRIVE}/files/{fid}/comments?pageSize=100&fields=comments(resolved,deleted,content,quotedFileContent(value))")
                 .get("comments", []) if not c.get("resolved") and not c.get("deleted")]
     for c in comments[:5]:  # どの文に付いた、どんなコメントか（直す先を探しやすいように）
         print(f"コメント: 「{c.get('quotedFileContent', {}).get('value', '')[:30]}」に「{c.get('content', '')[:60]}」", file=sys.stderr)
     why = (["前に組んだあとに画面で直されている"] if last and last != rev else []) + ([f"未解決のコメントが {len(comments)} 件ある"] if comments else [])
+    if why and not stop:
+        return why
     if why:
         sys.exit("組み直すと、画面での直しが消え、コメントは付け先を失う: " + "、".join(why)
                  + f"。直しとコメントへの対応を {src} に入れてから、--force を付けて組み直す")

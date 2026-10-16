@@ -16,7 +16,7 @@ cp -R ~/Documents/rules ~/Documents/AGENTS.md ~/Documents/CLAUDE.md .   # 本番
 写した `factory.toml` は、Google の側で本番のものを書き換えないように替える。
 
 - `[drive]` は、検証用の Drive のフォルダにする（下の「消す」）。
-- テンプレートを試すときは、`[slides] template_folder` を検証用のフォルダにし、`[slides.templates]` は検証用に複製したテンプレートの URL にする（空でもよい）。`template.py <テーマ>` は `[slides.templates]` のテンプレートをその場で書き換える。
+- テンプレートを試すときは、`[slides.templates]` を空にし、`template.py <テーマ> --from-base [<元の URL>]` で検証用の `[drive] factory` の下に作る（URL が書き込まれる）。`template.py <テーマ>` は `[slides.templates]` のテンプレートをその場で書き換えるので、本番の URL を残さない。本番のテーマで試すなら、本番の `themes/slides/` も写す（`template.py` は表紙・扉の幅と地の明るさをそこに書き込む）。
 - `sandbox/` で `git init` はしない（factory-init が聞いてくる）。入れ子のリポジトリになり、worktree の `git clean` で消えなくなる。
 - `factory-kaizen` だけは、この worktree を試さない。`kaizen.py start` は GitHub の `main` を `sandbox/.factory/kaizen/<名前>/repo` に clone する。
 

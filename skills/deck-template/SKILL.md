@@ -1,6 +1,6 @@
 ---
 name: deck-template
-description: 会社のスライドのテンプレート（Google Slides）から、AI Deck Factory のテンプレート（テーマ）を作る・整える。日本語のテンプレートがある、英語のテンプレートしかない（外資系の日本支社など）、テンプレートがない（新しく作る）の 3 つに分け、書体・文字の大きさ・大枠の色を残したまま、和文の描ける書体とコントラストの基準に合わせる。template.py の audit・check・--from-base を使う。既定のテーマ（[slides] default_theme）を、テンプレートの一覧から選んで切り替える。「会社のテンプレートを使いたい」「テンプレートを作って」「テンプレートを整えて」「既定のテンプレートを変えたい」と頼まれたときと、何をするか言わずに呼ばれたときに使う。
+description: 会社のスライドのテンプレート（Google Slides）から、AI Deck Factory のテンプレート（テーマ）を作る・整える。日本語のテンプレートがある、英語のテンプレートしかない（外資系の日本支社など）、テンプレートがない（新しく作る）の 3 つに分け、書体・文字の大きさ・大枠の色を残したまま、和文の描ける書体とコントラストの基準に合わせる。template.py の audit・--from-base と slides.py lint <テーマのファイル> を使う。既定のテーマ（[slides] default_theme）を、テンプレートの一覧から選んで切り替える。「会社のテンプレートを使いたい」「テンプレートを作って」「テンプレートを整えて」「既定のテンプレートを変えたい」と頼まれたときと、何をするか言わずに呼ばれたときに使う。
 ---
 
 # 会社のテンプレートから AI Deck Factory のテンプレートを作る
@@ -9,7 +9,7 @@ AI Deck Factory のテンプレートは、`slides.py new` が複製する Googl
 
 - **元の会社のテンプレートは変えない。** 複製から、いちばん多くのページが使うマスターと、ページ番号の枠を持つ Blank のレイアウトだけを残し、ほかのレイアウト、見本のページ、マスターのロゴや著作権の行を消す（`template.py` の `pick`・`strip`）。人が画面で使う会社のテンプレートは、そのまま使い続ける。
 - [template-001] **会社のテンプレートの表紙・扉のレイアウト（図形・ロゴ・写真入り）は、用意されているパターンを全部残す。** テーマの `cover`・`section` にレイアウトの名前を並べる（audit の表のとおり。並びの順がパターンの番号、同じ名前が 2 つあれば両方。それぞれのレイアウトにページ番号の枠が要る。目印をこの枠に書くので、なければテーマビルダーで足す。同じレイアウトを cover と section の両方に書かない。パターンを減らすときは --from-base で作り直す）と、`template.py` がそれぞれの文字の枠と著作権の行だけを消し、図形・画像・ロゴを残す。元のタイトルの枠と左端がそろっていたロゴや線は、文字の左端（0.6 in）に寄せる。目印には番号・文字の幅（元のタイトルの枠の右端まで。図形や写真に重ねない）・地の明るさ（`dark`・`accent`・`light`。白の文字が 4.5:1 に届く・3:1 だけ届く・届かない）を書き、`slides.py` の `d.cover(…, variant=n)`・`d.divider(…, variant=n)` は、そのレイアウトの地と絵のまま、地の明るさに合う色（`TONES`）で文字を組む。見本のページに全パターンを 1 枚ずつ組むので、資料では見本を見て番号を選ぶ。章ごとに地の違う扉を使い分けてよい。表紙の 1 番は元の見本の 1 枚目の表紙にする（2026-10-13、ユーザー「テンプレートを作る際に、元の図形が入ったタイトルスライドなどを、維持して欲しいです」「表紙、中表紙は何パターンか用意されている元のものを維持してください」「セクション区切りで異なる背景の区切りページを使い分けることはよくします」）。
-- **会社の値はワークスペースの `factory.toml` に書く。** `[slides.themes.<名前>]`（作ったテンプレートの `url`、使い分けの `description`、書体、役割ごとの色、テーマに入れない色、テーマごとの著作権表示）と `[brand]`（表紙の社名と著作権表示）。元のテンプレートの URL は書かず、作るときに `--from-base` に渡す。プラグインの `slides.py` の `THEMES` には足さない（visual・company は Databricks のテーマ）。
+- **会社の値はワークスペースに書く。** テーマのファイル `themes/slides/<名前>.json`（使い分けの `description`、書体、役割ごとの色、テーマに入れない色、テーマごとの著作権表示、表紙・扉のパターン）と、`factory.toml` の `[brand]`（表紙の社名と著作権表示）。作ったテンプレートの URL は `template.py` が `factory.toml` の `[slides.templates]` に書く。元のテンプレートの URL は書かず、作るときに `--from-base` に渡す。プラグインの組み込みのテーマ（`../deck-build/themes/`）には足さない（visual・company は Databricks のテーマ）。
 - コマンドは `K=<deck-build のフォルダ>/scripts`（このスキルのフォルダの `../deck-build/scripts`）で書く。
 - **何をするか言わずに呼ばれたら**（`/ai-deck-factory:deck-template` だけ）、下の「既定のテーマを選ぶ」から始め、選択肢に「新しく作る（会社のテンプレートから）」を足す。それを選ばれたら「流れ」に進む。
 
@@ -19,10 +19,10 @@ AI Deck Factory のテンプレートは、`slides.py new` が複製する Googl
 
 | 決まり | 正本 | 測るもの |
 |---|---|---|
-| 色の役割（11 の枠と固定の 6 色）と、組ごとのコントラスト（18pt 未満は 4.5:1、18pt 以上か 14pt 以上の太字は 3:1） | `../deck-practices/visual.md` の 1（表と注）・3 | `template.py check`（役割の組 `PAIRS`）、`gslides.py check` の「コントラストが基準に届かない色の組」 |
+| 色の役割（11 の枠と固定の 6 色）と、組ごとのコントラスト（18pt 未満は 4.5:1、18pt 以上か 14pt 以上の太字は 3:1） | `../deck-practices/visual.md` の 1（表と注）・3 | `slides.py lint <テーマのファイル>`（`template.py` の役割の組 `PAIRS`）、`gslides.py check` の「コントラストが基準に届かない色の組」 |
 | 書体（既定は Noto Sans JP、コードだけ Cascadia Mono。テーマで変えられる。Google Fonts にない書体は描けない） | `visual.md` の 2、`../deck-build/SKILL.md` の「納品物」、下の「書体」 | lint の「書体が … でない」（テンプレートの書体と比べる） |
 | 文字の大きさ（11pt 以上。著作権表示とページ番号だけ 9pt）と版面（13.33 × 7.5 in、左右の余白 0.6 in、要素の上端） | `visual.md` の 1 | lint、`slides.py` の定数 |
-| visual・company のテーマの値 | `../deck-build/scripts/slides.py` の `THEMES` | `template.py check visual` |
+| visual・company のテーマの値 | `../deck-build/themes/visual.json`・`company.json` | `slides.py lint ../deck-build/themes/visual.json` |
 | テンプレートの作り方と、テンプレートが決めるもの | `../deck-build/slides.md` の 3 と、このファイル | `template.py` |
 | 調べた経緯（文字の大きさの下限、コントラスト、色の数） | ワークスペースの `Research/deck_research/log/20261006_jp_visual.md` の 1-1・1-5・1-6、`Research/deck_research/state.md` の「採用したもの」 | |
 
@@ -30,9 +30,9 @@ AI Deck Factory のテンプレートは、`slides.py new` が複製する Googl
 
 `[slides] default_theme`（資料の `description` で決まらないときに組むテーマ）を、今あるテンプレートから選んで切り替える。factory-init（会話で入れるときも）からも使う。
 
-1. `python3 $K/slides.py themes` を回す。選べるのは「テンプレートあり」のテーマと、「（共有。…）」「（個人。…）」と出たテンプレート（`[drive] shared_themes` と `[drive] factory` の下の Themes にあって、`factory.toml` の `url` が指していないもの）。「テンプレートなし」のテーマは選べない（作るなら下の「流れ」か `template.py <名前> --from-base`）。
+1. `python3 $K/slides.py themes` を回す。選べるのは「テンプレートあり」のテーマと、「（共有。…）」「（個人。…）」と出たテンプレート（`[drive] shared_themes` と `[drive] factory` の下の Themes にあって、`factory.toml` の `[slides.templates]` が指していないもの）。「テンプレートなし」のテーマは選べない（作るなら下の「流れ」か `template.py <名前> --from-base`）。
 2. 選択式で聞く（Claude Code なら AskUserQuestion）。選択肢には名前と `description` を書き、今の既定に「（今の既定）」を付ける。選択肢は 4 つまで（何をするか言わずに呼ばれたときの「新しく作る」も 1 つに数える）なので、多ければ一覧を見せ、今の既定と `description` の合いそうなものを出し、ほかは名前で答えてもらう。選べるものが 1 つだけなら聞かずにそれを選び、3 に進む。
-3. `factory.toml` の `[slides] default_theme` を選んだ名前に書き替える。共有・個人のものを選んだら、`[slides.themes.<名前>]` に `url` も書く（`slides.py themes` の最後の行のとおり）。
+3. `factory.toml` の `[slides] default_theme` を選んだ名前に書き替える。共有・個人のものを選んだら、`slides.py theme <出た URL>` も回す（テーマのファイルを写し、`[slides.templates]` に書く。`slides.py themes` の最後の行のとおり）。
 4. もう一度 `slides.py themes` を回し、選んだテーマに「（既定）」が付いたことを見せる。
 
 ## 流れ
@@ -48,36 +48,35 @@ AI Deck Factory のテンプレートは、`slides.py new` が複製する Googl
    | `NAVY` | 表紙・扉の地、結論バンド・表の見出しの行・コードの箱の地。本文のページの見出しの文字（`HEAD`）も、書かなければこの色。会社のいちばん濃い主色（DARK1 か ACCENT1 にあることが多い） |
    | `BG`・`PANEL` | 本文の地と、パネル・表の 1 行おきの地。会社の LIGHT1・LIGHT2（白、ごく淡い灰色） |
    | `RED` | 強調の色（図形の塗り、番号の丸、18pt 以上の文字） |
-   | `RED_TEXT`・`RED_ON_NAVY` | `RED` と同じ色相で、18pt 未満の文字用と、`NAVY` の上の文字用。`RED` をそのまま書き、`check` の直す案で明るさを合わせる |
+   | `RED_TEXT`・`RED_ON_NAVY` | `RED` と同じ色相で、18pt 未満の文字用と、`NAVY` の上の文字用。`RED` をそのまま書き、lint の直す案で明るさを合わせる |
    | `NAVY_BLOCK` | 扉の中のブロック。`NAVY` を少し明るくした色 |
    | `SUB` | 補助の文字とフッター。会社の灰色 |
    | `GA`・`PREVIEW`・`OSS` | 提供ステージの札。意味で決まる色なので、ふつうは書かない（visual の値） |
 
    `GA`・`PREVIEW`・`OSS` のほかは全部書く（本文の地が明るいテーマ。暗いテーマは下の「暗い本文のテーマ」）。書かない役割は visual（Databricks）の値になり、会社の色の中で浮く（2026-10-12 に試したとき、青の `NAVY` の扉に visual の `NAVY_BLOCK` の灰色が残った）。1 枚に使う色は 4 色まで（`visual.md` の 3）なので、会社の配色をすべて使おうとしない。
 4. **書体を決める。** 下の「書体」。
-5. **`factory.toml` に書く。**
+5. **書く。** 社名と著作権表示は `factory.toml` の `[brand]` に、テーマはワークスペースの `themes/slides/acme.json`（ファイルの名前がテーマの名前。`../deck-build/slides.md` の slides-036）に書く。
    ```toml
    [brand]  # 表紙の左下と、全ページの左下の著作権表示（ドキュメントのフッターも）。copyright は要る（factory-doctor が見る）
    company = "アクメ・ジャパン株式会社"
    copyright = "© 2026 Acme, Inc. All rights reserved."  # lint が 9pt を通すのは「© <年> <社名> All rights reserved.」の形だけ（factory-doctor が確かめる）
-
-   [slides.themes.acme]  # 会社のテンプレートのテーマ。色は役割の名前（visual.md の 1）、# は付けない
-   description = "アクメの会社の色のテーマ。顧客に出す提案・説明と社外の登壇に使う。社内の勉強会には使わない（visual）"  # 何のテーマで、どの資料・聞き手に使うか、使わない場面（../deck-build/slides.md の 3）
-   font = "Noto Sans JP"
-   NAVY = "002B5C"
-   ...
-   # 書かなければ既定のもの（下の「書体」と、visual.md の 1 のテーマに入れない色、[brand] copyright）
-   # mono = "Cascadia Mono"     # コードの等幅
-   # TEXT = "303F47"            # テーマに入れない色: TEXT・RULE・RED_SOFT・STAGE_TEXT・DECOR。主色に合わない灰色と淡い赤を替える（check が測る）
-   # HEAD = "1B3139"            # 名前で書く役割: HEAD・CARD・SUB_ON_NAVY・ON_RED。書かなければ NAVY・白・RULE・白。暗い本文のテーマで書く（下の「暗い本文のテーマ」）
-   # copyright = "© 2026 Acme, Inc. All rights reserved."  # このテーマのデッキだけ [brand] の代わりに使う。形は [brand] と同じ（factory-doctor が見る）
-   # cover = ["Title Slide 1", "Title Slide 2"]      # 図形・ロゴを残す表紙のパターン（template-001。並びの順が variant の番号）。書かなければ表紙も Blank に組む
-   # section = ["Section Break 1", "Section Break 2"] # 同じく章の扉のパターン
    ```
-6. **測る。** `python3 $K/template.py check acme`。役割の組ごとの比と、届かない組の直す案（色相と彩度を保ち、明るさだけを変えた色）を出す。直す案は会社のブランドの色を変えるので、前と後の色をユーザーに見せて決めてもらう（黙って写さない）。直す案を使わないなら、当てる色を替える。NG が 0 になるまで繰り返す。
-7. **作る。** `python3 $K/template.py acme --from-base <元の URL>`（C は URL を渡さない）。元を `[drive] factory` の下の Themes フォルダ（なければ作る）に複製し、マスターと Blank だけを残し、配色・書体・ページ番号を合わせ、見本のページ（表紙、章の扉、テーマの枠の早見表、テーマに入れない色の早見表、部品の 2 枚）を組む。URL は `[slides.themes.acme]` の `url` に書き込まれる（手で写さない）。
+   ```json
+   {"apiVersion": "slides/v1", "kind": "Theme",
+    "description": "アクメの会社の色のテーマ。顧客に出す提案・説明と社外の登壇に使う。社内の勉強会には使わない（visual）",
+    "font": "Noto Sans JP",
+    "colors": {"NAVY": "002B5C", "BG": "FFFFFF", "RED": "E4002B", "…": "…"},
+    "cover": ["Title Slide 1", "Title Slide 2"],
+    "section": ["Section Break 1", "Section Break 2"]}
+   ```
+   - `description` は、何のテーマで、どの資料・聞き手に使うか、使わない場面（`../deck-build/slides.md` の 3）。
+   - `colors` は役割の名前で、`#` を付けない 6 桁。テーマに入れない色（`TEXT`・`RULE`・`RED_SOFT`・`STAGE_TEXT`・`DECOR`）も同じ所に書く。主色に合わない灰色と淡い赤を替える（lint が測る）。名前で書く役割（`HEAD`・`CARD`・`SUB_ON_NAVY`・`ON_RED`）は、書かなければ NAVY・白・RULE・白。暗い本文のテーマで書く（下の「暗い本文のテーマ」）。
+   - 書かなければ既定のもの: `font`（下の「書体」）、`mono`（コードの等幅）、`copyright`（このテーマのデッキだけ `[brand]` の代わりに使う。形は `[brand]` と同じ。factory-doctor が見る）。
+   - `cover`・`section` は図形・ロゴを残す表紙と章の扉のパターン（template-001。並びの順が variant の番号）。書かなければ表紙・扉も Blank に組む。名前だけを書けば、7 の `template.py` が文字の幅（`w`）と地の明るさ（`tone`）を測って書き込む。
+6. **測る。** `python3 $K/slides.py lint themes/slides/acme.json`（Google を読まない）。形と書体を確かめ、役割の組ごとの比と、届かない組の直す案（色相と彩度を保ち、明るさだけを変えた色）を出す。直す案は会社のブランドの色を変えるので、前と後の色をユーザーに見せて決めてもらう（黙って写さない）。直す案を使わないなら、当てる色を替える。NG が 0 になるまで繰り返す。
+7. **作る。** `python3 $K/template.py acme --from-base <元の URL>`（C は URL を渡さない）。元を `[drive] factory` の下の Themes フォルダ（なければ作る）に複製し、マスターと Blank だけを残し、配色・書体・ページ番号を合わせ、見本のページ（表紙、章の扉、テーマの枠の早見表、テーマに入れない色の早見表、部品の 2 枚）を組む。URL は `factory.toml` の `[slides.templates]` に書き込まれ（手で写さない）、表紙・扉の文字の幅と地の明るさはテーマのファイルに書き込まれる。マスターにはテーマの値をすべて書く（`slides.py theme <URL>` でテーマのファイルに戻せる）。
 8. **確かめる。** `python3 $K/gslides.py check <テンプレートの URL>`。要修正は 0、コントラストの一覧に出るのは見本の飾り（章番号）だけにする。全ページの画像を開き、書体が描けているか（明朝や別のゴシックになっていないか）、社名と著作権表示、会社の資料と並べて色に違和感がないかを見る。URL をユーザーに渡して見てもらう。
-9. **使い始める。** 既定にするなら `[slides] default_theme` を書き換える。デッキごとに選ぶなら `slides.py new <フォルダ> <名前> --theme acme`。全社に配るなら、作ったテンプレートを全社の共有テーマのフォルダ（`[drive] shared_themes`）に置く（Themes フォルダをそのまま共有テーマのフォルダにしてもよい）。2026-10-14 より前の `template.py` で作ったテンプレートには、Drive のプロパティにテーマの名前（`adf.theme`）がなく、置いても `slides.py themes` に出ない。先に持ち主が `template.py acme` で合わせ直す（配色・書体・見本のページも今の `factory.toml` で組み直す。factory-doctor の「共有テーマ」に出る）。ほかの人は `[slides.themes.acme]` に `url` を書くだけで、同じ値で組める（`../deck-build/slides.md` の 3 の slides-032）。
+9. **使い始める。** 既定にするなら `[slides] default_theme` を書き換える。デッキごとに選ぶなら `slides.py new <フォルダ> <名前> --theme acme`。全社に配るなら、作ったテンプレートを全社の共有テーマのフォルダ（`[drive] shared_themes`）に置く（Themes フォルダをそのまま共有テーマのフォルダにしてもよい）。2026-10-14 より前の `template.py` で作ったテンプレートには、Drive のプロパティにテーマの名前（`adf.theme`）がなく、置いても `slides.py themes` に出ない。先に持ち主が `template.py acme` で合わせ直す（配色・書体・見本のページも今のテーマのファイルで組み直す。factory-doctor の「共有テーマ」に出る）。2026-10-16 より前に作ったテンプレートも、合わせ直すまでマスターにテーマの値（テーマに入れない色・`copyright`・`mono`・`description`）がなく、写すとそれらが抜ける。ほかの人は `slides.py theme <テンプレートの URL>` を回すだけで、同じ値で組める（`../deck-build/slides.md` の 3 の slides-032）。
 
 ## 3 つの場合の違い
 
@@ -103,7 +102,7 @@ Databricks の社内テンプレート（DM Sans、英語だけ）がこの場�
   - ページの大きさ: 新規は 10 × 5.625 in。「ファイル → ページ設定 → カスタム」で 13.33 × 7.5 インチにする（API では変えられない）。
   - スライド番号: 「挿入 → スライド番号」でオンにする。オフだと足したページにページ番号の枠ができず、`--from-base` が止まる。
   - ページ番号の枠のパディング: 新規は 0.34 cm あり、ページ番号が約 0.13 in 下・0.1 in 左にずれる（`template.py` は内側の余白を 0 と見込む）。API では読めず変えられないので、画面のテーマの編集で、マスターと Blank のページ番号の枠を 0 にする。使わないレイアウトは消してよい。
-- **色:** 会社のロゴ・Web サイト・ブランドガイドから、主色（`NAVY`）と強調の色（`RED`）を決め、ほかの役割をそこから作る（3 の表）。決まった色がなければ、2〜3 の組の案を `check` で測ってから見せる。visual の色は Databricks のブランドの色なので、ほかの会社のテーマにはそのまま使わない。
+- **色:** 会社のロゴ・Web サイト・ブランドガイドから、主色（`NAVY`）と強調の色（`RED`）を決め、ほかの役割をそこから作る（3 の表）。決まった色がなければ、2〜3 の組の案を `slides.py lint` で測ってから見せる。visual の色は Databricks のブランドの色なので、ほかの会社のテーマにはそのまま使わない。
 - **書体:** Noto Sans JP（既定。字幅の見積もりがこの書体で測ってある）。
 
 ## 暗い本文のテーマ
@@ -123,8 +122,8 @@ Databricks の社内テンプレート（DM Sans、英語だけ）がこの場�
 | `ON_RED` | `RED` の塗りの上の文字（番号の丸）。明るい強調の色に白が届かなければ（オレンジの `FF6308` に白は 2.98:1）、黒 |
 | `RED_SOFT`・`STAGE_TEXT`・`DECOR` | 小さな赤の札の地は、強調の色をごく暗くした色。札の文字は黒。章番号は `RULE` ほどの暗い灰色 |
 
-- 色を書く場所、測り方、作り方は明るいテーマと同じ（流れの 5〜8）。`check` は同じ役割の組を測る（本文・パネル・カードの上の `HEAD`・`TEXT`・`SUB`・`RED_TEXT`、濃紺の上の `WHITE`・`SUB_ON_NAVY`、`RED` の上の `ON_RED` など）。
-- 地とパネル・結論バンドの差は文字の基準の外で、`check` は測らない。暗い色どうしは差が小さく見えるので（`000000` と `1A1A1A` で 1.2:1）、見本の画像で面の境が見えるかを見る。
+- 色を書く場所、測り方、作り方は明るいテーマと同じ（流れの 5〜8）。`slides.py lint` は同じ役割の組を測る（本文・パネル・カードの上の `HEAD`・`TEXT`・`SUB`・`RED_TEXT`、濃紺の上の `WHITE`・`SUB_ON_NAVY`、`RED` の上の `ON_RED` など）。
+- 地とパネル・結論バンドの差は文字の基準の外で、lint は測らない。暗い色どうしは差が小さく見えるので（`000000` と `1A1A1A` で 1.2:1）、見本の画像で面の境が見えるかを見る。
 - lint と `box_pad.py` は、表紙・扉を地の色でなく、`slides.py` が `NAVY` の地で作ったページかで見分ける。カードはテーマの `CARD` の色で見分ける。`PANEL` を `NAVY` と同じ値にすると、本文の幅いっぱいでページの下端（6.60 in）まであるパネルを結論バンドと数え、パネルの中のコードらしい行に等幅を求める。
 - ページの JSON（pages.py）で、見出しの文字を `NAVY`、カードの地を `WHITE` と書いた資料は、暗いテーマで読めなくなる（`HEAD`・`CARD` と書く。`visual.md` の 1）。lint のコントラストの一覧に出る。
 
@@ -144,22 +143,22 @@ Google Slides で描けるのは Google Fonts の書体だけ。描けると確�
 - 描けたかどうかは API の値では分からない（指定した名前をそのまま返す）。見本のページの画像で見る。
 - 欧文の書体で `font` に書けるのは DM Sans だけ（`slides.py` の `FONT_EM`）。和文の字がないので、Google Slides は和文を別のゴシックで描く（2026-10-15 に描いて見た。1 字 0.92 em ほどで、見込みの 1 em より少し狭い）。`template.py audit` は「欧文（和文は別のゴシック。字幅を測ってあり、font に書ける）」と出す。
 - `slides.py` の字幅の見積もり（`em_width`）は、本文の英数字を `FONT_EM` の幅（Noto Sans JP の `ASCII_EM`、DM Sans の `DM_SANS_EM`）で、コードを `MONO_EM`（Cascadia Mono）で見込む。ほかの書体を `font`・`mono` に書くと、Noto Sans JP と Cascadia Mono の幅で見込むので、英数字の幅が違い、折り返しの見込み（組むときの警告、`d.card` の高さ、lint の行数）がずれる。見本のページの画像と、組んだ資料の画像で見る。
-- コードの等幅の書体は、既定は Cascadia Mono。テーマの `mono` で変えられる（`[slides.themes.<名前>]` と `[docs.themes.<名前>]`）。等幅は和文を載せないので `JP_FONTS` には限らないが、リガチャのある書体（`slides.py` の `LIGATURE_MONO`: JetBrains Mono・Fira Code・Cascadia Code）は止める（`visual.md` の 2）。Google Fonts にない名前は、API が受け付けて、黙って別の書体（Arial）で描かれる。書いたら `template.py <名前>` で見本のページを組み直し、`gslides.py check` の画像で、コードが等幅で描けているか、`->` が矢印 1 字になっていないかを見る。
+- コードの等幅の書体は、既定は Cascadia Mono。テーマの `mono` で変えられる（テーマのファイルと `[docs.themes.<名前>]`）。等幅は和文を載せないので `JP_FONTS` には限らないが、リガチャのある書体（`slides.py` の `LIGATURE_MONO`: JetBrains Mono・Fira Code・Cascadia Code）は止める（`visual.md` の 2）。Google Fonts にない名前は、API が受け付けて、黙って別の書体（Arial）で描かれる。書いたら `template.py <名前>` で見本のページを組み直し、`gslides.py check` の画像で、コードが等幅で描けているか、`->` が矢印 1 字になっていないかを見る。
 - 確かめた書体の一覧は、リポジトリの README の「書体」。
 
 ## できないこと
 
 - 13.33 × 7.5 in 以外のページには組めない（上の 2）。
-- `[slides.themes]` の書体はスライドだけに効く。ドキュメント（Google Docs）の書体は `[docs.themes.<名前>]` の `font`・`mono`（`../doc-build/SKILL.md`）。ドキュメントのフッターの著作権表示は `[brand]` のまま。
-- `font` に書けるのは `JP_FONTS` の書体と DM Sans だけ（`template.py` が止める）。ほかの欧文の書体を使うなら、英数字の幅を測って `FONT_EM` に足す（Google Slides がどの版で描くかを、描いた画像で確かめる）。ほかの和文の Google Fonts を使うなら、試しのデッキで描けるかを画像で確かめてから `slides.py` の `JP_FONTS` に足す。
+- テーマのファイルの書体はスライドだけに効く。ドキュメント（Google Docs）の書体は `[docs.themes.<名前>]` の `font`・`mono`（`../doc-build/SKILL.md`）。ドキュメントのフッターの著作権表示は `[brand]` のまま。
+- `font` に書けるのは `JP_FONTS` の書体と DM Sans だけ（`slides.py lint` と `template.py` が止める）。ほかの欧文の書体を使うなら、英数字の幅を測って `FONT_EM` に足す（Google Slides がどの版で描くかを、描いた画像で確かめる）。ほかの和文の Google Fonts を使うなら、試しのデッキで描けるかを画像で確かめてから `slides.py` の `JP_FONTS` に足す。
 - 会社のテンプレートの文字の大きさ・行間・レイアウトは、`slides.py` が組むページには効かない（`visual.md` の 1 の型で組む）。会社の大きさで組みたいときは、`slides.py` の部品を直す（`factory-kaizen`）。
 - 人が画面で使う会社のテンプレート（全部のレイアウト）を、日本語用に整えることはしない。
-- テーマに入れない色（`TEXT`・`RULE`・`RED_SOFT`・`STAGE_TEXT`・`DECOR`）と名前で書く役割（`HEAD`・`CARD`・`SUB_ON_NAVY`・`ON_RED`）は、マスターの配色に枠が残っていない（12 の枠をすべて使う）。テーマに書くと、`slides.py build` がデッキのテーマ（`template.py` がマスターのページ番号の枠の代替テキストに書いた名前）から `factory.toml` の値を引いて組む。書かなければ、どのテーマでも同じ灰色と淡い赤。章の扉の章番号（`DECOR`、飾り）は、会社の `NAVY` と合わないことがあるので、合わなければ書く。`template.py` で合わせ直す前のテンプレートから作ったデッキは、テーマの名前を持たないので、既定の値で組む。
+- テーマに入れない色（`TEXT`・`RULE`・`RED_SOFT`・`STAGE_TEXT`・`DECOR`）と名前で書く役割（`HEAD`・`CARD`・`SUB_ON_NAVY`・`ON_RED`）は、マスターの配色に枠が残っていない（12 の枠をすべて使う）。テーマのファイルに書くと、`template.py` がマスターのページ番号の枠の代替テキスト（テーマの目印）に書き、`slides.py build` はテーマのファイルの値で組む。書かなければ、どのテーマでも同じ灰色と淡い赤。章の扉の章番号（`DECOR`、飾り）は、会社の `NAVY` と合わないことがあるので、合わなければ書く。
 - マスターのロゴは消える。ロゴを置くならページに画像として置く（JSON の `image`・`icon`。`../deck-build/slides.md` の 6）。表紙・扉のレイアウトのロゴは、`cover`・`section` で残せる（template-001）。
 
 ## 直すとき
 
-- 色や書体を変えたら、`factory.toml` を直して `check` を回し、`template.py <名前>` で合わせ直す（ID は変わらない）。作ったデッキの役割の色と本文の書体は変わらない（複製した時点の写し）。
-- **テーマに入れない色（名前で書く役割も）・`copyright`・`mono` を初めて書いたテーマは、`template.py <名前>` で合わせ直してから使う。** テンプレートにテーマの名前が入っていないと、`slides.py new` が止まる（複製したデッキが、組み直すたびに既定の値に戻らないように）。2 つのテーマで同じ `url` を使い、引く値が違うときも止まる。
-- **テーマに入れない色・`copyright`・`mono` は、組むたびに `factory.toml` から引く。** デッキを作ったあとで変えると、そのテーマのデッキを組み直したときに、役割の色はデッキに入った当時のまま、テーマに入れない色・著作権表示・等幅は新しい値になる。役割の色と一緒に変えたなら、テンプレートの見本だけでなく、組み直すデッキの画像も見る。
+- 色や書体を変えたら、テーマのファイルを直して `slides.py lint <ファイル>` を回し、`template.py <名前>` で合わせ直す（ID は変わらない）。作ったデッキは、`slides.py build` で組み直すと、マスターの配色・書体・目印がテーマのファイルの値にそろう（`../deck-build/slides.md` の 3）。役割の色を変えたなら、テンプレートの見本だけでなく、組み直したデッキの画像も見る。
+- 画面のテーマビルダーでテンプレートの色や書体を直したら、`slides.py theme <テンプレートの URL> --force` でテーマのファイルに戻す（戻さずに組むと、テーマのファイルの値に戻る）。
+- テンプレートにテーマの名前が入っていない（`template.py` で合わせ直す前のもの）か、別のテーマの名前が入っていると、`slides.py new` が止まる。
 - 会社のテンプレートが新しくなったら、新しい URL を `--from-base` に渡して作り直す。前のテンプレートは消すか、名前に「旧」を付ける。共有テーマのフォルダにあるなら、フォルダから外す（同じ名前のテーマが 2 つ出る）。作り直すと URL が変わるので、使う人にも新しい URL を書いてもらう（合わせ直し〔`--from-base` なし〕なら URL は変わらず、そのまま届く）。
