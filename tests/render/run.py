@@ -20,10 +20,21 @@ import gapi  # noqa: E402
 
 COMMON = "文字のはみ出し・重なり・切れがなく、本文がフッターと結論バンドに重ならず、矢印が箱から外れていない"  # どのページにも見るところ
 JUDGE = """{report} を読み、ページごとに画像（png の行のパス）を Read で開いて、「見るところ」と「どのページにも」をすべて満たすかを確かめる。
-答えは次の形だけにする（前置きを書かない）。1 ページ 1 行、最後の行に NG の数。
+答えは次の形だけにする（前置きを書かない）。どのページも 1 行ずつ、番号とファイル名は report.md の見出しのとおり。
 - p<番号> <ファイル>: OK
-- p<番号> <ファイル>: NG — <満たさない見るところと、画像で見えたこと>
-NG: <数>"""
+- p<番号> <ファイル>: NG — <満たさない見るところと、画像で見えたこと>"""
+
+
+def judged(answer, files):
+    """claude -p の答えの NG のページの数。どのページにも、番号とファイル名の合う OK か NG が 1 つずつなければ、判定の抜けとして止める。"""
+    got = re.findall(r"^- p(\d+) (\S+): (OK|NG)(?: — .*)?$", answer, re.M)
+    want = [(str(i), f) for i, f in enumerate(files, 1)]
+    seen = [(n, f) for n, f, _ in got]
+    if sorted(seen) != sorted(want):
+        miss = [f"p{n} {f}" for n, f in want if (n, f) not in seen]
+        extra = [f"p{n} {f}" for n, f in dict.fromkeys(seen) if seen.count((n, f)) > 1 or (n, f) not in want]
+        sys.exit(f"claude -p の答えに、判定のないページか重なったページがある（ない: {', '.join(miss) or 'なし'}。重なり・知らない: {', '.join(extra) or 'なし'}）")
+    return sum(v == "NG" for *_, v in got)
 
 
 def pages():
@@ -53,6 +64,15 @@ def main():
         sys.exit(__doc__ + f"\n知らない引数: {' '.join(bad)}")
     e = expect()
     if "--selftest" in a:
+        fs = ["a.json", "b.json"]
+        assert judged("- p1 a.json: OK\n- p2 b.json: NG — 矢印が外れている\n", fs) == 1 and judged("- p1 a.json: OK\n- p2 b.json: OK\n", fs) == 0
+        for bad in ("NG: 0\n", "- p1 a.json: OK\n", "- p1 a.json: OK\n- p1 a.json: OK\n- p2 b.json: OK\n",
+                    "- p1 a.json: OK\n- p2 c.json: OK\n", "- p1 a.json: OK\n- p2 b.json: **NG**\n"):  # 集計だけ、一部だけ、重なり、知らないファイル、崩れた書き方
+            try:
+                judged(bad, fs)
+                raise AssertionError(bad)
+            except SystemExit:
+                pass
         return print("selftest ok")
     ws = gapi.factory_path().parent
     folder = gapi.factory().get("drive", {}).get("internal") or sys.exit("factory.toml の [drive] internal が空。一時のデッキを置く Drive のフォルダ（検証用）を書く")
@@ -106,13 +126,9 @@ def main():
         r = subprocess.run(["claude", "-p", JUDGE.format(report=report), "--allowedTools", "Read"], cwd=out, capture_output=True, text=True)
         (out / "judge.md").write_text(r.stdout)
         print(r.stdout + r.stderr, end="")
-        m = re.search(r"^NG: (\d+)", r.stdout, re.M)
-        if r.returncode or not m:
-            sys.exit("claude -p の答えに「NG: <数>」の行がない（上の出力）")
-        ng = len(re.findall(r"^- p\d+ \S+: NG", r.stdout, re.M))  # 数は、ページごとの行の NG で数える（最後の行と食い違うことがある）
-        if ng != int(m.group(1)):  # 行の書き方が崩れると、行からは数えそこねる。多いほうを使う
-            print(f"NG の行は {ng} ページ（最後の行は {m.group(1)}）。多いほうを使う")
-        n += max(ng, int(m.group(1)))
+        if r.returncode:
+            sys.exit("claude -p が止まった（上の出力）")
+        n += judged(r.stdout, pages())
     sys.exit(1 if n else 0)
 
 
