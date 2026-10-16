@@ -1,0 +1,18 @@
+{
+ "apiVersion": "slides/v1",
+ "kind": "Theme",
+ "description": "既定の配色。濃紺の扉、淡い Oat の本文面、赤のアクセント。会社の色の指定がない資料（勉強会、技術の説明、提案）",
+ "colors": {
+  "NAVY": "1B3139",
+  "BG": "F9F7F4",
+  "RED_ON_NAVY": "FF5F46",
+  "PANEL": "EEEDE9",
+  "NAVY_BLOCK": "303F47",
+  "GA": "00A972",
+  "RED_TEXT": "CC2B17",
+  "PREVIEW": "FFAB00",
+  "SUB": "5A6F77",
+  "OSS": "2272B4",
+  "RED": "FF3621"
+ }
+}

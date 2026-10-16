@@ -1,0 +1,7 @@
+{"apiVersion": "slides/v1", "kind": "Theme",
+ "description": "見本のテーマ。会社のテンプレートから作るテーマの書き方（書かない役割は visual の色、書かない値は既定）",
+ "font": "Noto Sans JP", "mono": "Cascadia Mono",
+ "copyright": "© 2026 Example, Inc. All rights reserved.",
+ "colors": {"NAVY": "002B5C", "RED": "E4002B", "RED_TEXT": "C8102E", "RED_ON_NAVY": "FF8A9A", "TEXT": "303F47", "HEAD": "002B5C"},
+ "cover": ["Title Slide 1", {"layout": "Title Slide 2", "w": 7.08, "tone": "light"}],
+ "section": ["Section Break 1"]}

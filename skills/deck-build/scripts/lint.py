@@ -1130,13 +1130,11 @@ def selftest():
     assert hard == 0  # 英数字だけの等幅は通す
     res, _, hard = run(deck([(NAVY, [title(), shape(1, font=MONO, text=["# 名前"])])]))
     assert hard == 1 and len(res.hits[MONO_NG]) == 1
-    import slides  # テーマの mono（マスターの代替テキストのテーマの名前 → factory.toml）と比べる。factory.toml の代わりに表を渡す
-    table, slides.theme_table = slides.theme_table, lambda n: {"mono": "IBM Plex Mono"} if n == "code" else {}
+    import slides  # テーマの mono（マスターの代替テキストのテーマの目印の値）と比べる
     themed = deck([(NAVY, [title(), shape(1, font="IBM Plex Mono", text=["# 名前"]), shape(1, font=MONO_DEFAULT, text=["x = 1"])])])
-    themed["masters"][0]["pageElements"] = [{"description": "ai-deck-factory theme=code", "shape": {"placeholder": {"type": "SLIDE_NUMBER"}}}]
+    themed["masters"][0]["pageElements"] = [{"description": 'ai-deck-factory theme=code {"mono":"IBM Plex Mono"}', "shape": {"placeholder": {"type": "SLIDE_NUMBER"}}}]
     res, _, hard = run(themed)
     assert len(res.hits[MONO_NG]) == 1 and "IBM Plex Mono" in res.hits[MONO_NG][0] and len(res.hits[FONT_NG]) == 1 and MONO == "IBM Plex Mono"
-    slides.theme_table = table
     res, _, hard = run(deck([(NAVY, [title(), shape(1, font=MONO_DEFAULT, text=["# 名前"])])]))
     assert len(res.hits[MONO_NG]) == 1 and MONO == MONO_DEFAULT  # テーマの名前のないデッキは既定に戻す
     dm = deck([(NAVY, [shape(1, y=0.62, size=24, w=12, text=["見出し"], font="DM Sans"), shape(1, font="DM Sans")])])  # template.py が DM Sans で組んだテーマのデッキ

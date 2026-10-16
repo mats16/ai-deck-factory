@@ -18,7 +18,7 @@ description: 日本語のスライドを Slides API で Google Slides に直接�
 K=<deck-build のフォルダ>/scripts   # deck-build の SKILL.md のあるフォルダ。ほかのスキルからは、そのスキルのフォルダの ../deck-build/scripts
 cd <フォルダ>/build
 # スライド
-python3 $K/slides.py new <Drive のフォルダの URL> <YYYYMMDD_の名前>   # 初めて組むとき。出た URL をすぐユーザーに伝える（下の「Drive に置く」）。--theme company で会社の色
+python3 $K/slides.py new <Drive のフォルダの URL> <YYYYMMDD_の名前>   # 初めて組むとき。出た URL をすぐユーザーに伝える（下の「Drive に置く」）。--theme <テーマ>（slides.py themes の名前）で会社の色
 python3 $K/slides.py lint <URL>                                     # 直すたびに、組まずに手元で lint（前に回したときから変わったページ。下の「確かめ方の 3 つの層」）
 python3 $K/slides.py build <URL>                                    # 区切りで組む（変えたページだけ作り直す。URL は変わらない。画面で直されていたら止まる。slides.md の 1）
 python3 $K/gslides.py check <URL>                                   # 組んだら。変えたページの画像と lint。LT など話す資料は末尾に --talk。全ページの画像は --all

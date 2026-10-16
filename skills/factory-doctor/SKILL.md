@@ -21,7 +21,9 @@ python3 <このスキルのフォルダ>/scripts/doctor.py --local  # 手元だ�
 | `factory.toml`・`AGENTS.md`（`CLAUDE.md`・`references_index.md`） | factory-init で置く |
 | `factory.source` | 使わなくなった（factory-kaizen が自分で clone する）。ユーザーに伝えて消す |
 | スキルの重なり | ワークスペースの `.agents/skills/`・`.claude/skills/` に同じ名前のスキルがある。プラグインと二重に読まれるので、どちらを使うかをユーザーに聞く（ワークスペースのものを外すのはユーザーが決める） |
-| `google.quota_project`、`slides.themes` の `url`、`drive.*` | factory-init の 3 のとおり埋める。`slides.templates`（前の版の書き方）が要修正なら、URL を `[slides.themes.<名前>]` の `url` に移す |
+| `google.quota_project`、`slides.templates`、`drive.*` | factory-init の 3 のとおり埋める |
+| `slides.themes`（前の版の書き方） | テーマの表を、ワークスペースの `themes/slides/<名前>.json`（`kind: Theme`。色は `colors` の下に同じ名前で書き、`url` は書かない）に移し、`url` を `[slides.templates]` の「<名前> = "<url>"」に移して、表を消す。テンプレートのある名前は `slides.py theme <url>` でも写せる（2026-10-16 より前のテンプレートは、テーマに入れない色・`copyright`・`mono`・`description` が抜けるので、表から写す）。移す前に、表のコメントに残した経緯をどこに残すかをユーザーに聞く（JSON にはコメントを書けない） |
+| `themes/slides/<名前>.json`、テーマのファイル、`slides.default_theme` | 書けない値は、出た場所を直して `slides.py lint <ファイル>` で確かめる。テンプレートだけでファイルのないテーマは `slides.py theme <URL>` で写す |
 | テーマの説明 | `description` がないテーマは、エージェントが資料ごとに選べない。何のテーマで、どの資料・聞き手に使うかを書く（`deck-build/slides.md` の 3） |
 | `review.*`、AGENTS.md の方針のレビュー | `review.*` は雛形の範囲の値（`"ai"`・`"human"`、1〜3）に直す。AGENTS.md に前の雛形の「人がレビューするかも選んでもらう」が残っていれば、ユーザーに見せてから雛形の今の文（`[review] plan_reviewer` に従う）に替える（ワークスペースの決まりなので、黙って直さない） |
 | Google の認証 | 出たコマンド（`gcloud auth application-default login --scopes=…`）をユーザーに回してもらう。トークンの取り方は `factory.toml` の `[google]` のコメント |

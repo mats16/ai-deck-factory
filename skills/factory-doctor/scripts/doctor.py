@@ -2,7 +2,7 @@
 """usage: doctor.py [<ワークスペース>] [--local]   （--selftest で自己確認）
 AI Deck Factory を動かす前提を確かめる。--local は手元だけ見て、Google の API を呼ばない。
 1 行 1 項目で「OK」「要修正」「要確認」を出す。要修正が 1 つでもあれば exit 1。標準ライブラリだけ。"""
-import io, contextlib, os, shutil, subprocess, sys, tempfile, tomllib
+import io, contextlib, json, os, shutil, subprocess, sys, tempfile, tomllib
 from pathlib import Path
 
 SKILLS = Path(__file__).resolve().parents[2]  # プラグインの skills/
@@ -54,17 +54,21 @@ def check(ws, local=False):
     if not g.get("quota_project"):
         warn("google.quota_project", "空。gcloud の既定の OAuth クライアントで取ったトークンなら、Slides・Docs が 403 になる")
     from lint import COPYRIGHT_FOOTER  # 9pt で通す著作権表示の形（slides.py が全ページに書く）
-    import slides  # 仮の著作権表示（PLACEHOLDER_COPYRIGHT。need_brand と同じ）と、組み込みのテーマの説明（THEME_NOTES）
+    import slides  # 仮の著作権表示（PLACEHOLDER_COPYRIGHT。need_brand と同じ）と、テーマのファイルの読み方（read_theme）
     brand = cfg.get("brand", {})
     marks = [("brand.copyright", brand.get("copyright", ""))]  # テーマの copyright は、そのテーマのデッキで [brand] の代わりに書く（slides.py の use_theme）
-    marks += [(f"slides.themes.{n}.copyright", t["copyright"]) for n, t in cfg.get("slides", {}).get("themes", {}).items()
-              if isinstance(t.get("copyright"), str)]  # 文字列でない値は、下の theme_values が slides.themes.<名前> に出す（2 回出さない）
-    for kind, validate in (("slides", lambda t: (slides.theme_values(t), slides.theme_font(t))), ("docs", lambda t: (slides.theme_font(t), slides.theme_mono(t)))):
-        for n, t in cfg.get(kind, {}).get("themes", {}).items():  # 組むときに止まる値（色・copyright・書体）を、組む前に出す（slides.py・docs.py と同じ関数で見る）
-            try:
-                validate(t)
-            except SystemExit as e:
-                ng(f"{kind}.themes.{n}", str(e))
+    mine = {}  # ワークスペースのテーマのファイル（themes/slides/<名前>.json）。組むときに止まる値（形・色・copyright・書体）を、組む前に出す（slides.py と同じ read_theme で見る）
+    for f in sorted(root.joinpath(*slides.WS_THEMES).glob("*.json")):
+        try:
+            mine[f.stem] = slides.read_theme(f)
+        except SystemExit as e:
+            ng(f"themes/slides/{f.name}", str(e).replace(f"{f}: ", ""))
+    marks += [(f"themes/slides/{n}.json の copyright", t["copyright"]) for n, t in mine.items() if "copyright" in t]
+    for n, t in cfg.get("docs", {}).get("themes", {}).items():  # ドキュメントのテーマ（docs.py と同じ関数で見る）
+        try:
+            slides.theme_font(t), slides.theme_mono(t)
+        except SystemExit as e:
+            ng(f"docs.themes.{n}", str(e))
     for key, c in marks:
         if not (c := str(c).strip()):
             ng(key, "空。スライドもドキュメントも組めない（全ページの左下に書く著作権表示がない）。自分の会社の著作権表示を書く")
@@ -74,23 +78,24 @@ def check(ws, local=False):
             ng(key, f"「{c}」は「© <年> <社名> All rights reserved.」の形でない。lint が全ページの著作権表示を 11pt 未満として止める")
     if not brand.get("company"):
         warn("brand.company", "空。表紙の左下に社名を置かない")
-    mine, docs = sl.get("themes", {}), cfg.get("docs", {})
-    theme, temps = sl.get("default_theme", "visual"), {k: t["url"] for k, t in mine.items() if t.get("url")}
-    if old := {k: v for k, v in sl.get("templates", {}).items() if not mine.get(k, {}).get("url")}:  # 2026-10-12 までの書き方
-        ng("slides.templates", f"{', '.join(old)} のテンプレートの URL を [slides.themes.<名前>] の url に移す（[slides.templates] の visual = \"…\" → [slides.themes.visual] の url = \"…\"）")
-    if stale := [f"slides.themes.{k}.base" for k, t in mine.items() if "base" in t] + ["slides.base_template"] * ("base_template" in sl):  # 2026-10-14 までの書き方
-        ng("slides の base", f"{', '.join(stale)} を消す。元のテンプレートは factory.toml に持たず、template.py <テーマ> --from-base <元の URL> で渡す（渡さなければ白紙の pptx から作る）。残っていると template.py が止まる")
+    docs = cfg.get("docs", {})
+    files = {**{f.stem: t for f in slides.BUILTIN_THEMES.glob("*.json") for t in [slides.read_theme(f)]}, **mine}  # ワークスペースのものが勝つ
+    theme, temps = sl.get("default_theme", "visual"), {k: v for k, v in sl.get("templates", {}).items() if v}
+    if old := sl.get("themes"):  # 2026-10-16 までの書き方
+        ng("slides.themes", f"{', '.join(old)} はプラグインが読まない。テーマはワークスペースの themes/slides/<名前>.json（kind Theme。色は colors の下に同じ名前で書く）に、"
+                            "テンプレートの url は [slides.templates] の「<名前> = \"<url>\"」に移して消す（テンプレートのある名前は slides.py theme <url> でも写せる。../../deck-build/slides.md の 3）")
+    if "base_template" in sl:  # 2026-10-14 までの書き方
+        ng("slides の base", "slides.base_template を消す。元のテンプレートは factory.toml に持たず、template.py <テーマ> --from-base <元の URL> で渡す（渡さなければ白紙の pptx から作る）")
     if sl.get("template_folder"):  # 2026-10-12 までの書き方
         warn("slides.template_folder", "プラグインは読まない。新しく作るテンプレートは [drive] factory の下の Themes に作る（前の版のスクリプトで動かさなくなったら消す）")
-    if sl.get("templates") and not old:
-        warn("slides.templates", "プラグインは読まない（[slides.themes.<名前>] の url を読む）。前の版のスクリプト（.agents/skills/）で動かさなくなったら消す")
-    (ok if temps.get(theme) else warn)("slides.themes の url", ", ".join(temps) if temps.get(theme) else
-                                       f"既定のテーマ {theme} のテンプレートがない。template.py {theme} --from-base で作るか、共有のテーマ（slides.py themes）の url を書く")
-    no_desc = [n for n in temps if not mine.get(n, {}).get("description") and n not in slides.THEME_NOTES]  # テンプレートの Drive の説明にあるかは、Google を見るところで
-    desc_warn = lambda bad, note="": warn("slides.themes の説明", f"{', '.join(bad)} に description がない。エージェントが資料ごとにテーマを選べない"
-                                                             f"（[slides.themes.<名前>] の description に、どの資料・聞き手に使うかを書く）{note}")
-    if no_desc and local:
-        desc_warn(no_desc, "。url のテンプレートの Drive の説明にあるかは --local なしで見る")
+    (ok if temps.get(theme) else warn)("slides.templates", ", ".join(temps) if temps.get(theme) else
+                                       f"既定のテーマ {theme} のテンプレートがない。template.py {theme} --from-base で作るか、共有のテーマ（slides.py themes）を slides.py theme <url> で写す")
+    if bare := [n for n in temps if n not in files]:
+        ng("テーマのファイル", f"{', '.join(bare)} のテンプレートはあるが、themes/slides/<名前>.json がない。組めない。slides.py theme <[slides.templates] の URL> で写す")
+    if theme not in files:
+        ng("slides.default_theme", f"{theme} のテーマのファイルがない（themes/slides/{theme}.json）。テーマを書かない資料が組めない")
+    if no_desc := [n for n in temps if n in files and not files[n].get("description")]:
+        warn("テーマの説明", f"{', '.join(no_desc)} に description がない。エージェントが資料ごとにテーマを選べない（themes/slides/<名前>.json の description に、どの資料・聞き手に使うかを書く）")
     if bad := [n for n, t in docs.get("themes", {}).items() if not t.get("description")]:
         warn("docs.themes の説明", f"{', '.join(bad)} に description がない。エージェントが資料ごとにテーマを選べない")
     if (d := docs.get("default_theme")) and d not in docs.get("themes", {}) and d != "standard":  # standard は組み込み（docs.py の STANDARD）
@@ -116,10 +121,8 @@ def check(ws, local=False):
         first = str(e).splitlines()[0]
         fix = "google.quota_project を書く（空だと gcloud の既定の OAuth クライアントのトークンは 403）" if first.startswith("403") and not g.get("quota_project") else f"作り直す: {gapi.LOGIN}"
         ng("Google の認証", f"{how} で通らない: {first}。{fix}")
-        if no_desc:  # テンプレートの Drive の説明を見られないので、--local と同じに出す
-            desc_warn(no_desc, "。url のテンプレートの Drive の説明にあるかは、Google の認証が通ってから見る")
         return out
-    targets = [(f"slides.themes.{k}.url", v) for k, v in temps.items()] + [(f"docs.templates.{k}", v) for k, v in cfg.get("docs", {}).get("templates", {}).items()]
+    targets = [(f"slides.templates.{k}", v) for k, v in temps.items()] + [(f"docs.templates.{k}", v) for k, v in cfg.get("docs", {}).get("templates", {}).items()]
     targets += [(f"drive.{k}", v) for k, v in dr.items() if v]
     for name, url in targets:
         fid = gapi.folder_id(url) if "/folders/" in url else gapi.file_id(url)
@@ -128,9 +131,7 @@ def check(ws, local=False):
             (warn if f.get("trashed") else ok)(name, f"{f['name']}{'（ゴミ箱にある）' if f.get('trashed') else ''}")
         except gapi.ApiError as e:
             ng(name, f"開けない（{str(e).split()[0]}）: {url}")
-    if bad := [n for n in no_desc if not slides.theme_description(n)]:  # url だけを書いたテーマは、テンプレートの Drive の説明を使う
-        desc_warn(bad)
-    if dr.get("shared_themes"):  # 全社の共有テーマのフォルダ。探すときだけ読む（使うテーマは [slides.themes.<名前>] の url）
+    if dr.get("shared_themes"):  # 全社の共有テーマのフォルダ。探すときだけ読む（使うテーマは slides.py theme <url> で写す）
         try:
             files, have = slides.shared_files(), {gapi.file_id(u) for u in temps.values()}  # 自分の Themes は読まない（slides.py themes が出す）
             names, new = [f["properties"][slides.THEME_PROP] for f in files], [f["properties"][slides.THEME_PROP] for f in files if f["id"] not in have]
@@ -138,13 +139,13 @@ def check(ws, local=False):
         except slides.READ_ERRORS:  # 開けないことは drive.shared_themes に出ている
             return out
         if dup := sorted({n for n in names if names.count(n) > 1}):
-            warn("共有テーマ", f"同じ名前のテーマが 2 つ以上ある（どれを url で指すか迷う。古いほうをフォルダから外す）: {', '.join(dup)}")
+            warn("共有テーマ", f"同じ名前のテーマが 2 つ以上ある（どれを写すか迷う。古いほうをフォルダから外す）: {', '.join(dup)}")
         elif bare:  # テーマの名前を書く前（2026-10-14 より前）の template.py で作ったもの
             warn("共有テーマ", f"Google Slides が {bare} 個あるが、どれにもテーマの名前（{slides.THEME_PROP}）がない。持ち主が template.py <テーマ> で合わせ直すと書かれる")
         elif not names:
             warn("共有テーマ", "テーマがない。管理者が template.py で作ったテンプレートを置く（ほかのファイルは読まない）")
         else:
-            ok("共有テーマ", ", ".join(names) + (f"（factory.toml にない: {', '.join(new)}。使うなら slides.py themes の url を書く）" if new else ""))
+            ok("共有テーマ", ", ".join(names) + (f"（[slides.templates] にない: {', '.join(new)}。使うなら slides.py theme <url> で写す）" if new else ""))
     return out
 
 
@@ -167,7 +168,7 @@ def selftest():
         (Path(tmp) / ".agents" / "skills" / "deck-build").mkdir(parents=True)
         (Path(tmp) / ".agents" / "skills" / "deck-build" / "SKILL.md").write_text("x")
         k = kinds()
-        assert k["AGENTS.md"] == "OK" and k["スキルの重なり"] == "要確認" and k["slides.themes の url"] == "要確認" and k["drive.customers"] == "要確認"
+        assert k["AGENTS.md"] == "OK" and k["スキルの重なり"] == "要確認" and k["slides.templates"] == "要確認" and k["drive.customers"] == "要確認"
         (Path(tmp) / "Customers" / "acme").mkdir(parents=True, exist_ok=True)
         (Path(tmp) / "Customers" / "acme" / "CLAUDE.md").write_text("x")
         assert kinds()["顧客の memory"] == "要確認"
@@ -188,24 +189,34 @@ def selftest():
         assert kinds()["brand.copyright"] == "要修正"  # 仮の値をそのまま書いた
         toml.write_text(toml.read_text().replace('"© 2026 Example, Inc. All rights reserved."', '"© 2026 Acme, Inc. All rights reserved."'))
         assert "brand.copyright" not in kinds()
-        toml.write_text(toml.read_text() + '\n[slides.themes.mine]\ncopyright = "© Me 2026"\n')
-        assert kinds()["slides.themes.mine.copyright"] == "要修正"  # テーマの copyright にも同じ確かめ
-        toml.write_text(toml.read_text().replace('"© Me 2026"', '"© 2026 Me. All rights reserved."'))
-        assert "slides.themes.mine.copyright" not in kinds()
-        toml.write_text(toml.read_text() + 'TEXT = "red"\n\n[docs.themes.us2]\nmono = "Fira Code"\n')
-        assert kinds()["slides.themes.mine"] == "要修正" and kinds()["docs.themes.us2"] == "要修正"  # 6 桁でない色、リガチャの出る等幅
-        toml.write_text(toml.read_text().replace('\n[slides.themes.mine]\ncopyright = "© 2026 Me. All rights reserved."\nTEXT = "red"\n\n[docs.themes.us2]\nmono = "Fira Code"\n', ""))
-        assert "slides.themes.mine" not in kinds() and "docs.themes.us2" not in kinds()
-        toml.write_text(toml.read_text() + '\n[slides.themes.num]\ncopyright = 2026\n')
-        assert kinds()["slides.themes.num"] == "要修正" and "slides.themes.num.copyright" not in kinds()  # 文字列でない copyright は 1 回だけ出す
-        toml.write_text(toml.read_text().replace('\n[slides.themes.num]\ncopyright = 2026\n', ""))
-        toml.write_text(toml.read_text() + '\n[slides.templates]\nvisual = "x"\n')
-        assert kinds()["slides.templates"] == "要修正"  # 古い書き方だけ
-        toml.write_text(toml.read_text().replace('[slides.templates]\nvisual = "x"\n', ""))
-        assert "slides の base" not in kinds()  # 雛形には書いていない
-        toml.write_text(toml.read_text().replace("[slides.themes.visual]", '[slides.themes.visual]\nbase = ""', 1))
-        assert kinds()["slides の base"] == "要修正"  # 2026-10-14 までの書き方。空でも消す
-        toml.write_text(toml.read_text().replace('[slides.themes.visual]\nbase = ""', "[slides.themes.visual]", 1))
+        themes = Path(tmp, "themes", "slides")
+        themes.mkdir(parents=True)
+        put = lambda n, o: (themes / f"{n}.json").write_text(json.dumps({"apiVersion": "slides/v1", "kind": "Theme", **o}))
+        put("mine", {"copyright": "© Me 2026"})
+        assert kinds()["themes/slides/mine.json の copyright"] == "要修正"  # テーマの copyright にも同じ確かめ
+        put("mine", {"copyright": "© 2026 Me. All rights reserved.", "colors": {"TEXT": "red"}})
+        toml.write_text(toml.read_text() + '\n[docs.themes.us2]\nmono = "Fira Code"\n')
+        assert kinds()["themes/slides/mine.json"] == "要修正" and kinds()["docs.themes.us2"] == "要修正"  # 6 桁でない色、リガチャの出る等幅
+        assert "themes/slides/mine.json の copyright" not in kinds()
+        toml.write_text(toml.read_text().replace('\n[docs.themes.us2]\nmono = "Fira Code"\n', ""))
+        put("mine", {"copyright": 2026})
+        assert kinds()["themes/slides/mine.json"] == "要修正" and "themes/slides/mine.json の copyright" not in kinds()  # 文字列でない copyright は 1 回だけ出す
+        put("mine", {})
+        assert "themes/slides/mine.json" not in kinds() and "slides.themes" not in kinds()
+        toml.write_text(toml.read_text().replace("\n[slides.templates]", '\n[slides.templates]\nmine = "x"\nacme = "y"', 1))
+        k = kinds()
+        assert k["テーマのファイル"] == "要修正" and "acme" in next(d for _, n, d in check(Path(tmp), local=True) if n == "テーマのファイル")  # テンプレートだけで、テーマのファイルがない
+        assert k["テーマの説明"] == "要確認"  # mine に description がない
+        put("mine", {"description": "自分の"})
+        toml.write_text(toml.read_text().replace('mine = "x"\nacme = "y"', 'mine = "x"', 1))
+        assert "テーマのファイル" not in kinds() and "テーマの説明" not in kinds()
+        toml.write_text(toml.read_text() + '\n[slides.themes.visual]\nurl = "x"\n')
+        assert kinds()["slides.themes"] == "要修正"  # 2026-10-16 までの書き方
+        toml.write_text(toml.read_text().replace('\n[slides.themes.visual]\nurl = "x"\n', ""))
+        assert "slides の base" not in kinds() and "slides.default_theme" not in kinds()  # 雛形には書いていない。既定の visual は組み込み
+        toml.write_text(toml.read_text().replace('default_theme = "visual"', 'default_theme = "nope"\nbase_template = ""', 1))
+        assert kinds()["slides の base"] == "要修正" and kinds()["slides.default_theme"] == "要修正"  # 2026-10-14 までの書き方（空でも消す）、ファイルのない既定のテーマ
+        toml.write_text(toml.read_text().replace('default_theme = "nope"\nbase_template = ""', 'default_theme = "visual"', 1))
         toml.write_text(toml.read_text() + '\n[docs]\ndefault_theme = "acme"\n\n[docs.themes.us]\npage = [215.9, 279.4]\n')
         assert kinds()["docs.default_theme"] == "要修正" and kinds()["docs.themes の説明"] == "要確認"  # 既定のテーマがない、説明がない
         toml.write_text(toml.read_text().replace('default_theme = "acme"', 'default_theme = "standard"'))

@@ -61,7 +61,7 @@ pi install -l git:github.com/mats16/ai-deck-factory
 
 ## 4. ワークスペースを作る
 
-1. `<プラグイン>/skills/factory-init/SKILL.md` を開き、その手順に従う。「このスキルのフォルダ」は `<プラグイン>/skills/factory-init`、ほかのスキルのフォルダは `<プラグイン>/skills/<スキル>`。手順の 1（場所）は、ここの 1 で聞いたので飛ばす。3 の `[drive] shared_themes` は、ここの 1 の 2 で聞いた値を書く。3 の `[slides] default_theme`（既定のテンプレート）は、テンプレートを作り、共有のテーマの `url` を書いたあとで、`<プラグイン>/skills/deck-template/SKILL.md` の「既定のテーマを選ぶ」に従って選択式で聞く（1 では聞かない。何を選べるかは、そろってから分かる）。
+1. `<プラグイン>/skills/factory-init/SKILL.md` を開き、その手順に従う。「このスキルのフォルダ」は `<プラグイン>/skills/factory-init`、ほかのスキルのフォルダは `<プラグイン>/skills/<スキル>`。手順の 1（場所）は、ここの 1 で聞いたので飛ばす。3 の `[drive] shared_themes` は、ここの 1 の 2 で聞いた値を書く。3 の `[slides] default_theme`（既定のテンプレート）は、テンプレートを作り、共有のテーマを `slides.py theme <url>` で写したあとで、`<プラグイン>/skills/deck-template/SKILL.md` の「既定のテーマを選ぶ」に従って選択式で聞く（1 では聞かない。何を選べるかは、そろってから分かる）。
 2. factory-init の最後の「確かめる」は、`<プラグイン>/skills/factory-doctor/SKILL.md` を開いて従う。要修正が 0 になるまで直す。Google のログインのように、ユーザーが回すものが残ったら、回してもらってから doctor をもう一度回す。
 
 ## 5. 定期の整理を登録する
