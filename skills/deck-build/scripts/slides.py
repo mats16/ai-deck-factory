@@ -2127,11 +2127,12 @@ def use_pages(p):
 
 
 def deck_context(path, url=None):
-    """組む・見るデッキのテーマを決める（make_deck の前に呼ぶ）。テーマは deck.json の theme、なければ url のデッキの目印、なければ既定のテーマ。
+    """組む・見るデッキのテーマを決める（make_deck の前に呼ぶ）。テーマは deck.json の theme、なければ url のデッキの目印、なければ既定のテーマ
+    （deck.json の theme のファイルがあれば、url のデッキは読まない）。
     テーマのファイルがあればその値で（Google を読まない。url のデッキも組むときにこの値にそろう）、なければ url のデッキが持つ値で組む。
     戻り: (テーマの名前, テーマの表, presentations.get の形の masters・layouts)。"""
     want, p = declared_theme(path), None
-    if url:
+    if url and load_theme(want) is None:  # deck.json の theme のファイルがあれば、URL のデッキは読まない（認証が切れていても、手元だけで見る）
         p = request("GET", f"{SLIDES}/{file_id(url)}?fields=title,{DECK_FIELDS}")
         need_deck_theme(want, deck_theme(p))
     name = want or (deck_theme(p) if p else None) or default_theme()
@@ -2228,17 +2229,20 @@ def build_plan(pid, deck, force=False, theme=None, only=None):
             have[m.group(1)].append(o)
     new_n = Counter(digest.values())
     twins = {h for h in new_n if new_n[h] > 1 or len(have[h]) > 1}  # 中身の同じページ（今の pages.py か、前に組んだデッキに 2 枚以上）
-    for s in deck.slides:
-        if have[digest[s]]:
-            keep[s] = have[digest[s]].pop(0)
     names = {sid: n for n, sid in deck.page_names.items()}
-    frozen = set()
-    if only is not None:  # 選んでいないページは、前に組んだ同じページ（ファイル名の印）を残す
-        by_key = {m.group(1): o for o in olds if (m := PAGE_KEY.search(o))}
+    key = lambda o: m.group(1) if (m := PAGE_KEY.search(o)) else None
+    by_key, claimed, frozen = {k: o for o in olds if (k := key(o))}, set(), set()
+    if only is not None:  # 選んでいないページは、先に前に組んだ同じページ（ファイル名の印）を取る（同じ中身のほかのページに、ハッシュで取られないように）
         for s in deck.slides:
-            if s not in keep and s in names and names[s] not in only and (o := by_key.get(page_key(names[s]))) and o not in keep.values():
+            if s in names and names[s] not in only and (o := by_key.get(page_key(names[s]))):
                 keep[s] = o
-                frozen.add(s)
+                claimed.add(o)
+                if PAGE_HASH.search(o).group(1) != digest[s]:
+                    frozen.add(s)
+    for s in deck.slides:  # 中身のハッシュが同じ前のページを残す。同じファイル名の印のものを先に選ぶ（同じ中身のページが 2 枚以上あっても、元のページに戻す）
+        if s not in keep and (cands := [o for o in have[digest[s]] if o not in claimed]):
+            keep[s] = next((o for o in cands if s in names and key(o) == page_key(names[s])), cands[0])
+            claimed.add(keep[s])
     chose = lambda s: only is None or names.get(s) in only
     for s in [s for s in keep if chose(s) and any(digest[t] in twins for t in links[s])]:  # 中身の同じページのどれへのリンクかはハッシュで分からないので、リンク元を作り直す（選んでいないページは前のリンクのまま）
         keep.pop(s)
@@ -2279,6 +2283,8 @@ def build(pid, deck, force=False, theme=None, only=None):
         batch(pid, theme_reqs(*theme, *deck_parts(x.p)))
         if not force:  # 自分の書き込みの版を残す（このあとページを組めずに止まっても、次の build が画面での直しと取り違えない）
             gapi.stamp(pid, revision(pid), STAMP)
+        if os.path.exists(shots := f"/tmp/slides_{pid[:8]}/shots.json"):  # ID の変わらないページも色が替わるので、gslides.py check が前の画像を使わずに全ページを取る
+            os.remove(shots)
         print(f"テーマ {theme[0]} のファイルの値（{'・'.join(x.themed)}）を、デッキのマスターに書いた", file=sys.stderr)
     carrier = None
     try:
@@ -3801,6 +3807,27 @@ def selftest_diff():
                     finally:
                         globals()["request"] = req0
                     assert live[0] != before[0] and live[1] == before[1] and live[2] != before[2], (live, before)
+                    # 同じ中身のページがあっても、選んでいないページは前のスライドのまま（ハッシュで先に取られない）
+                    page("p1", "p1 だけの")
+                    page("p2", "同じ")
+                    page("p3", "同じ")
+                    build("x" * 10, spec(), force=True)
+                    before = list(live)
+                    page("p2", "p2 を直している")
+                    dk = spec()
+                    with contextlib.redirect_stdout(out := io.StringIO()):
+                        cmd_plan("x" * 10, dk, None, chosen(["p1.json"], dk, None))
+                    assert json.loads(out.getvalue())["frozen"] == [2], out.getvalue()
+                    build("x" * 10, dk, only=chosen(["p1.json"], dk, None))
+                    assert live == before, (live, before)
+                    # deck.json の theme のファイルがあれば、URL を渡しても Google を読まない
+                    Path(t, "d2.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Deck", "name": "d", "theme": "visual", "pages": ["p1.json"]}))
+                    req0 = globals()["request"]
+                    globals()["request"] = lambda *a, **k: (_ for _ in ()).throw(AssertionError("Google を読んだ"))
+                    try:
+                        assert deck_context("d2.json", "https://docs.google.com/presentation/d/abc/edit")[0] == "visual"
+                    finally:
+                        globals()["request"] = req0
                     # テーマのファイルは、デッキのテーマのファイルそのものだけを受け付ける（名前が同じ別のファイルで、違う値を当てたと思わせない）
                     Path(t, "visual.json").write_text((BUILTIN_THEMES / "visual.json").read_text())
                     assert chosen([str(theme_path("visual"))], dk, "visual") == set()
@@ -3819,6 +3846,8 @@ def selftest_diff():
                         fb(pid, reqs)
                     globals()["batch"] = fail_pages
                     vis = read_theme(BUILTIN_THEMES / "visual.json")
+                    os.makedirs(f"/tmp/slides_{('x' * 10)[:8]}", exist_ok=True)
+                    Path(f"/tmp/slides_{('x' * 10)[:8]}/shots.json").write_text("[]")  # 前に取った画像の記録
                     try:
                         build("x" * 10, spec(), force=False, theme=("visual", {**vis, "NAVY": "000000"}))
                         raise AssertionError("ページの batch の失敗を通した")
@@ -3826,7 +3855,7 @@ def selftest_diff():
                         pass
                     finally:
                         globals()["batch"], gapi.stamp = fb, lambda *a: None
-                    assert len(stamps) == 1
+                    assert len(stamps) == 1 and not Path(f"/tmp/slides_{('x' * 10)[:8]}/shots.json").exists()  # マスターを書いたら、次の check は全ページを取る
                     try:
                         chosen(["p2.json"], make_deck(lambda d: d.page("pages.py の"), "t"), None)
                         raise AssertionError("pages.py のデッキでページを選べた")
