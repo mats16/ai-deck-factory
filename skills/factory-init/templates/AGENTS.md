@@ -49,7 +49,7 @@ AI Deck Factory（プラグイン）で、スライドとドキュメントを�
 | 材料を集める | `deck-practices/materials.md`（検索・会議の記録・社内のチャットの使い方、`references.md` の台帳） |
 | 社内資料の流用 | `deck-practices/reuse.md`（4 つの段階の決め方、Google Slides の書き出しとページの画像） |
 | 構成案と言葉 | `deck-practices/content.md`（資料の種類ごとの書き分け、見出し、文体と出典） |
-| スライド | `deck-build/slides.md`（コマンド、pages.py の書き方、テンプレートとテーマ、Slides API の落とし穴、画像）と `deck-practices/visual.md`（色・配置・文字サイズ、和文の組み方） |
+| スライド | `deck-build/slides.md`（コマンド、ページの書き方〔JSON〕、テンプレートとテーマ、Slides API の落とし穴、画像）と `deck-practices/visual.md`（色・配置・文字サイズ、和文の組み方） |
 | ドキュメント | `doc-build/SKILL.md`（doc.md の書き方と確かめるループ、テンプレート、Docs API の落とし穴）と `deck-practices/visual_doc.md`（版面・見出し・表と図） |
 | テンプレートを作る・整える（会社のテンプレートから） | `deck-template/SKILL.md`（3 つの場合、役割への色の当て方、書体、コントラストの直し方） |
 | 仕上げと納品 | `deck-build/SKILL.md`（`gslides.py check` と lint の見方、納品物、Drive への置き方）、ドキュメントは `doc-build/SKILL.md`、`deck-review/SKILL.md`（返す前の全体のレビュー） |
