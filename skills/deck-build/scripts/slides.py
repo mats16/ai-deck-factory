@@ -1522,9 +1522,12 @@ class SpecPage:
                 sys.exit(f"{loc}: id「{i}」が 2 つある")
             self.ids[i] = (x, y, w, h)
             # つなぐのは、文字の枠が見える箱と同じ大きさの四角になる部品だけ（接続点は四角の上 0・左 1・下 2・右 3）。楕円や矢羽根の図形と、
-            # 左寄せ・右寄せの塗りの文字・札・数字の強調（Deck.text が文字の枠を箱の内に縮める）はつながない。矢印の先が箱の中に入る
+            # 左寄せ・右寄せの塗りの文字・札・数字の強調（Deck.text が文字の枠を箱の内に縮める）と、2 字以上で文字の枠が円より広がる番号
+            # （Deck.text の ring）はつながない。矢印の先が箱の中か、円の外に出る
             center = e.get("align", "center" if kind == "label" else "left") == "center"
-            shrink = kind in ("text", "label", "stat") and not center and (kind == "stat" or e.get("pad") is None or e["pad"] > INSET)
+            dia, npt = NUM[e.get("size", "M")] if kind == "num" else (0, 0)
+            shrink = (kind in ("text", "label", "stat") and not center and (kind == "stat" or e.get("pad") is None or e["pad"] > INSET)
+                      or kind == "num" and len(str(e["n"])) > 1 and em_width(str(e["n"])) * npt / 72 + 2 * INSET > dia)
             if kind in CONNECT and (kind != "text" or e.get("fill") or e.get("line")) and e.get("shape", "rectangle") in ("rectangle", "round_rectangle") and not shrink:
                 self.anchors[i] = loc
         fill = e.get("fill")
@@ -1627,7 +1630,7 @@ class SpecPage:
         a, b = (self.anchors.get(v) if isinstance(v, str) else None for v in (e["from"], e["to"]))
         bent = e.get("route") == "bent"
         if bent and not (a and b):
-            sys.exit(f"{loc}（arrow）.route: 折れ線（bent）は、両端を id でつなげる部品（card・code・num・box と、中央寄せの label・stat・塗りか枠線のある text。shape は四角か角丸）に引く")
+            sys.exit(f"{loc}（arrow）.route: 折れ線（bent）は、両端を id でつなげる部品（card・code・box・1 字の num と、中央寄せの label・stat・塗りか枠線のある text。shape は四角か角丸）に引く")
         # 両端がつなげる部品なら、図形につなぐ（画面で動かしても付いてくる）。つないだ線は接続点（辺の中央）から引くので、間を空けない
         pa, pb = (ARROW_PAD if (aw or ah) and not (a and b) else 0), (ARROW_PAD if (bw or bh) and not (a and b) else 0)  # [x, y] の端はその点まで
         sites = None
@@ -3898,6 +3901,14 @@ def selftest_spec():
                                                                              {"type": "stat", "id": "s", "value": "3", "x": 8, "y": 0, "w": 2},
                                                                              {"type": "arrow", "from": "l", "to": "c"}, {"type": "arrow", "from": "c", "to": "s"}]}]})
     assert not any("link" in e for e in els if e["call"] == "arrow")  # 文字の枠が箱の内に縮む部品（左寄せの塗りの文字・stat）はつながない
+    d, els = run({"type": "slide", "body": [{"type": "frame", "h": 1, "items": [{"type": "num", "id": "a", "n": 1, "x": 0, "y": 0}, {"type": "num", "id": "b", "n": 10, "x": 2, "y": 0},
+                                                                             {"type": "label", "id": "c", "text": "x", "x": 4, "y": 0, "w": 1, "h": 0.36},
+                                                                             {"type": "arrow", "from": "a", "to": "c"}, {"type": "arrow", "from": "b", "to": "c"}]}]})
+    one, ten = [e for e in els if e["call"] == "arrow"]
+    assert "link" in one and "link" not in ten  # 1 字の番号は円と同じ大きさの枠につなぐ。2 字以上は枠が円より広がるのでつながない
+    to = next(r["updateLineProperties"]["lineProperties"]["startConnection"]["connectedObjectId"] for r in d.reqs if "startConnection" in r.get("updateLineProperties", {}).get("lineProperties", {}))
+    frame = next(r["createShape"]["elementProperties"]["size"] for r in d.reqs if r.get("createShape", {}).get("objectId") == to)
+    assert frame["width"]["magnitude"] == frame["height"]["magnitude"] == emu(NUM["M"][0])["magnitude"]  # つないだ枠は円と同じ大きさ
     with contextlib.redirect_stderr(io.StringIO()):
         d, els = run({"type": "slide", "body": [{"type": "gantt", "cols": [f"{i} 月" for i in range(1, 13)], "rows": [{"head": "a", "bars": [{"from": 1, "to": 1, "text": "ユーザーの受け入れの試験と確かめ"}]}]},
                                                 {"type": "bars", "items": [["a", 100.0]] + [[str(i), 12345678] for i in range(15)], "unit": "件"}]})
