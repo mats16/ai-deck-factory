@@ -1529,7 +1529,8 @@ class SpecPage:
             if e["type"] == "gantt" and loc == self.body and all(c.get("type") == "arrow" for c in items[i + 1:]) and self.room:  # 矢印は場所を取らない  # 本文の最後のガントは、余った高さを行に配る（slides-010）
                 eh += min(G_GROW * len(e["rows"]), max(self.room - y - eh, 0))
             if frame and (e["x"] + ew > w + 0.01 or e["y"] + eh > frame + 0.01):  # frame の外に描くと、ページの下端の見込みにも入らない
-                sys.exit(f"{l}（{e['type']}）: frame の外に出る（右端 {e['x'] + ew:.2f} in・下端 {e['y'] + eh:.2f} in。frame は幅 {w:.2f} in・高さ {frame:.2f} in）")
+                sys.exit(f"{l}（{e['type']}）: frame の外に出る（ページの左上から、部品は右端 {x + e['x'] + ew:.2f} in・下端 {y + e['y'] + eh:.2f} in、"
+                         f"frame は右端 {x + w:.2f} in・下端 {y + frame:.2f} in）")
             self.place(e, x + e["x"] if frame else x, y + e["y"] if frame else y, ew, eh, l)
             if frame:
                 spans.append((e["y"], e["y"] + eh))
@@ -1656,7 +1657,8 @@ class SpecPage:
         def end(v, k):
             if isinstance(v, list):
                 if bounds and not (0 <= v[0] <= bounds[0] + 0.01 and 0 <= v[1] <= bounds[1] + 0.01):  # frame の部品と同じく、frame の外を指さない
-                    sys.exit(f"{loc}（arrow）.{k}: {v} は frame の外（frame は幅 {bounds[0]:.2f} in・高さ {bounds[1]:.2f} in）")
+                    sys.exit(f"{loc}（arrow）.{k}: {v} は frame の外（ページの左上から、点は {origin[0] + v[0]:.2f}, {origin[1] + v[1]:.2f} in、"
+                             f"frame は左端 {origin[0]:.2f} in・上端 {origin[1]:.2f} in・右端 {origin[0] + bounds[0]:.2f} in・下端 {origin[1] + bounds[1]:.2f} in）")
                 return (origin[0] + v[0], origin[1] + v[1], 0, 0)
             if v not in self.ids:
                 sys.exit(f"{loc}（arrow）.{k}: id「{v}」の部品がない（このページにあるもの: {'・'.join(self.ids) or 'なし'}）")
@@ -1712,9 +1714,10 @@ class SpecPage:
             tw = min(r[2], widest_em(e["text"]) * e.get("size", 11) / 72)
             return (r[0] + {"left": 0, "center": (r[2] - tw) / 2, "right": r[2] - tw}[e.get("align", "left")], r[1], tw, r[3])
         rs = [(loc, kind, ink(kind, r, e)) for kind, loc, r, _, _, e in self.placed if r[2] > 0 and r[3] > 0]
+        rings = {loc for _, loc, _, _, _, e in self.placed if e.get("shape") == "ellipse"}  # 輪の上にカードを載せる図は、重ねるのが意図
         for i, (l1, k1, a) in enumerate(rs):
             for l2, k2, b in rs[i + 1:]:
-                if min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0]) > 0.03 and min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1]) > 0.03 and not rect_in(a, b) and not rect_in(b, a):
+                if l1 not in rings and min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0]) > 0.03 and min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1]) > 0.03 and not rect_in(a, b) and not rect_in(b, a):
                     self.warns.append(f"{l1}（{k1}）と {l2}（{k2}）が一部だけ重なる。離すか、一方をもう一方の中に収める")
         for loc, pts, _, ends, lab in self.lines:
             for l2, k2, r in rs:
@@ -1795,11 +1798,11 @@ def spec_page(d, p, base, loc, name=None):
         d.warn(w)
     made = {}  # 部品の場所 → 組んだ図形の ID（矢印をつなぐ先。card・code は箱）
     for c in sp.out:
-        kw = {k: v for k, v in c.items() if k not in ("call", "loc")}
-        if kw.get("link"):
-            a, sa, z, sz = kw["link"]
-            kw["link"] = (made[a], sa, made[z], sz)
-        r = getattr(d, c["call"])(sid, **kw)
+        ckw = {k: v for k, v in c.items() if k not in ("call", "loc")}
+        if ckw.get("link"):
+            a, sa, z, sz = ckw["link"]
+            ckw["link"] = (made[a], sa, made[z], sz)
+        r = getattr(d, c["call"])(sid, **ckw)
         made.setdefault(c["loc"], d.anchor if c["call"] in ("card", "code") else r)
     if band:
         d.band(sid, b["text"], b.get("sub"))
@@ -3655,6 +3658,7 @@ def selftest_spec():
     assert arr["link"] == ["spec.body[0].items[0]", 3, "spec.body[0].items[1]", 1] and conn["endConnection"]["connectionSiteIndex"] == 1  # 右の辺から左の辺へ、箱につなぐ
     assert conn["startConnection"]["connectedObjectId"] in {g[1] for g in d.round_groups}  # つなぐのはカードの箱の文字の枠（角丸の図形のまとまりには、つなげない）
     assert els[-1]["call"] == "arrow" and d.notes and json.dumps(d.resolved)  # 矢印は最後に引く。解いた形は JSON にできる
+    assert d.resolved[0]["title"] == "見出し" and d.resolved[0]["lead"] == "リード"  # 解いた形のページの値は、最後の部品の値で上書きしない
     assert any(r.get("insertText", {}).get("text") == "出典: 公式" for r in d.reqs)
     assert spec_where(d)("p1: 「下の文は強調と uv」の") == f"（spec.body[1]）" and spec_where(d)("p1: 12 個") == ""  # lint の指摘に部品の場所を付ける
     two = Deck("x")
@@ -3896,6 +3900,9 @@ def selftest_spec():
     assert w.count("上を通る") == 2 and w.count("重なる") == 1, w  # 囲みの box、両端の部品、自分の札は数えない
     arr, lab = next(e for e in els if e["loc"] == "spec.body[0].items[8]"), next(e for e in els if e["loc"] == "spec.body[0].items[8].label")
     assert lab["call"] == "text" and lab["parts"] == "① 要求" and near(lab["x"] + lab["w"] / 2, (arr["x1"] + arr["x2"]) / 2) and near(lab["y"] + lab["h"] + LABEL_GAP, arr["y1"])  # 横の線の上の中央
+    d, _ = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [  # 輪（楕円）の上にカードを載せる図は、一部だけ重なっても知らせない
+        {"type": "text", "text": "輪", "shape": "ellipse", "fill": "PANEL", "x": 1, "y": 0.4, "w": 8, "h": 2.4}, {"type": "card", "head": "載せる", "x": 0, "y": 1, "w": 2.5, "h": 0.8}]}]})
+    assert not any("重なる" in w for w in d.warnings), d.warnings
     _, els = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [{"type": "label", "id": "a", "text": "A", "x": 0, "y": 0, "w": 2},
         {"type": "label", "id": "b", "text": "B", "x": 0, "y": 2, "w": 2}, {"type": "arrow", "from": "a", "to": "b", "label": "縦"}]}]})
     arr, lab = (e for e in els if e["call"] in ("arrow", "text"))
@@ -3932,9 +3939,9 @@ def selftest_spec():
                       ({"title": "t", "body": [{"type": "text", "text": "a", "size": 0}]}, "0 より大きい数"),
                       ({"title": "t", "body": [{"type": "frame", "h": 1, "items": [{"type": "box", "x": 0, "y": 0, "w": 1, "h": -1, "fill": "PANEL"}]}]}, "0 より大きい数"),
                       ({"title": "t", "body": [{"type": "frame", "h": 1, "items": [{"type": "box", "x": 0, "y": 2.5, "w": 2, "h": 1, "fill": "PANEL"}]}]}, "frame の外に出る"),
-                      ({"title": "t", "body": [{"type": "frame", "h": 1, "items": [{"type": "box", "x": 12, "y": 0, "w": 1, "h": 1, "fill": "PANEL"}]}]}, "frame の外に出る"),
+                      ({"title": "t", "body": [{"type": "frame", "h": 1, "items": [{"type": "box", "x": 12, "y": 0, "w": 1, "h": 1, "fill": "PANEL"}]}]}, "ページの左上から、部品は右端 13.60 in"),  # frame の右端（12.73 in）と並べる
                       ({"type": "cover", "title": "t", "kicker": "k", "variant": 0}, "1 以上の整数"),
-                      ({"title": "t", "body": [{"type": "frame", "h": 1, "items": [{"type": "arrow", "from": [0, 0], "to": [1, 3]}]}]}, "は frame の外"),
+                      ({"title": "t", "body": [{"type": "frame", "h": 1, "items": [{"type": "arrow", "from": [0, 0], "to": [1, 3]}]}]}, "は frame の外（ページの左上から、点は 1.60,"),
                       ({"title": "t", "body": [{"type": "row", "items": []}]}, "1 つ以上の部品"),
                       ({"title": "t", "body": [{"type": "table", "rows": [[]]}]}, "rows"),
                       ({"title": "t", "body": [{"type": "grid", "cols": 2, "h": 1, "items": [{"type": "card", "head": "a", "text": "b"}]}]}, "知らないキー h"),
