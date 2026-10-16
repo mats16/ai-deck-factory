@@ -1,0 +1,16 @@
+{"apiVersion": "slides/v1", "kind": "Page",
+ "title": "印のあるカードを並べる", "lead": "アイコン・番号・ロゴを左か上に置き、row の矢印でつなぐ", "kicker": "card",
+ "body": [
+  {"type": "row", "arrows": true, "items": [
+    {"type": "card", "icon": "tabler:database", "head": "取り込む", "text": "届いたままの形で残す"},
+    {"type": "card", "num": 2, "head": "整える", "text": "- 型をそろえる\n- 重複を外す"},
+    {"type": "card", "image": "asset:gcp/bigquery.png", "head": "BigQuery", "text": "集計を置く", "align": "center"}]},
+  {"type": "row", "items": [
+    {"type": "card", "head": "今", "items": [["取り込み", "手で回す"], ["確かめ", "目で見る"]], "step": 0.62, "line": "RULE"},
+    {"type": "card", "head": "これから", "items": [["取り込み", "毎日の定時に回す"], ["確かめ", "lint と画像で見る"]], "step": 0.62},
+    {"type": "stack", "items": [
+      {"type": "card", "icon": "tabler:server", "head": "業務のデータベース", "valign": "middle", "fill": "PANEL"},
+      {"type": "card", "icon": "tabler:cloud", "head": "データレイク", "valign": "middle", "fill": "NAVY"}]},
+    {"type": "card", "head": "地の色を替えたカード", "text": "PANEL の地には枠線が付かない", "fill": "PANEL"}]}],
+ "band": {"text": "印のあるカードは、見出しと本文を印の横にそろえる", "sub": "番号の円は地によらず赤"},
+ "note": "上の列は矢印でつないだ流れ。下の列は step で項目の上端をそろえたカードと、上下の中央にそろえた小さなカード。"}

@@ -1,0 +1,25 @@
+{"apiVersion": "slides/v1", "kind": "Page",
+ "title": "row で書けない図は frame に置く", "lead": "囲みと枝分かれは位置で置き、矢印は id でつなぐ", "kicker": "frame・grid",
+ "body": [
+  {"type": "frame", "h": 2.4, "items": [
+    {"type": "box", "id": "zone", "x": 0, "y": 0, "w": 5.6, "h": 2.4, "fill": "PANEL"},
+    {"type": "text", "text": "**社内のネットワーク**", "x": 0.2, "y": 0.15, "w": 3},
+    {"type": "label", "id": "db", "text": "業務のデータベース", "x": 0.3, "y": 1.1, "w": 2.2, "h": 0.6, "fill": "CARD"},
+    {"type": "label", "id": "etl", "text": "取り込み", "x": 3.1, "y": 1.1, "w": 2.2, "h": 0.6, "fill": "CARD"},
+    {"type": "label", "id": "lake", "text": "データレイク", "x": 6.6, "y": 1.1, "w": 2.4, "h": 0.6, "fill": "NAVY", "color": "WHITE"},
+    {"type": "label", "id": "bi", "text": "画面と報告", "x": 9.8, "y": 0.2, "w": 2.2, "h": 0.6},
+    {"type": "label", "id": "ml", "text": "予測のモデル", "x": 9.8, "y": 1.6, "w": 2.2, "h": 0.6},
+    {"type": "icon", "name": "tabler:cloud", "x": 7.55, "y": 0.35, "size": 0.5, "color": "NAVY"},
+    {"type": "image", "src": "asset:gcp/bigquery.png", "x": 11.5, "y": 0.95, "w": 0.4, "h": 0.4, "alt": "BigQuery"},
+    {"type": "num", "n": 1, "x": 0.3, "y": 0.7, "size": "S", "fill": "NAVY"},
+    {"type": "box", "x": 9.55, "y": 0, "w": 2.55, "h": 2.4, "line": "SUB", "dash": true, "weight": 1, "shape": "round_rectangle", "radius": 0.15},
+    {"type": "arrow", "from": "db", "to": "etl"},
+    {"type": "arrow", "from": "etl", "to": "lake", "color": "RED", "weight": 2},
+    {"type": "arrow", "from": "lake", "to": "bi"},
+    {"type": "arrow", "from": "lake", "to": "ml", "dash": true},
+    {"type": "arrow", "from": [7.8, 0.88], "to": [7.8, 1.08], "head": false}]},
+  {"type": "grid", "cols": 3, "gap": 0.24, "items": [
+    {"type": "text", "text": "**取り込み**<br>1 日 1 回", "fill": "PANEL"},
+    {"type": "text", "text": "**変換**<br>段ごとに", "fill": "PANEL"},
+    {"type": "text", "text": "**配る**<br>画面と API", "fill": "PANEL"}]}],
+ "note": "囲みの中に見出しと箱を置き、矢印は id でつなぐ。横 1 列の流れなら row の arrows で書く。"}

@@ -1,0 +1,21 @@
+{"apiVersion": "slides/v1", "kind": "Page",
+ "title": "文字と札の書き方", "lead": "記法で書式を書き、塗りや枠線は部品の既定にまかせる", "kicker": "text・label",
+ "body": [
+  {"type": "text", "spacing": 125, "para_gap": 4,
+   "text": "**太字**、***赤の太字***、{20:大きな文字}、[外のリンク](https://docs.databricks.com/)、[構成図のページ](#diagram)へのリンク。`uv run` は地の文の書体のまま<br>段落の中の改行\n2 つ目の段落"},
+  {"type": "row", "gap": 0.3, "items": [
+    {"type": "text", "text": "- 箇条書きの 1 つ目\n- 箇条書きの 2 つ目", "fill": "PANEL", "pad": 0.2, "radius": 0.15},
+    {"type": "text", "text": "枠線だけの箱（点線）", "line": "RULE", "dash": true, "weight": 1, "align": "center", "valign": "middle"},
+    {"type": "stack", "items": [
+      {"type": "text", "text": "全体を太字にした補足", "bold": true, "size": 12, "color": "SUB", "align": "right"},
+      {"type": "text", "text": "python3 slides.py lint --all", "mono": true}]}]},
+  {"type": "row", "items": [
+    {"type": "label", "text": "GA", "w": "fit", "fill": "GA", "color": "STAGE_TEXT"},
+    {"type": "label", "text": "Public Preview", "w": "fit", "fill": "PUBLIC_PREVIEW", "color": "STAGE_TEXT"},
+    {"type": "label", "text": "uv run", "w": "fit", "mono": true},
+    {"type": "label", "text": "左寄せの札", "align": "left", "pad": 0.2, "radius": 0.2, "bold": false, "size": 12}]},
+  {"type": "row", "gap": 0.12, "items": [
+    {"type": "text", "text": "**準備**", "shape": "home_plate", "fill": "PANEL", "align": "center"},
+    {"type": "text", "text": "**試し**", "shape": "chevron", "fill": "PANEL", "align": "center"},
+    {"type": "text", "text": "**定着**", "shape": "chevron", "fill": "NAVY", "align": "center"}]}],
+ "note": "記法は太字、赤の太字、一部の大きさ、リンク、段落の中の改行。箇条書きは別の text に分ける。"}

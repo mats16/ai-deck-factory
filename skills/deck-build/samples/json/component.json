@@ -1,0 +1,2 @@
+{"apiVersion": "slides/v1", "kind": "Component", "type": "card", "icon": "tabler:database", "head": "部品 1 つ",
+ "text": "kind Component のファイルは、型のないページに置いて部品だけを確かめる", "w": 4}
