@@ -21,7 +21,7 @@ from gapi import DRIVE, GSLIDES, PPTX, SLIDES, batch, factory, file_id, folder_i
 from lint import JA, cells, contrast, flatten, lum, paras, solid
 from slides import (BG, BLANK, CARD, COPYRIGHT_PT, DECOR, EMU, GA, HEAD, INSET, NAVY, NAVY_BLOCK, ON_RED, OSS, PAD, PANEL, PREVIEW, RED, RED_ON_NAVY,
                     RED_SOFT, RED_TEXT, RULE, SLOTS, STAGE_TEXT, SUB, SUB_ON_NAVY, TEXT, WHITE, W, X, Y_BODY, Y_FOOT, build, cols, make_deck, number_style)
-from slides import (BUILTIN_THEMES, FIXED as FIXED_DEFAULT, FOLDER, FONT_EM, JP_FONTS, LAYOUT_MARK, NAMED, ROLE, THEME_MARK, THEME_PROP, THEMES_DIR, VARIANTS, find_themes_folder, is_blank,
+from slides import (BUILTIN_THEMES, FIXED as FIXED_DEFAULT, FOLDER, FONT_EM, JP_FONTS, LAYOUT_MARK, NAMED, ROLE, THEME_MARK, THEME_PROP, THEMES_DIR, TONES, VARIANTS, find_themes_folder, is_blank,
                     load_theme, need_brand, placeholders, read_theme, record_template, templates, theme_file, theme_fixed, theme_font, theme_names,
                     theme_reqs, theme_slots, use_font, use_layouts, use_theme, ws_themes)
 
@@ -36,15 +36,24 @@ FIXED = [(TEXT, "TEXT", "本文の文字", WHITE, None), (HEAD, "HEAD", "本文�
          (ON_RED, "ON_RED", "RED の塗りの上の文字", TEXT, RULE), (RED_SOFT, "RED_SOFT", "小さな赤の札の地", RED_TEXT, None), (STAGE_TEXT, "STAGE_TEXT", "札の文字", WHITE, None),
          (DECOR, "DECOR", "章番号。部品が使う", WHITE, None)]  # テーマに入れない色（既定の値か NAMED の名前, 名前, 用途, 載せる文字, 枠線）
 ON = {NAVY: WHITE, NAVY_BLOCK: WHITE, RED_TEXT: WHITE, SUB: WHITE, OSS: WHITE, BG: TEXT, PANEL: TEXT}  # 枠に載せる文字の色（届かなければ、札の文字か白の届くほう）。ほかは札の文字の色
-# 役割の組（文字, 地, 基準, どこで使うか）。visual.md の 1・3 の組み合わせ。18pt 未満は 4.5:1、18pt 以上か 14pt 以上の太字は 3:1。visual・company はすべて届く。
+# 役割の組（文字, 地, 基準, どこで使うか）。visual.md の 1・3 の組み合わせ。18pt 未満の細字と 11pt 未満の太字は 4.5:1、18pt 以上と 11pt 以上の太字は 3:1（visual.md の 3）。visual・company はすべて届く。
 # NAMED の役割（HEAD・CARD・SUB_ON_NAVY・ON_RED）は、テーマが書いていなければ既定の色で測る（alias）。本文の地が暗いテーマも同じ組で測る
 PAIRS = [(WHITE, NAVY, 4.5, "結論バンドの白"), (SUB_ON_NAVY, NAVY, 4.5, "濃紺の上の補足・フッター"), (RED_ON_NAVY, NAVY, 4.5, "表紙の小見出し"),
          (HEAD, BG, 4.5, "見出し"), (HEAD, PANEL, 4.5, "パネルの見出し"), (HEAD, CARD, 4.5, "カードの見出し・表の 1 列目"),
          (TEXT, BG, 4.5, "本文"), (TEXT, PANEL, 4.5, "パネルの本文"), (TEXT, CARD, 4.5, "カードの本文"), (SUB, BG, 4.5, "出典・フッター"), (SUB, PANEL, 4.5, "パネルの補足"),
          (SUB, CARD, 4.5, "カードの補足"), (RED_TEXT, BG, 4.5, "キッカー"), (RED_TEXT, PANEL, 4.5, "パネルの赤の文字"), (RED_TEXT, CARD, 4.5, "カードの赤の文字"),
-         (RED_TEXT, RED_SOFT, 4.5, "淡い赤の札"), (RED, BG, 3.0, "18pt 以上の赤の文字"), (ON_RED, RED, 3.0, "赤の塗りの 14pt 以上の太字（番号の丸）"),
+         (RED_TEXT, RED_SOFT, 4.5, "淡い赤の札"), (RED, BG, 3.0, "18pt 以上の赤の文字"), (ON_RED, RED, 3.0, "赤の塗りの太字（番号の丸）"),
          (WHITE, NAVY_BLOCK, 4.5, "扉の中のブロックの白"), (SUB_ON_NAVY, NAVY_BLOCK, 4.5, "扉の中のブロックの補足"), (STAGE_TEXT, GA, 4.5, "GA の札"),
          (STAGE_TEXT, PREVIEW, 4.5, "Beta・Preview の札"), (WHITE, OSS, 4.5, "OSS の札")]
+# 扉の章番号（88pt 太字）と扉の地の組（visual-038）。地の明るさ（slides.py の TONES）ごとに、テーマの扉が使うものだけを測る。濃紺の地は Blank に組む扉でも使う
+DIVIDER = {"dark": (TONES["dark"][2], NAVY, 3.0, "濃紺の地の扉の章番号"), "accent": (TONES["accent"][2], RED, 3.0, "赤の地の扉の章番号"),
+           "light": (TONES["light"][2], BG, 3.0, "白の地の扉の章番号")}
+
+
+def theme_pairs(t):
+    """テーマの表 t で測る組: PAIRS と、扉のパターン（section）の地の明るさごとの章番号の組。"""
+    tones = {"dark"} | {s.get("tone", "dark") for s in t.get("section", []) if isinstance(s, dict)}
+    return PAIRS + [DIVIDER[k] for k in DIVIDER if k in tones]
 NO_RENDER = {"Noto Sans CJK JP", "Hiragino Sans", "Yu Gothic"}  # API は受け付けるが、描くと明朝と欧文のセリフ体になる（Google Fonts にない）
 PAGE = (13.333, 7.5)  # slides.py の版面（in）。違う大きさのテンプレートには組めない
 
@@ -96,16 +105,18 @@ def shift(c, other, need):
     return min((walk(-0.005), walk(0.005)), key=rank)[0]
 
 
-def fix(T):
+def fix(T, pairs=PAIRS + [DIVIDER["dark"]]):
     """T（palette）を PAIRS で測り、届かない組の色を shift で直す。直すのは、文字がテーマの枠かテーマが書いた NAMED ならその文字の色、
     文字が固定の色なら地の色。戻りは（直した T、[(どこ, 枠, 前, 後, 前の比, 後の比)]）。"""
     T, out = dict(T), []
     for _ in range(3):  # 1 つの枠を直すと、ほかの組の比が変わることがある
-        for fg, gr, need, use in PAIRS:
+        for fg, gr, need, use in pairs:
             fg, gr = alias(T, fg), alias(T, gr)
             if (r := contrast(T.get(fg, fg), T.get(gr, gr))) >= need:
                 continue
-            slot, other = (fg, T.get(gr, gr)) if fg in SLOTS or fg in NAMED else (gr, T.get(fg, fg))
+            slot, other = (fg, T.get(gr, gr)) if fg in SLOTS or fg in NAMED or fg == DECOR else (gr, T.get(fg, fg))  # 章番号（飾り）は、地の主色を動かさずに自分が動く
+            if (fg, gr) == DIVIDER["accent"][:2]:  # 赤の地の章番号（濃紺）は、主色も強調の色も動かさない。check が届かないと出す
+                continue
             if slot not in T:  # 文字も地も固定の色（TEXT / 書いていない CARD など）は動かさない。check が「届かない」に出す
                 continue
             old, T[slot] = T[slot], shift(T[slot], other, need)
@@ -116,11 +127,11 @@ def fix(T):
 
 def check(theme, t):
     """テーマ theme（表 t）の役割の組のコントラストと、届かない色の直す案を出す。すべて届けば True。slides.py lint <テーマのファイル> が呼ぶ。"""
-    T = palette(t)
-    F, out = fix(T)
+    T, ps = palette(t), theme_pairs(t)
+    F, out = fix(T, ps)
     name = {**{c: n for c, n, *_ in FIXED}, **{slot: n for n, slot in ROLE.items()}}
     print(f"テーマ {theme} の役割の組（文字 / 地、比 / 基準）")
-    for fg, gr, need, use in PAIRS:
+    for fg, gr, need, use in ps:
         r = contrast(tone(T, fg), tone(T, gr))
         print(f"  {'OK' if r >= need else 'NG'}  {use}: {name.get(fg, fg)} {tone(T, fg)} / {name.get(gr, gr)} {tone(T, gr)}  {r:.2f}:1 / {need:g}:1")
     if out:
@@ -128,10 +139,10 @@ def check(theme, t):
         for slot in dict.fromkeys(o[1] for o in out):
             old, new = next(o[2] for o in out if o[1] == slot), F[slot]
             print(f'  "{name[slot]}": "{new}"  # {old} から{"暗く" if lum(new) < lum(old) else "明るく"}した（{"、".join(dict.fromkeys(o[0] for o in out if o[1] == slot))}）')
-    for fg, gr, need, use in PAIRS:  # 明るさだけでは届かない組（白か黒まで動かしても届かない、ほかの組と同じ枠を取り合うなど）。当てる色を替える
+    for fg, gr, need, use in ps:  # 明るさだけでは届かない組（白か黒まで動かしても届かない、ほかの組と同じ枠を取り合うなど）。当てる色を替える
         if (r := contrast(tone(F, fg), tone(F, gr))) < need:
             print(f"  直す案でも届かない: {use}（{r:.2f}:1 / {need:g}:1）。役割に当てる色を替える")
-    return all(contrast(tone(T, fg), tone(T, gr)) >= need for fg, gr, need, _ in PAIRS)
+    return all(contrast(tone(T, fg), tone(T, gr)) >= need for fg, gr, need, _ in ps)
 
 
 def runs(page, empty=False):
@@ -207,7 +218,7 @@ def specimen(theme, t, origin=()):
         s = d.divider("01", "色と部品", "テーマの色の役割と、本文ページの部品")
         d.card(s, X, 5.0, 2.4, 0.85, None, body=[("扉の中のブロック\n", {"bold": True, "color": WHITE}), ("白と SUB_ON_NAVY だけを載せる", {"color": SUB_ON_NAVY})],
                fill=NAVY_BLOCK, line=None)
-        d.note(s, "章の扉です。章番号は飾りの色で、コントラストの基準の外です。扉の中のブロックには、白と濃紺の上の補足の色（SUB_ON_NAVY）だけを載せます。濃紺の上の赤は、ブロックの上ではコントラストが届きません。")
+        d.note(s, "章の扉です。章番号は飾りの色ですが、濃紺の上で大きな文字の基準（3:1）に届く色にします。扉の中のブロックには、白と濃紺の上の補足の色（SUB_ON_NAVY）だけを載せます。濃紺の上の赤は、ブロックの上ではコントラストが届きません。")
 
         s = d.page("色は役割の名前で選び、値はテーマが決める", "濃い色の枠には白か札の文字、淡い色の枠には本文の色を載せる。", kicker="早見表")
         cw, ch, gap = (W - 3 * 0.2) / 4, 1.0, 0.2
@@ -486,6 +497,14 @@ def main():
             d = specimen(name, theme(name))
             assert len(d.slides) == 6 and not d.images and all(s in d.notes for s in d.slides)
         assert all(not fix(palette(read_theme(f)))[1] for f in BUILTIN_THEMES.glob("*.json"))  # 組み込みのテーマは、役割の組がすべて届く
+        for f in BUILTIN_THEMES.glob("*.json"):  # 組み込みのテーマの章番号は、濃紺・赤・白のどの地の扉でも 3:1 に届く（visual-038）
+            assert not fix(palette(read_theme(f)), PAIRS + list(DIVIDER.values()))[1], f
+        light = {**read_theme(BUILTIN_THEMES / "visual.json"), "section": [{"layout": "a"}, {"layout": "b", "tone": "light"}]}
+        assert [p[3] for p in theme_pairs(light)][-2:] == ["濃紺の地の扉の章番号", "白の地の扉の章番号"] and DIVIDER["accent"] not in theme_pairs(light)  # 使う地だけ
+        F, out = fix({**palette(light), DECOR: "3E5159"}, theme_pairs(light))  # 白の地の扉もあれば、直す案は両方の地に届く
+        assert all(contrast(F[DECOR], F[g]) >= 3 for g in (NAVY, BG)) and F[NAVY] == palette(light)[NAVY]
+        F, out = fix({**palette(light), NAVY: "8A3A3A"}, PAIRS + [DIVIDER["accent"]])  # 赤の地の章番号（濃紺）が届かなくても、主色と強調の色は章番号のためには動かさない
+        assert "赤の地の扉の章番号" not in [o[0] for o in out]
         visual, company = (read_theme(BUILTIN_THEMES / f"{n}.json") for n in ("visual", "company"))
         F, out = fix({**palette(company), SUB: "618794"})  # 公式のテンプレートの ACCENT5。Oat Medium の上で 3.32:1
         assert {o[1] for o in out} == {SUB} and F[SUB] == "506F7A"  # 同じ青緑のまま暗くする（company の SUB はこの案）
@@ -493,8 +512,10 @@ def main():
         assert contrast(shift("4A5A70", "5A6E8C", 4.5), "5A6E8C") >= 4.5  # 暗くしても届かない色は明るくする
         F, out = fix({**palette(visual), NAVY: "1F6FB2", RED_ON_NAVY: "B22222"})  # 中くらいの青の NAVY に、RED をそのまま写した RED_ON_NAVY
         assert contrast(F[RED_ON_NAVY], F[NAVY]) >= 4.5 and lum(F[RED_ON_NAVY]) > lum("B22222") and len({o[1] for o in out}) == len(out)
+        F, out = fix({**palette(visual), DECOR: "3E5159"})  # 章番号が扉の地に届かなければ、NAVY でなく DECOR を明るくする
+        assert [o[1] for o in out] == [DECOR] and F[NAVY] == palette(visual)[NAVY] and contrast(F[DECOR], F[NAVY]) >= 3
         F, out = fix({**palette(visual), TEXT: "8A8A8A"})  # テーマの固定の色でも測る。直すのは役割の枠（地）のほう
-        assert out and all(o[1] in SLOTS for o in out) and F[TEXT] == "8A8A8A" and contrast("8A8A8A", F[BG]) >= 4.5
+        assert out and all(o[1] in SLOTS or o[1] == DECOR for o in out) and F[TEXT] == "8A8A8A" and contrast("8A8A8A", F[BG]) >= 4.5  # 章番号は、動いた地に合わせて自分が動く
         assert palette(visual)[TEXT] == TEXT and set(palette(visual)) == set(SLOTS) | set(FIXED_DEFAULT.values())  # 書いていなければ既定の値
         T = palette(visual)  # 書いていない NAMED は既定の色で測る（前の PAIRS と同じ組）
         assert [tone(T, c) for c in (HEAD, CARD, SUB_ON_NAVY, ON_RED)] == [T[NAVY], WHITE, RULE, WHITE] and alias(T, HEAD) == NAVY

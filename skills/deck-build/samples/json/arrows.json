@@ -1,0 +1,20 @@
+{"apiVersion": "slides/v1", "kind": "Page",
+ "title": "矢印は上下にも引き、枝分かれは折れ線にする", "lead": "上下に離れた箱は縦に引き、ずれた箱と 1 つから分かれる枝は折れ線にする", "kicker": "arrow",
+ "body": [
+  {"type": "frame", "h": 2.8, "items": [
+    {"type": "label", "id": "up", "text": "上の箱", "x": 0, "y": 0, "w": 2.2, "h": 0.6},
+    {"type": "label", "id": "down", "text": "下の箱", "x": 0, "y": 2.2, "w": 2.2, "h": 0.6},
+    {"type": "card", "id": "root", "icon": "tabler:git-fork", "head": "分ける", "valign": "middle", "x": 3.6, "y": 0, "w": 2.6, "h": 0.8},
+    {"type": "label", "id": "left", "text": "左の枝", "x": 2.9, "y": 2.2, "w": 1.8, "h": 0.6, "fill": "CARD"},
+    {"type": "label", "id": "right", "text": "右の枝", "x": 5.1, "y": 2.2, "w": 1.8, "h": 0.6, "fill": "NAVY"},
+    {"type": "label", "id": "from", "text": "左上の箱", "x": 7.6, "y": 0, "w": 2.0, "h": 0.6},
+    {"type": "label", "id": "to", "text": "右下の箱", "x": 10.0, "y": 2.2, "w": 2.0, "h": 0.6},
+    {"type": "arrow", "from": "up", "to": "down"},
+    {"type": "arrow", "from": "root", "to": "left", "route": "bent"},
+    {"type": "arrow", "from": "root", "to": "right", "route": "bent", "color": "RED"},
+    {"type": "arrow", "from": "from", "to": "to", "route": "bent", "dash": true}]},
+  {"type": "row", "arrows": true, "items": [
+    {"type": "label", "text": "集める", "fill": "PANEL"},
+    {"type": "label", "text": "整える", "fill": "PANEL"},
+    {"type": "label", "text": "配る", "fill": "NAVY"}]}],
+ "note": "上下に離れた箱は縦の矢印。1 つの箱から上下に分かれる枝は、どれも bent にする（縦・横・縦）。左右にも上下にもずれた箱は bent で横・縦・横に折る。下は札を row の矢印でつないだ流れ。"}

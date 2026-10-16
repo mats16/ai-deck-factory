@@ -8,7 +8,7 @@
 
 - **Claude Code と pi で同じソースを使う。** `skills/` は両方が読む。`rules/` を続けて出す仕組みは、`hooks/rules_overlay.py` を Claude Code（`hooks/hooks.json`）と pi（`extensions/rules.ts`）の両方から呼んでいる。片方だけに効く直しにしない。
 - **スクリプトは標準ライブラリだけで書く。** Pillow などが要るものだけ、先頭の `# /// script` に依存を書いて `uv run` で回す。Python は 3.11 以上で動かす（README の「入れ方」）。
-- **直したスクリプトは `--selftest` を通す。** 回し方は下の「sandbox で確かめる」の 2。見た目に効く部品（`slides.py`・`template.py`・`docs.py`）を直したら、テンプレートの見本を組み直して画像で見る（`deck-build/slides.md`・`doc-build/SKILL.md`）。JSON のページの形と部品を直したら、`skills/deck-build/samples/json/` の見本を sandbox に写して `slides.py new` で組み、全ページの画像で見る（形にキーを足したら見本にも足す。selftest が見る）。部品や書き方の説明を直したら、`docs/fixtures/` の依頼文を会話を持たない子に渡し、説明だけで正しい部品を選べるかを見る（[docs/development.md](docs/development.md) の「依頼文で試す」）。
+- **直したスクリプトは `--selftest` を通す。** 回し方は下の「sandbox で確かめる」の 2。見た目に効く部品（`slides.py`・`template.py`・`docs.py`）を直したら、テンプレートの見本を組み直して画像で見る（`deck-build/slides.md`・`doc-build/SKILL.md`）。JSON のページの形と部品を直したら、sandbox で `python3 ../tests/render/run.py --judge` を回し、`skills/deck-build/samples/json/` の見本を全部組んで、全ページの画像をページごとの見るところ（`tests/render/expect.json`）と比べる（形にキーを足したら見本にも足す。selftest が見る。見本のページを足したら見るところも足す）。部品や書き方の説明を直したら、`docs/fixtures/` の依頼文を会話を持たない子に渡し、説明だけで正しい部品を選べるかを見る（[docs/development.md](docs/development.md) の「依頼文で試す」）。
 - **スキルを足す・外す・名前を変えるときは、数と名前の出てくるところをそろえる。** README の表、`docs/` の「11 個」、`deck-practices` などから指しているパス。
 - **PR の本文は `.github/pull_request_template.md` の節で書く。** 回したコマンドと結果はそのまま貼り、「レビューで見てほしいところ」にファイル:行と確信のない判断を書く。レビューする人も AI も、そこから読む。
 - **ユーザーが決めたことは、README の「決めたこと」に日付とユーザーの発言（原文）で残す。** 後回しにしたものは「残っている課題」に書く。
@@ -38,7 +38,7 @@ worktree の直下に検証用のワークスペース `sandbox/` を置き、wo
 2. **selftest を回す。** `sandbox/` で回す（`template.py` は `factory.toml` を探す）。Python は最低の版の 3.11 にそろえる。
 
    ```sh
-   for f in ../hooks/*.py ../skills/*/scripts/*.py; do
+   for f in ../hooks/*.py ../skills/*/scripts/*.py ../tests/*/*.py; do
      grep -q -e --selftest "$f" && echo "$f: $(uv run -q --python 3.11 "$f" --selftest 2>&1 | tail -1)"
    done
    ```

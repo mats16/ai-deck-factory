@@ -45,6 +45,17 @@ pi install -l ..
 - trust は、`sandbox/` で対話の pi を開いて `/trust` で保存する（`pi -p` の子は聞けないので、先に済ませる）。親のフォルダの決定も子に効く。ホームを信頼してあれば、`--approve` なしの `pi -p`・`--mode rpc` でも読まれた。worktree を置くフォルダ（T3 Code なら `~/.t3/worktrees`）ごと信頼すると、聞かれなくなる代わりに、あとからそこに置くほかのリポジトリの拡張も黙って読まれる（[pi.md](pi.md) の「project trust」）。
 - 同じ名前のスキルがほかにあると、パッケージのものは負ける（[pi.md](pi.md) の「同じ名前のスキルがあるとき」）。`get_commands` の `sourceInfo.path` が worktree を指しているかを確かめる。
 
+## 見本を組んで画像で見る
+
+JSON のページの形と部品を直したら、`sandbox/` で `tests/render/run.py` を回す。見本（`skills/deck-build/samples/json/` の全ページと、部品 1 つの `component.json`）を `[drive] internal` に一時のデッキとして組み、lint（手元と組んだあと）と全ページの画像を取って、ページごとの見るところ（`tests/render/expect.json`）と並べた `sandbox/.factory/render/report.md` を書く。デッキは画像を取ったらゴミ箱に移す（`--keep` で残す）。
+
+```sh
+python3 ../tests/render/run.py            # report.md を書く。画像は自分で開いて見る
+python3 ../tests/render/run.py --judge    # 続けて claude -p に画像を見させ、ページごとの OK・NG を judge.md に書く
+```
+
+lint の要修正か、`--judge` の NG があれば、終わりの状態が 1 になる。`--judge` の見立ては LLM なので、NG のページは画像を開いて確かめる。見本のページを足したら、`expect.json` にも見るところを足す（`--selftest` が見る）。
+
 ## 依頼文で試す
 
 JSON のページの形やスキルの説明を直したら、会話を持たない子に [fixtures/](fixtures/) の依頼文を渡して書かせ、各ファイルの「見るところ」で確かめる（pom の dev-fixtures にならった。2026-10-16）。説明だけで正しい部品を選べるかは、selftest では分からない。
