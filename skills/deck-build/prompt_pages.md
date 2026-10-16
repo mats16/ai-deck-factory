@@ -15,7 +15,7 @@
 - ワークスペースの決まり: <ワークスペース>/AGENTS.md と、<ワークスペース>/rules/ の deck-practices・deck-build の下のファイル（あれば）
 - この資料で受けた修正の指示: python3 <deck-practices のフォルダ>/scripts/ledger.py list --deck <資料のフォルダ>
 - 材料: 構成案の出典の表と <資料のフォルダ>/references.md にあるもの（数字と固有名詞を確かめるときだけ開く）
-- 書き方: <deck-build のフォルダ>/slides.md の slides-034（JSON のページの書き方）と 4・6、一通りの書き方を入れた見本の <deck-build のフォルダ>/samples/json/（同じ型のページを開く）、<deck-practices のフォルダ>/visual.md と content.md の 4〜6。書けるキーと色の名前は `python3 <deck-build のフォルダ>/scripts/slides.py schema` で出る
+- 書き方: <deck-build のフォルダ>/slides.md の slides-034（JSON のページの書き方）と 4・6、一通りの書き方を入れた見本の <deck-build のフォルダ>/samples/json/（同じ型のページを開く）、<deck-practices のフォルダ>/visual.md と content.md の 4〜6。書ける型・キー・色の名前の早見表は `python3 <deck-build のフォルダ>/scripts/slides.py schema --brief` で出る（全部は `schema`）
 
 ## 書き方
 - 並べ方は row・stack・grid で書き、座標は frame の中だけに書く。文字の強調は **太字** と ***赤の太字***、一部だけの大きさは {32:48}、ほかのページへのリンクは [名前](#<ページのファイル名>)、矢印は部品の id でつなぐ（slides.md の slides-034）。形のキーで書けないものだけ raw に書き、返事に書く（slides-035）。

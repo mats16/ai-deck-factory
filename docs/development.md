@@ -45,6 +45,19 @@ pi install -l ..
 - trust は、`sandbox/` で対話の pi を開いて `/trust` で保存する（`pi -p` の子は聞けないので、先に済ませる）。親のフォルダの決定も子に効く。ホームを信頼してあれば、`--approve` なしの `pi -p`・`--mode rpc` でも読まれた。worktree を置くフォルダ（T3 Code なら `~/.t3/worktrees`）ごと信頼すると、聞かれなくなる代わりに、あとからそこに置くほかのリポジトリの拡張も黙って読まれる（[pi.md](pi.md) の「project trust」）。
 - 同じ名前のスキルがほかにあると、パッケージのものは負ける（[pi.md](pi.md) の「同じ名前のスキルがあるとき」）。`get_commands` の `sourceInfo.path` が worktree を指しているかを確かめる。
 
+## 依頼文で試す
+
+JSON のページの形やスキルの説明を直したら、会話を持たない子に [fixtures/](fixtures/) の依頼文を渡して書かせ、各ファイルの「見るところ」で確かめる（pom の dev-fixtures にならった。2026-10-16）。説明だけで正しい部品を選べるかは、selftest では分からない。
+
+```sh
+rsync -a --exclude sandbox --exclude .git <worktree>/ /tmp/adf-plugin/   # 点で始まるフォルダの下だと、claude -p の子はプラグインも読めない（上の Claude Code の節）
+cp -R sandbox /tmp/adf-fixture && cd /tmp/adf-fixture
+claude --plugin-dir /tmp/adf-plugin -p "$(sed -n '/^```text$/,/^```$/p' /tmp/adf-plugin/docs/fixtures/02-gantt.md | sed '1d;$d')" \
+  --permission-mode acceptEdits --allowedTools "Bash(python3:*)" "Bash(uv run:*)" "Bash(ls:*)" "Bash(mkdir:*)"
+```
+
+書いたファイルと lint の結果を見て、迷った書き方は形か説明を直す。依頼文は見本（`skills/deck-build/samples/json/`）と違う中身にする（同じだと、見本を写しただけか分からない）。終わったら `/tmp/adf-plugin` と `/tmp/adf-fixture` を消す。
+
 ## 本番のワークスペースで worktree の版を試す
 
 本番のワークスペースの決まりや資料のまま試すときは、そのワークスペースの直下で、起動オプションで worktree を渡す。入れてあるものは変えない。

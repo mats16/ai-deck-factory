@@ -1,5 +1,5 @@
 {"apiVersion": "slides/v1", "kind": "Page",
- "title": "row で書けない図は frame に置く", "lead": "囲みと枝分かれは位置で置き、矢印は id でつなぐ", "kicker": "frame・grid",
+ "title": "row で書けない図は frame に置く", "lead": "囲みと枝分かれは位置で置き、矢印は id で箱につなぐ（枝分かれは折れ線）", "kicker": "frame・grid",
  "body": [
   {"type": "frame", "h": 2.4, "items": [
     {"type": "box", "id": "zone", "x": 0, "y": 0, "w": 5.6, "h": 2.4, "fill": "PANEL"},
@@ -15,8 +15,8 @@
     {"type": "box", "x": 9.55, "y": 0, "w": 2.55, "h": 2.4, "line": "SUB", "dash": true, "weight": 1, "shape": "round_rectangle", "radius": 0.15},
     {"type": "arrow", "from": "db", "to": "etl"},
     {"type": "arrow", "from": "etl", "to": "lake", "color": "RED", "weight": 2},
-    {"type": "arrow", "from": "lake", "to": "bi"},
-    {"type": "arrow", "from": "lake", "to": "ml", "dash": true},
+    {"type": "arrow", "from": "lake", "to": "bi", "route": "bent"},
+    {"type": "arrow", "from": "lake", "to": "ml", "dash": true, "route": "bent"},
     {"type": "arrow", "from": [7.8, 0.88], "to": [7.8, 1.08], "head": false}]},
   {"type": "grid", "cols": 3, "gap": 0.24, "items": [
     {"type": "text", "text": "**取り込み**<br>1 日 1 回", "fill": "PANEL"},

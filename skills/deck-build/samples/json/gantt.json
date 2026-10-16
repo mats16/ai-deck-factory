@@ -1,0 +1,10 @@
+{"apiVersion": "slides/v1", "kind": "Page",
+ "title": "移行は 12 月に終え、1 月から使い始める", "lead": "月ごとの予定。濃紺は決まったもの、点線の枠は未定のもの、淡い赤は節目", "kicker": "gantt",
+ "body": [
+  {"type": "gantt", "cols": ["10 月", "11 月", "12 月", "1 月", "2 月", "3 月"], "today": 1.5,
+   "rows": [
+    {"head": "データ基盤", "bars": [{"from": 1, "to": 2, "text": "設計"}, {"from": 3, "to": 3, "text": "移行"}], "note": "権限は 11 月に決める"},
+    {"head": "取り込み", "bars": [{"from": 2, "to": 4, "text": "毎日の取り込み"}, {"from": 3, "to": 5, "text": "確かめ", "fill": "PANEL"}]},
+    {"head": "予測のモデル", "bars": [{"from": 4, "to": 6, "text": "試す\n（未定）", "dash": true}], "note": "1 月の定例で決める"},
+    {"head": "使い始め", "bars": [{"from": 4, "to": 4, "text": "開始", "fill": "RED_SOFT"}]}]}],
+ "note": "重なる 2 本のバーは、同じ行の下の段に回る。本文の最後のガントは、余った高さを行に配る。"}
