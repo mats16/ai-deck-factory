@@ -1060,9 +1060,10 @@ def image_ratio(path):
     return w / h if h else None
 
 
-def spec_text_h(parts, avail, size, spacing=None, gap=0):
+def spec_text_h(parts, avail, size, spacing=None, gap=0, mono=False):
     """parts の文字の高さの見込み（in）。段落ごとに、行の高さはその段落でいちばん大きい文字で見る（Deck.text と同じく、行間を省けば 2 行以上で 125、
-    基準の 2 倍以上の大きさの段落は 100）。gap は段落の間（pt）。ponytail: 大きさの違う文字が交ざる段落は、幅を足して割るだけで、語の送りは見ない"""
+    基準の 2 倍以上の大きさの段落は 100）。gap は段落の間（pt）。mono は英数字を等幅の幅で見る（Deck.text の mono と同じ）。
+    ponytail: 大きさの違う文字が交ざる段落は、幅を足して割るだけで、語の送りは見ない"""
     paras = [[]]
     for p in [parts] if isinstance(parts, str) else parts:
         t, sz = (p, size) if isinstance(p, str) else (p[0], p[1].get("size", size))
@@ -1071,14 +1072,14 @@ def spec_text_h(parts, avail, size, spacing=None, gap=0):
                 paras.append([])
             paras[-1].append((piece.replace("\v", "\n"), sz))
     full = "\n".join("".join(t for t, _ in q) for q in paras)
-    sp = spacing or (125 if est_lines(full.strip("\n"), avail, size) > 1 else 100)
+    sp = spacing or (125 if est_lines(full.strip("\n"), avail, size, mono) > 1 else 100)
     h = 0
     for q in paras:
         big = max([sz for t, sz in q if t] or [size])
         if len({sz for t, sz in q if t}) > 1:  # 大きさの違う文字が交ざる段落は、文字ごとの幅を足して行数を見る（行の高さはいちばん大きい文字）
-            n = max(1 + sum(t.count("\n") for t, _ in q), math.ceil(sum(em_width(t) * sz / 72 for t, sz in q) / avail))
+            n = max(1 + sum(t.count("\n") for t, _ in q), math.ceil(sum(em_width(t, mono) * sz / 72 for t, sz in q) / avail))
         else:
-            n = est_lines("".join(t for t, _ in q) or " ", avail, big)
+            n = est_lines("".join(t for t, _ in q) or " ", avail, big, mono)
         h += n * big * 1.2 * (100 if big >= 2 * size else sp) / 100 / 72
     return h + gap / 72 * (len(paras) - 1)
 
@@ -1140,7 +1141,8 @@ class SpecPage:
     def fixed_w(self, e):
         if e.get("w") == "fit":  # 札の幅を中身の文字に合わせる（左右に 1 字分）
             size = e.get("size", 11)
-            return max(map(em_width, spec_plain(spec_md(e["text"])).replace("\v", "\n").split("\n"))) * size / 72 + 2 * size / 72 + 0.06
+            mono = e.get("mono", False)
+            return max(em_width(ln, mono) for ln in spec_plain(spec_md(e["text"])).replace("\v", "\n").split("\n")) * size / 72 + 2 * size / 72 + 0.06
         return e.get("w") or (NUM[e.get("size", "M")][0] if e["type"] == "num" else e.get("size", 0.5) if e["type"] == "icon" else None)
 
     def slot_w(self, e, w):
@@ -1179,7 +1181,7 @@ class SpecPage:
             center = e.get("align", "center" if kind == "label" else "left") == "center"
             inner = max((size / 72 if e.get("pad") is None else e["pad"]) - INSET, 0) if boxed and not center and e.get("shape") != "ellipse" else 0  # Deck.text と同じ
             avail = (w - 2 * INSET - 2 * inner if boxed else w) - (size * 1.3 / 72 if bul else 0)
-            body = spec_text_h(spec_md(s, loc=loc), avail, size, e.get("spacing"), e.get("para_gap", 0))
+            body = spec_text_h(spec_md(s, loc=loc), avail, size, e.get("spacing"), e.get("para_gap", 0), e.get("mono", False))
             if kind == "label":
                 return max(0.4, body + 2 * size / 72)
             return body + (2 * size / 72 + 0.1 if boxed else 0.02)  # 塗りか枠線があれば、上下に 1 字分（visual-027）
@@ -1192,8 +1194,9 @@ class SpecPage:
         if kind == "card":
             if "step" in e:
                 return card_h(w, e.get("head"), items=[tuple(x) for x in e.get("items", [])], step=e["step"])
-            body, bul = self.card_body(e, loc)
-            return card_h(w, e.get("head"), body=body or None, bullets=bul)
+            body, bul = self.card_body(e, loc)  # card_h は本文をすべて 11pt で数えるので、文字ごとの大きさを見る spec_text_h で、d.card の本文の枠と同じ幅に見込む
+            avail = w - 2 * PAD - 2 * INSET - (11 * 1.3 / 72 if bul else 0)
+            return (0.5 if e.get("head") else 0.1) + (spec_text_h(body, avail, 11, 125) + 2 * INSET if body else 0) + 0.15
         if kind == "code":
             return sum(est_lines(ln, w - 0.4, size, True) for ln in e["text"].split("\n")) * size * 1.2 * 1.1 / 72 + 0.28
         if kind == "table":
@@ -1342,6 +1345,8 @@ class SpecPage:
 
     def place(self, e, x, y, w, h, loc):
         kind = e["type"]
+        if kind in ("icon", "num"):  # 決まった大きさで置く。grid や比で分けた row の列の幅に広げない（measure と同じ大きさ）
+            w = h = self.fixed_w(e)
         if (i := e.get("id")) is not None:
             if i in self.ids:
                 sys.exit(f"{loc}: id「{i}」が 2 つある")
@@ -1630,9 +1635,9 @@ def spec_log_path():
 
 
 def spec_record(deck, pid):
-    """組んだデッキの形の外の書き方の数を、ワークスペースの .factory/spec_raw.jsonl に 1 行で残す（slides.py stats が数える）。資料の文は残さず、キーと数だけ。
+    """組んだ JSON のページのデッキの形の外の書き方の数を、ワークスペースの .factory/spec_raw.jsonl に 1 行で残す（slides.py stats が数える。raw がなくても残し、前の数を 0 にする）。資料の文は残さず、キーと数だけ。
     名前に tmp の入った資料と、factory-kaizen の検証の資料（FACTORY_VERIFY）は数えない（lint_runs.jsonl と同じ）。"""
-    if not deck.spec_esc or os.environ.get("FACTORY_VERIFY") or "tmp" in deck.name.lower():
+    if not deck.resolved or os.environ.get("FACTORY_VERIFY") or "tmp" in deck.name.lower():  # JSON のページのデッキは、raw がなくても残す（前の数を 0 にする）
         return
     path = spec_log_path()
     try:  # 組み終えたあとの記録。書けなくても組んだデッキは止めない
@@ -3019,15 +3024,21 @@ def selftest_spec():
             spec_record(d, "deck1")
             spec_record(d, "deck1")  # 組み直しは最後の数だけ
             dd = Deck("資料 2")
-            dd.spec_esc = [("s", "l", "table.raw.zebra")]
+            dd.resolved, dd.spec_esc = [{"type": "page"}], [("s", "l", "table.raw.zebra")]
             spec_record(dd, "deck2")
             with contextlib.redirect_stdout(io.StringIO()):
                 rows = spec_stats(log)
             assert rows["table.raw.zebra"] == [2, 2] and rows["box.raw.radius"] == [1, 1]
+            gone = Deck("資料 1")
+            gone.resolved = [{"type": "page"}]  # 最後の raw を外して組み直した JSON のデッキ
+            spec_record(gone, "deck1")
+            with contextlib.redirect_stdout(io.StringIO()):
+                rows = spec_stats(log)
+            assert "box.raw.radius" not in rows and rows["table.raw.zebra"] == [1, 1]  # 古い数は残らない
             tmp = Deck("tmp_試し")
             tmp.spec_esc = dd.spec_esc
             spec_record(tmp, "deck3")
-            assert len(log.read_text().splitlines()) == 3  # tmp の資料は数えない
+            assert len(log.read_text().splitlines()) == 4  # tmp の資料は数えない
         finally:
             globals()["spec_log_path"] = real_log
         f = Path(t) / "p.json"
@@ -3077,6 +3088,19 @@ def selftest_spec():
     dh, dt = (next(e for e in dk if e["loc"] == f"spec.body[0].{k}") for k in ("head", "text"))
     assert dh["color"] == WHITE and dh["parts"][0][1]["color"] == WHITE and dt["parts"][0][1]["color"] == RED_ON_NAVY  # 濃い地の印のないカードも地から色を決める
     assert near(dt["x"], X + MARK_IN) and not any(e["call"] in ("icon", "num", "image") for e in dk)
+    globals()["iconify"], real_iconify = (lambda name, color=TEXT, w=512: f"https://x/{name}.png"), iconify
+    try:  # grid の中のアイコンと番号は、列の幅に広げず決まった大きさで置き、下の部品はその下端から
+        _, gi = run({"title": "t", "body": [{"type": "grid", "cols": 2, "items": [{"type": "icon", "name": "tabler:a", "size": 0.5}, {"type": "num", "n": 1}]},
+                                            {"type": "text", "text": "下"}]})
+    finally:
+        globals()["iconify"] = real_iconify
+    ic, nm, below = gi
+    assert ic["size"] == 0.5 and near(nm["cx"], cols(2)[1][0] + NUM["M"][0] / 2) and near(below["y"], Y_BODY_NOLEAD + 0.5 + GAP_BODY)
+    _, bc = run({"title": "t", "body": [{"type": "card", "text": "{64:48}"}, {"type": "text", "text": "下"}]})
+    assert bc[0]["h"] > 64 * 1.2 / 72 and near(bc[-1]["y"], bc[0]["y"] + bc[0]["h"] + GAP_BODY)  # 印のないカードも文字ごとの大きさで高さを見込む
+    _, mo = run({"title": "t", "body": [{"type": "text", "text": "i" * 80, "w": 1, "mono": True}, {"type": "label", "text": "iiii", "w": "fit", "mono": True}]})
+    assert near(mo[0]["h"], est_lines("i" * 80, 1, 11, True) * 11 * 1.2 * 1.25 / 72 + 0.02)  # 等幅の字幅で行数を見る
+    assert near(mo[1]["w"], 4 * MONO_EM * 11 / 72 + 2 * 11 / 72 + 0.06)
     for bad, want in [({"type": "card", "icon": "a:b", "num": 1}, "どれか 1 つ"), ({"type": "card", "head": "h", "align": "center"}, "印（icon・num・image）のあるカード"),
                       ({"type": "card", "icon": "a:b", "align": "center", "valign": "middle"}, "一緒に使えない")]:
         try:
