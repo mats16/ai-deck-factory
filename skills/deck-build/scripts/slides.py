@@ -1690,6 +1690,8 @@ class SpecPage:
         if bent:  # Google は横・縦・横（縦・横・縦）の真ん中で折る（見込み）
             m = (x1 + x2) / 2 if sites[0] in (1, 3) else (y1 + y2) / 2
             pts[1:1] = [(m, y1), (m, y2)] if sites[0] in (1, 3) else [(x1, m), (x2, m)]
+            # 両端の中央がそろうと真ん中の区間の長さが 0 になり、札を横の線の向きに置いてしまう。1 本の直線に並ぶ折れ点を外す
+            pts = [pts[0], *(b for a, b, c in zip(pts, pts[1:], pts[2:]) if abs((b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])) > 1e-9), pts[-1]]
         lab = None
         if "label" in e:  # 札は線の真ん中の区間に付ける（横なら上、縦なら右）。札を位置で置くと、線から浮くか線に重なる（2026-10-16 の deck-review で 6 件）
             (px, py), (qx, qy) = pts[len(pts) // 2 - 1], pts[len(pts) // 2]
@@ -3897,6 +3899,9 @@ def selftest_spec():
     _, els = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [{"type": "label", "id": "a", "text": "A", "x": 0, "y": 0, "w": 2},
         {"type": "label", "id": "b", "text": "B", "x": 0, "y": 2, "w": 2}, {"type": "arrow", "from": "a", "to": "b", "label": "縦"}]}]})
     arr, lab = (e for e in els if e["call"] in ("arrow", "text"))
+    d, bent = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [{"type": "label", "id": "a", "text": "A", "x": 0, "y": 0, "w": 2},
+        {"type": "label", "id": "b", "text": "B", "x": 0, "y": 2, "w": 2}, {"type": "arrow", "from": "a", "to": "b", "route": "bent", "label": "transfer"}]}]})
+    assert not d.warnings and near(next(e for e in bent if e["call"] == "text")["x"], arr["x1"] + 2 * LABEL_GAP), d.warnings  # 中央のそろった折れ線も縦の線の右（PR #47 のレビュー）
     d, _ = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [{"type": "arrow", "from": [0, 0], "to": [4, 2.5], "label": "斜めの線"}]}]})
     assert any("札（label）が線に重なる" in w for w in d.warnings), d.warnings  # 斜めの線の上の中央に置いた札は、線にかかる（fixture 04 の子が見つけた）
     assert near(lab["x"], arr["x1"] + 2 * LABEL_GAP) and near(lab["y"] + lab["h"] / 2, (arr["y1"] + arr["y2"]) / 2)  # 縦の線は右の中ほど
