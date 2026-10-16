@@ -68,7 +68,7 @@ python3 $K/slides.py merge fix_a.py fix_b.py          # pages.py の資料で、
    "note": "左から順に、データが整っていく流れを話す。"}
   ```
 
-  - **見本:** 一通りの書き方（すべての型とキー）を入れたデッキが [samples/json/](samples/json/)（`deck.json` と 10 ページ、部品 1 つの `component.json`）にある。書き方に迷ったら、同じ型の見本のページを開く。selftest が、見本が形のすべての型とキーを使っているかと、警告なしに組めるかを確かめる（形にキーを足したら、見本にも足す）。
+  - **見本:** 一通りの書き方（すべての型とキー）を入れたデッキが [samples/json/](samples/json/)（`deck.json` と 13 ページ、部品 1 つの `component.json`）にある。書き方に迷ったら、同じ型の見本のページを開く。selftest が、見本が形のすべての型とキーを使っているかと、警告なしに組めるかを確かめる（形にキーを足したら、見本にも足す）。
   - **ファイルの頭:** どのファイルも頭に `"apiVersion": "slides/v1"` と `"kind"` を書く（k8s にならった。形の版は slides-035）。`kind` は `Deck`（`name` と `pages`）、`Page`（1 ページ）、`Component`（部品 1 つ。型のないページに置いて確かめる）。
   - **デッキのファイル:** `build/deck.json`（`kind: Deck`）に資料名（`name`。社内向けは `｜Internal Only`、秘密扱いは `｜Confidential` を末尾に書く。資料名はフッターに出ず、秘密区分だけが著作権表示の末尾に残る）とページの順（`pages`）を書き、ページは 1 ページ 1 ファイルの `build/p<構成案の番号>.json`（`kind: Page`）に書く（直しの子がページごとにファイルを直せるように。slides-031）。`pages` には、ページのファイルのパスと、ほかのデッキのファイル（子の `pages_<担当>.json`）のパスだけを並べる（ページは 1 ページ 1 ファイル）。デッキに `theme`（`slides.py themes` の名前）を書くと、`new` が `--theme` を省いたときに使い、`lint`・`dry` がそのテーマのファイルで見て、`build` はデッキのテーマと違えば止める（子の `pages_<担当>.json` には書かない）。`build/` の `deck.json` を `new`・`build`・`lint`・`dry` が読む（pages.py と両方あると止める）。pages.py から呼ぶときは、`make` の中で `d.spec("p05.json")`（ファイルの並びも dict も渡せる。Python から渡す dict は頭を省ける）。
   - **ページ:** `type` は `page`（省いたとき。`title`・`lead`・`kicker`・`body`・`band`・`source`・`note`）、`cover`（`title`・`kicker`・`sub`・`variant`・`note`）、`divider`（`num`・`title`・`sub`・`variant`・`note`）、`slide`（型のないページ。`bg`・`foot`・`body`・`source`・`note`）。`band` は結論バンドで、`"文"` か `{"text": …, "sub": …}`。`source` は出典の行（頭の「出典: 」は付く）。

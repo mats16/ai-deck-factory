@@ -19,7 +19,7 @@ jobs:
           python3 skills/factory-init/scripts/init.py sandbox
           cd sandbox
           fail=0
-          for f in ../hooks/*.py ../skills/*/scripts/*.py; do
+          for f in ../hooks/*.py ../skills/*/scripts/*.py ../tests/*/*.py; do
             grep -q -e --selftest "$f" || continue
             out=$(uv run -q --python 3.11 "$f" --selftest 2>&1) && last=$(tail -1 <<<"$out") || last="exit $?"
             echo "$f: $last"

@@ -619,7 +619,7 @@ def lint_slides(p, r, reuse=False, talk=False, only=None, scope="deck"):
                             r.hits[COPYRIGHT_NG if copyright_footer else f"{MIN_PT}pt 未満の文字"].append(f"p{i}: {sz:g}pt「{txt[:20]}」")
                         col, ground = hexof(st.get("foregroundColor"), scheme), f or under
                         if col and ground:
-                            large = sz >= 18 or (sz >= 14 and st.get("bold"))
+                            large = sz >= 18 or (sz >= 11 and st.get("bold"))  # 太字は本文の 11pt から大きな文字（WCAG の 14pt より下げた。visual.md の 3）
                             pairs[(col, ground, 3.0 if large else 4.5)].append(txt)
                         if sz > best[0] and not re.fullmatch(r"[\d\s.]+", txt):
                             best = (sz, e, b)
@@ -1123,6 +1123,13 @@ def selftest():
     assert not column_shift([cb(0, 2, 3, 1), cb(4, 2.3, 3, 1)], [cb(3.5, 1.5, 4, 3)])  # 右は入れ子なので見ない
     vl = lambda n: [[k * EMU, EMU, 0, 4 * EMU] for k in range(n)]
     assert line_grid(vl(3)) == [3] and not line_grid(vl(2))  # 格子の縦線は 3 本から
+    def on_red(text, size, bold, y):  # 赤の塗りに白の文字（3.62:1）
+        e = shape(1, size=size, text=[text], color={"rgbColor": rgb("FFFFFF")}, fill={"rgbColor": rgb("FF3621")}, y=y)
+        e["shape"]["text"]["textElements"][1]["textRun"]["style"]["bold"] = bold
+        return e
+    _, out, _ = run(deck([(OAT, [title(), on_red("太字11", 11, True, 2), on_red("細字11", 11, False, 3), on_red("太字9", 9, True, 4)])]))
+    low = out[out.index("== コントラスト"):]
+    assert "FFFFFF / FF3621  3.62（基準 4.5）  2 か所" in low and "太字11" not in low  # 11pt 以上の太字は 3:1（visual-039）。細字と 9pt の太字は 4.5:1
     # 書体、ノート、テーマの色のコントラスト（ACCENT5 の 618794 は Oat の上で 3.64:1）
     res, _, hard = run(deck([(NAVY, [title(), shape(1, font="Arial")])]))
     assert hard == 1 and len(res.hits[FONT_NG]) == 1

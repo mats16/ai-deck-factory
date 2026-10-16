@@ -77,7 +77,7 @@ LOGO = _BRAND.get("logo")  # ドキュメントの表紙のロゴ（assets/ の�
 COPYRIGHT_PT = 9  # 著作権表示と、高さをそろえるページ番号だけは 11pt 以上の例外。本文を邪魔しない（2026-10-08、ページ番号は 2026-10-13）
 # 結論バンドの内側の余白（in）。枠と文字の間は 1 字分より大きめに取る（見た目 1-8。13pt の 1 字は 0.18 in）。左右は pptx 版と同じ 18pt
 BAND_PAD_X, BAND_PAD_Y = 0.25, 0.2
-# [slides_py-001] 正円の番号の直径（in）と数字（pt）。M・L は数字の高さが円の 4 割ほど。S は周りの 11pt の文字に合わせて 11pt（赤に白の 14pt の決まりの例外。visual.md の 1）
+# [slides_py-001] 正円の番号の直径（in）と数字（pt）。M・L は数字の高さが円の 4 割ほど。S は周りの 11pt の文字に合わせて 11pt（11pt の太字なので、赤に白の 3.62:1 で届く。visual.md の 3 の visual-039）
 NUM = {"S": (0.3, 11), "M": (0.36, 14), "L": (0.48, 18)}  # 図の中の印／カードと手順（既定）／大きな段
 # [slides_py-002] 赤（RED）の線の太さ（pt）。強調の囲みは実線でも点線でも 2pt（強調のための線なので、細くしない）。ほかの枠線は 0.75pt
 EMPH_PT = 2
@@ -88,7 +88,7 @@ NAVY_BLOCK, GA, RED_TEXT, PREVIEW = "ACCENT1", "ACCENT2", "ACCENT3", "ACCENT4"  
 SUB, OSS, RED = "ACCENT5", "ACCENT6", "HYPERLINK"  # 補助の文字とフッター／OSS の札／赤のアクセント（塗りと 18pt 以上の文字）
 # テーマに入れない色。WHITE はどのテーマでも同じ
 WHITE = "FFFFFF"
-TEXT, RULE, RED_SOFT, STAGE_TEXT, DECOR = "303F47", "DCE0E2", "FFECE8", "0B2026", "3E5159"  # 本文／罫線と濃紺の上の補足／淡い赤／札の文字／章番号（飾り）
+TEXT, RULE, RED_SOFT, STAGE_TEXT, DECOR = "303F47", "DCE0E2", "FFECE8", "0B2026", "6B8089"  # 本文／罫線と濃紺の上の補足／淡い赤／札の文字／章番号（飾り。濃紺の上で 3.28:1）
 # 上の 5 色は既定の値。テーマのファイルの colors に同じ名前で書くと、そのテーマのデッキでは paint とアイコンが置き換える（use_theme）。
 # pages.py には名前（か既定の 6 桁）で書く。マスターの配色に枠が残っていない（12 の枠をすべて使う）ので、組むときに置き換える
 FIXED = {"TEXT": TEXT, "RULE": RULE, "RED_SOFT": RED_SOFT, "STAGE_TEXT": STAGE_TEXT, "DECOR": DECOR}
@@ -115,7 +115,8 @@ LAYOUT_MARK = re.compile(r"ai-deck-factory layout=(cover|section):(\d+)(?: w=([\
 VARIANTS = {}  # 組んでいるデッキの {"cover"・"section": {番号: (文字の幅 in か None, tone)}}（目印の番号で引く。build の @COVER<番号> と同じ。use_layouts が決める）
 # 表紙・扉の地の明るさごとの文字の色（タイトル、小見出し・副題、章番号、社名とフッター）。dark は濃紺の地（Blank に組むときも）、accent は
 # 白が大きな文字にだけ届く赤の地（小さな文字は NAVY）、light は白の地
-TONES = {"dark": (WHITE, RED_ON_NAVY, DECOR, SUB_ON_NAVY), "accent": (WHITE, NAVY, RED, NAVY), "light": (HEAD, RED_TEXT, RULE, SUB)}
+# 章番号は、どの地でも 3:1 に届く色（visual-038。赤の地は濃紺、白の地は DECOR）
+TONES = {"dark": (WHITE, RED_ON_NAVY, DECOR, SUB_ON_NAVY), "accent": (WHITE, NAVY, NAVY, NAVY), "light": (HEAD, RED_TEXT, DECOR, SUB)}
 _SWAP = {}  # 組んでいるデッキの、FIXED の既定の値 → テーマの値（use_theme が決める）
 _NAMED = {}  # 組んでいるデッキの、テーマが書いた NAMED の値（use_theme が決める）
 # 提供ステージの札の塗り（visual.md の 1）。本番で使える Public Preview は、Beta・Private Preview（本番向けではない）の黄と分け、GA の緑を 4 割にした色（2026-10-09）
@@ -198,9 +199,11 @@ def card_h(w, head=None, body=None, items=None, step=None, bullets=False, size=1
     中身より大きい箱になる（代表の 3 枚の記録で、ほぼすべてのデッキに出た）。列の高さをそろえるなら、並ぶカードの card_h の最大を渡す。
     ponytail: 本文は size の 1 つの大きさで見積もる。大きさの違う run（大きな数字など）が混ざるなら h を渡す"""
     top = 0.5 if head else 0.1
-    if step is not None:
-        return top + len(items or []) * step + 0.1
     avail = w - 2 * PAD - 2 * INSET - (size * 1.3 / 72 if bullets else 0)
+    if step is not None:  # 最後の項目の文字が step の間隔より高ければ、その分を足す（下端との間を下の 0.15 と同じだけ空ける）
+        n = len(items or [])
+        last = est_h(items[-1][0] + "\n" + items[-1][1], avail, size, 125) + 2 * INSET + 0.15 if n else 0.1
+        return top + max(n * step + 0.1, (n - 1) * step + last)
     parts = [body] if isinstance(body, str) else body or []
     s = "\n\n".join(h2 + "\n" + b for h2, b in items) if items else "".join(p if isinstance(p, str) else p[0] for p in parts)
     return top + (est_h(s, avail, size, 125) + 2 * INSET if s else 0) + 0.15  # 最終行と下端の間を、白いカードの決まり（box_pad の 0.28 in）より広く
@@ -3159,6 +3162,7 @@ def selftest():
     assert c.card(sid, 1, 1, 3, None, "見出し", body="あ" * 30) == 1 + card_h(3, "見出し", body="あ" * 30)  # h を省くと中身から決め、下端を返す
     assert card_h(3, "見出し", body="あ" * 30) > card_h(3, "見出し", body="あ" * 10) > card_h(3, "見出し") > 0.5
     assert card_h(3, items=[("a", "b"), ("c", "d")]) == card_h(3, body="a\nb\n\nc\nd")  # items は空行を挟んで 1 つの枠に流す
+    assert card_h(3, "今", items=[("a", "b"), ("c", "d")], step=0.62) == card_h(3, "今", items=[("a", "b")]) + 0.62 and card_h(3, items=[("a", "b")], step=2) == 2.2  # step の最後の項目も下端と 0.28 in より空け、広い step はそのまま
     try:
         c.card(sid, 1, 1, 3)
         raise AssertionError("中身のないカードを h なしで通した")
@@ -3234,7 +3238,7 @@ def selftest():
     except ValueError as e:
         assert "1, 3" in str(e)
     use_layouts({})
-    use_theme({"TEXT": "#37352f", "DECOR": "3E5159", "copyright": "© 2026 Me. All rights reserved."})  # テーマの値で組む（既定と同じ値は置き換えない）
+    use_theme({"TEXT": "#37352f", "DECOR": "6B8089", "copyright": "© 2026 Me. All rights reserved."})  # テーマの値で組む（既定と同じ値は置き換えない）
     assert _SWAP == {TEXT: "37352F"} and paint(TEXT) == paint("303f47") == {"rgbColor": rgb("37352F")} and paint(RULE) == {"rgbColor": rgb(RULE)} and paint(NAVY) == {"themeColor": NAVY}
     t = make_deck(lambda d: d.text(d.page("t"), 0, 0, 1, 1, "本文"), "foot")
     assert sum(r.get("insertText", {}).get("text") == "© 2026 Me. All rights reserved." for r in t.reqs) == 1
@@ -3544,7 +3548,7 @@ def selftest_sample():
             c = make_deck(lambda x: x.spec(root / "component.json"), "部品")
     finally:
         globals().update(real)
-    assert len(d.slides) == 10 and not d.warnings and not c.warnings, d.warnings + c.warnings
+    assert len(d.slides) == len(json.loads((root / "deck.json").read_text())["pages"]) and not d.warnings and not c.warnings, d.warnings + c.warnings
     assert not missing_notes(d) and "diagram" in d.page_names
 
 
