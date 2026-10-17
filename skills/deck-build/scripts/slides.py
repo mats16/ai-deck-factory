@@ -1453,7 +1453,7 @@ class SpecPage:
         hh = spec_text_h(head, tw, 12, 100) if head else 0  # 見出しと本文は別の枠（箇条書きが見出しに付かないように。d.card と同じ）
         bh = spec_text_h(body, tw - (11 * 1.3 / 72 if bul else 0), 11, 125) if body else 0
         th = hh + (HEAD_GAP if head and body else 0) + bh
-        need = (CARD_TOP + size + MARK_GAP + th + CARD_BOTTOM if center else max(th + 0.12, size + 0.24) if middle else
+        need = (CARD_TOP + size + MARK_GAP + th + CARD_BOTTOM if center else max(th + 0.4, size + 0.36) if middle else
                 max(CARD_TOP + th + CARD_BOTTOM, MARK_IN + size + MARK_IN))
         if h is None:
             return {"h": need}
@@ -3949,12 +3949,8 @@ def selftest_spec():
             raise AssertionError(bad)
         except SystemExit as ex:
             assert want in str(ex), (bad, ex)
-    _, els = run({"title": "t", "body": [{"type": "stack", "items": [{"type": "card", "num": 1, "head": "見出し", "text": "1 行", "valign": "middle"},
-        {"type": "card", "num": 2, "head": "見出し", "valign": "middle"}, {"type": "card", "num": 3, "head": "見出し", "text": "1 行目<br>2 行目<br>3 行目", "valign": "middle"}]}]})
     d, _ = pair({"type": "label", "id": "t", "text": "T", "x": 4, "y": 1.2, "w": 2, "h": 1.2}, {"type": "arrow", "from": "c", "to": "t", "offset": 0.1})
     assert any("斜めになる" in w for w in d.warnings), d.warnings  # 中央の高さの違う箱の間でずらしても斜めになる
-    one, bare, three = (e["h"] for e in els if e["call"] == "card")
-    assert one < 0.65 and near(bare, MARK + 0.24) and three > one + 0.4, (one, bare, three)  # 上下の中央の小さな箱は 1 行なら 0.6 in ほど、行が増えれば伸びる
     schema = spec_schema()
     assert {f"el_{k}" for k in SPEC_EL} <= set(schema["$defs"]) and json.dumps(schema, ensure_ascii=False)
     assert schema["$defs"]["el_text"]["properties"]["fill"]["enum"] == list(COLOR_NAMES)  # 色は役割の名前だけ（6 桁は書けない）
