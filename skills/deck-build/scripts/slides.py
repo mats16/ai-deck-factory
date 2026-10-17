@@ -913,7 +913,8 @@ SPEC_EL = {  # type → (要るキー, 書けるキー)
     "icon": ({"name": "s"}, {"size": "p", "color": "c"}),
     "num": ({"n": "ns"}, {"size": tuple(NUM), "fill": "c"}),
     "box": ({}, _BOX),
-    "arrow": ({"from": "pt", "to": "pt"}, {"color": "c", "head": "b", "dash": "b", "weight": "p", "route": ("straight", "bent"), "label": "md"}),  # label は線の札
+    "arrow": ({"from": "pt", "to": "pt"}, {"color": "c", "head": "b", "dash": "b", "weight": "p", "route": ("straight", "bent"), "label": "md",
+                         "label_side": ("top", "bottom", "left", "right"), "offset": "f"}),  # label は線の札、label_side はその置き場所、offset は線を横（縦）にずらす in
     "gantt": ({"cols": "cols", "rows": "grows"}, {"today": "p"}),  # 予定表（slides-010）
     "bars": ({"items": "bitems"}, {"unit": "s", "horizontal": "b", "hot": "ints"}),  # 1 系列の棒グラフ（visual.md の 5）
     "row": ({"items": "kids"}, {"gap": "n", "widths": "nums", "arrows": "b"}),
@@ -964,7 +965,7 @@ def _color(v):
 
 
 _pos = lambda v: _num(v) and v > 0  # 大きさ・太さ・行間など、0 だと描けないもの
-SPEC_OK = {"s": lambda v: isinstance(v, str), "md": lambda v: isinstance(v, str), "n": lambda v: _num(v) and v >= 0, "p": _pos, "i": _int,
+SPEC_OK = {"s": lambda v: isinstance(v, str), "md": lambda v: isinstance(v, str), "n": lambda v: _num(v) and v >= 0, "f": _num, "p": _pos, "i": _int,
            "pi": lambda v: _int(v) and v >= 1, "b": lambda v: isinstance(v, bool), "c": _color,
            "w": lambda v: _pos(v) or v == "fit", "nh": lambda v: _pos(v) or isinstance(v, list) and bool(v) and all(map(_pos, v)),
            "els": lambda v: isinstance(v, list), "kids": lambda v: isinstance(v, list) and bool(v),  # 並べ方の箱の中は 1 つ以上
@@ -1006,7 +1007,7 @@ def spec_check(o, schema, loc, extra=None):
             sys.exit(f"{loc}.{k}: {v!r} は書けない（{'・'.join(t) if isinstance(t, tuple) else SPEC_TYPES[t]}）")
 
 
-SPEC_TYPES = {"s": "文字列", "md": "記法つきの文字列", "n": "0 以上の数", "p": "0 より大きい数", "i": "整数", "pi": "1 以上の整数", "b": "true か false", "c": f"色の名前（{'・'.join(COLOR_NAMES)}。6 桁は書けない。値はテーマのファイルで決める）",
+SPEC_TYPES = {"s": "文字列", "md": "記法つきの文字列", "n": "0 以上の数", "f": "数（負の数も書ける）", "p": "0 より大きい数", "i": "整数", "pi": "1 以上の整数", "b": "true か false", "c": f"色の名前（{'・'.join(COLOR_NAMES)}。6 桁は書けない。値はテーマのファイルで決める）",
               "w": '0 より大きい数（in）か "fit"（label だけ。中身の文字の幅にする）', "nh": "0 より大きい数（in）か、行ごとのその並び",
               "els": "部品の並び", "kids": "1 つ以上の部品の並び", "pages": "ページかデッキのファイルのパス（.json）の並び", "pt": "部品の id か [x, y]", "items": '[["見出し", "説明"], …]',
               "rows": '[["見出しの行", …], ["セル", …], …]', "nums": "正の数の並び",
@@ -1452,7 +1453,7 @@ class SpecPage:
         hh = spec_text_h(head, tw, 12, 100) if head else 0  # 見出しと本文は別の枠（箇条書きが見出しに付かないように。d.card と同じ）
         bh = spec_text_h(body, tw - (11 * 1.3 / 72 if bul else 0), 11, 125) if body else 0
         th = hh + (HEAD_GAP if head and body else 0) + bh
-        need = (CARD_TOP + size + MARK_GAP + th + CARD_BOTTOM if center else max(th + 0.4, size + 0.36) if middle else
+        need = (CARD_TOP + size + MARK_GAP + th + CARD_BOTTOM if center else max(th + 0.12, size + 0.24) if middle else
                 max(CARD_TOP + th + CARD_BOTTOM, MARK_IN + size + MARK_IN))
         if h is None:
             return {"h": need}
@@ -1665,26 +1666,35 @@ class SpecPage:
             return self.ids[v]
         (ax, ay, aw, ah), (bx, by, bw, bh) = end(e["from"], "from"), end(e["to"], "to")
         a, b = (self.anchors.get(v) if isinstance(v, str) else None for v in (e["from"], e["to"]))
-        bent = e.get("route") == "bent"
+        bent, off = e.get("route") == "bent", e.get("offset", 0)
+        if off and (bent or not all(isinstance(v, str) for v in (e["from"], e["to"]))):
+            sys.exit(f"{loc}（arrow）.offset: 線をずらすのは、両端を id で指したまっすぐの矢印だけ（折れ線と [x, y] の端には書けない）")
+        boxed = bool(a and b)
+        if off:  # ずらした線は辺の中央の接続点に付かないので、図形につながず、箱の辺から辺へ引く（画面で箱を動かすと付いてこない）
+            a = b = None
         if bent and not (a and b):
             sys.exit(f"{loc}（arrow）.route: 折れ線（bent）は、両端を id でつなげる部品（card・code・box・1 字の num と、中央寄せの label・stat・塗りか枠線のある text。shape は四角か角丸）に引く")
         # 両端がつなげる部品なら、図形につなぐ（画面で動かしても付いてくる）。つないだ線は接続点（辺の中央）から引くので、間を空けない
-        pa, pb = (ARROW_PAD if (aw or ah) and not (a and b) else 0), (ARROW_PAD if (bw or bh) and not (a and b) else 0)  # [x, y] の端はその点まで
+        pa, pb = (ARROW_PAD if (aw or ah) and not boxed else 0), (ARROW_PAD if (bw or bh) and not boxed else 0)  # [x, y] の端はその点まで
         sites = None
         if not (aw or ah or bw or bh):
             x1, y1, x2, y2 = ax, ay, bx, by
         elif bx >= ax + aw or ax >= bx + bw:  # 左右に離れている。向き合う辺の中央どうしを結ぶ（中央が同じ高さなら横の矢印。違えば斜め。
             # 重なる範囲の中央に横に引くと、どちらの箱の中央にも付かない。2026-10-16 の見本で 0.25 in ずれた）
-            y1, y2 = ay + ah / 2, by + bh / 2
+            y1, y2 = ay + ah / 2 + off, by + bh / 2 + off
             x1, x2 = (ax + aw + pa, bx - pb) if bx >= ax + aw else (ax - pa, bx + bw + pb)
+            if off and not (ay < y1 < ay + ah and by < y2 < by + bh):
+                sys.exit(f"{loc}（arrow）.offset: {off} in ずらすと、線の端が箱の上下の外に出る（箱の高さの半分より小さくする）")
             sites = (3, 1) if bx >= ax + aw else (1, 3)  # 右から左へ、左から右へ（四角の接続点は上 0・左 1・下 2・右 3）
         elif by >= ay + ah or ay >= by + bh:
-            x1, x2 = ax + aw / 2, bx + bw / 2
+            x1, x2 = ax + aw / 2 + off, bx + bw / 2 + off
             y1, y2 = (ay + ah + pa, by - pb) if by >= ay + ah else (ay - pa, by + bh + pb)
+            if off and not (ax < x1 < ax + aw and bx < x2 < bx + bw):
+                sys.exit(f"{loc}（arrow）.offset: {off} in ずらすと、線の端が箱の左右の外に出る（箱の幅の半分より小さくする）")
             sites = (2, 0) if by >= ay + ah else (0, 2)
         else:
             sys.exit(f"{loc}（arrow）: 両端の部品が重なっているので引けない")
-        if a and b and not bent and abs(x1 - x2) > 0.01 and abs(y1 - y2) > 0.01:  # 2026-10-16 の依頼文の試しで、枝の 1 本だけ直線にして斜めになった
+        if boxed and not bent and abs(x1 - x2) > 0.01 and abs(y1 - y2) > 0.01:  # ずらした線（offset）も、両端の箱の中央からずらすので同じ  # 2026-10-16 の依頼文の試しで、枝の 1 本だけ直線にして斜めになった
             self.warns.append(f"{loc}: 矢印が斜めになる。枝分かれなら、どの枝も \"route\": \"bent\" にする（中央が同じ高さの枝はまっすぐ引かれる）か、両端の箱の高さをそろえる")
         self.emit("arrow", loc, e, x1=x1, y1=y1, x2=x2, y2=y2, color=spec_color(e.get("color", "SUB")), head=e.get("head", True), dash=e.get("dash", False), weight=e.get("weight", 1.25),
                   **({"link": [a, sites[0], b, sites[1]], "bent": bent} if a and b else {}))
@@ -1695,13 +1705,21 @@ class SpecPage:
             # 両端の中央がそろうと真ん中の区間の長さが 0 になり、札を横の線の向きに置いてしまう。1 本の直線に並ぶ折れ点を外す
             pts = [pts[0], *(b for a, b, c in zip(pts, pts[1:], pts[2:]) if abs((b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])) > 1e-9), pts[-1]]
         lab = None
-        if "label" in e:  # 札は線の真ん中の区間に付ける（横なら上、縦なら右）。札を位置で置くと、線から浮くか線に重なる（2026-10-16 の deck-review で 6 件）
+        if "label_side" in e and "label" not in e:
+            sys.exit(f"{loc}（arrow）.label_side: label がない")
+        if "label" in e:  # 札は線の真ん中の区間に付ける（既定は、横なら上、縦なら右）。札を位置で置くと、線から浮くか線に重なる（2026-10-16 の deck-review で 6 件）
             (px, py), (qx, qy) = pts[len(pts) // 2 - 1], pts[len(pts) // 2]
-            mx, my, side = (px + qx) / 2, (py + qy) / 2, abs(qx - px) >= abs(qy - py)
-            t = {"type": "text", "text": e["label"], "color": "SUB", "align": "center" if side else "left"}
+            mx, my, flat = (px + qx) / 2, (py + qy) / 2, abs(qx - px) >= abs(qy - py)
+            side = e.get("label_side", "top" if flat else "right")
+            if (side in ("top", "bottom")) != flat:
+                sys.exit(f"{loc}（arrow）.label_side: {side} は{'縦' if flat else '横'}の線の置き場所。札を置く区間は{'横' if flat else '縦'}の線なので、"
+                         f"{'top か bottom' if flat else 'left か right'}にする")
+            t = {"type": "text", "text": e["label"], "color": "SUB", "align": {"top": "center", "bottom": "center", "left": "right", "right": "left"}[side]}
             lw = widest_em(e["label"], loc) * 11 / 72 + 0.06
             lh = self.measure(t, lw, f"{loc}.label")
-            self.place(t, mx - lw / 2 if side else mx + 2 * LABEL_GAP, my - lh - LABEL_GAP if side else my - lh / 2, lw, lh, lab := f"{loc}.label")
+            lx = {"left": mx - lw - 2 * LABEL_GAP, "right": mx + 2 * LABEL_GAP}.get(side, mx - lw / 2)
+            ly = {"top": my - lh - LABEL_GAP, "bottom": my + LABEL_GAP}.get(side, my - lh / 2)
+            self.place(t, lx, ly, lw, lh, lab := f"{loc}.label")
         self.lines.append((loc, pts, e.get("head", True), {self.id_loc[v] for v in (e["from"], e["to"]) if isinstance(v, str)}, lab))
 
     def tangles(self):
@@ -1838,6 +1856,8 @@ SPEC_UNIT = {"w": "幅（in）", "h": "高さ（in）", "x": "frame の左上か
              "size": "pt", "icon.size": "in", "num.size": "S・M・L", "gap": "部品の間（in）", "id": "矢印の from・to で指す名前", "spacing": "行間（%）", "para_gap": "段落の間（pt）",
              "pad": "箱の端と文字の間（in）", "radius": "角の丸み（in）", "step": "項目の間隔（in）",
              "route": "bent は折れ線（両端を id でつないだとき）。id の両端が箱なら、線は箱につながる", "today": "今日の縦線の位置（1 が 1 列目の左端、1.5 が 1 列目の中ほど）",
+             "label_side": "札の置き場所。横の線は top（既定）か bottom、縦の線は right（既定）か left",
+             "offset": "線を箱の中央からずらす in。横の線は下が正、縦の線は右が正。ずらした線は箱につながない（同じ 2 つの箱の間に 2 本引くとき）",
              "bars.unit": "数のあとに付ける単位", "stat.unit": "単位（数字の半分の大きさ）", "horizontal": "横の棒（名前が長い・順位）。既定は縦の棒（時の流れ）", "bars.hot": "強調する棒の番号（1 から。赤）",
              "code.hot": "赤の太字にする行（1 から）"}
 
@@ -1850,7 +1870,7 @@ def spec_unit(kind, k):
 def spec_brief():
     """書く形の早見表（slides.py schema --brief）。SPEC_EL・SPEC_PAGE・SPEC_DECK と型の説明から作るので、形と食い違わない。* は要るキー。
     pom の llm.txt にならい、ページを書く子が JSON Schema の全文の代わりに読む（prompt_pages.md）。"""
-    short = {"s": "文字", "md": "記法", "n": "数", "p": "正の数", "i": "整数", "pi": "1 以上", "b": "真偽", "c": "色", "els": "部品の並び", "kids": "部品の並び",
+    short = {"s": "文字", "md": "記法", "n": "数", "f": "正か負の数", "p": "正の数", "i": "整数", "pi": "1 以上", "b": "真偽", "c": "色", "els": "部品の並び", "kids": "部品の並び",
              "w": '正の数か "fit"', "nh": "正の数か行ごとの並び", "ints": "1 からの番号の並び", "nums": "比の並び", "ns": "文字か整数", "pt": "id か [x, y]"}
     def keys(schema, kind=""):
         need, opt = schema
@@ -1878,7 +1898,7 @@ def spec_schema():
           "\\n で段落、どの段落も「- 」で始めると箇条書き。`コード` は ` を外して本文の書体のまま")
     color = {"enum": list(COLOR_NAMES), "description": "役割の名前。値はテーマのファイルが決める（6 桁は書けない）"}
     num, pos = {"type": "number"}, {"type": "number", "exclusiveMinimum": 0}
-    t = {"s": {"type": "string"}, "md": {"type": "string", "description": md}, "n": {"type": "number", "minimum": 0}, "p": pos, "i": {"type": "integer"},
+    t = {"s": {"type": "string"}, "md": {"type": "string", "description": md}, "n": {"type": "number", "minimum": 0}, "f": num, "p": pos, "i": {"type": "integer"},
          "pi": {"type": "integer", "minimum": 1}, "b": {"type": "boolean"}, "c": color,
          "w": {"anyOf": [pos, {"const": "fit"}], "description": "幅（in）。label は \"fit\" で中身の文字の幅"},
          "nh": {"anyOf": [pos, {"type": "array", "items": pos}], "description": "行の高さの最小（in）。行ごとに並べてもよい"},
@@ -3912,6 +3932,29 @@ def selftest_spec():
     d, _ = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [{"type": "arrow", "from": [0, 0], "to": [4, 2.5], "label": "斜めの線"}]}]})
     assert any("札（label）が線に重なる" in w for w in d.warnings), d.warnings  # 斜めの線の上の中央に置いた札は、線にかかる（fixture 04 の子が見つけた）
     assert near(lab["x"], arr["x1"] + 2 * LABEL_GAP) and near(lab["y"] + lab["h"] / 2, (arr["y1"] + arr["y2"]) / 2)  # 縦の線は右の中ほど
+    pair = lambda *arrows: run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [{"type": "label", "id": "a", "text": "A", "x": 0, "y": 0, "w": 2, "h": 0.8},
+        {"type": "label", "id": "b", "text": "B", "x": 4, "y": 0, "w": 2, "h": 0.8}, {"type": "label", "id": "c", "text": "C", "x": 0, "y": 2, "w": 2, "h": 0.6}, *arrows]}]})
+    d, els = pair({"type": "arrow", "from": "a", "to": "b", "offset": -0.2, "label": "行き"}, {"type": "arrow", "from": "b", "to": "a", "offset": 0.2, "label": "帰り", "label_side": "bottom"},
+                  {"type": "arrow", "from": "a", "to": "c", "label": "左", "label_side": "left", "offset": 0.3})
+    go, back, down = (e for e in els if e["call"] == "arrow")
+    lg, lb, ll = (e for e in els if e["loc"].endswith(".label"))
+    assert not d.warnings and "link" not in go and near(go["y1"], 0.4 - 0.2 + Y_BODY_NOLEAD) and near(back["y1"], 0.4 + 0.2 + Y_BODY_NOLEAD), d.warnings  # ずらした線は箱につながない
+    assert near(go["x1"], X + 2) and near(go["x2"], X + 4) and near(down["x1"], X + 1.3)  # 辺から辺へ（つないだ線と同じく間を空けない）。縦の線は右へずらす
+    assert near(lg["y"] + lg["h"] + LABEL_GAP, go["y1"]) and near(lb["y"], back["y1"] + LABEL_GAP) and near(ll["x"] + ll["w"] + 2 * LABEL_GAP, down["x1"])  # 上・下・左
+    for bad, want in [({"type": "arrow", "from": "a", "to": "b", "offset": 0.5}, "箱の上下の外"), ({"type": "arrow", "from": "a", "to": "b", "route": "bent", "offset": 0.1}, "まっすぐの矢印だけ"),
+                      ({"type": "arrow", "from": [0, 0], "to": "b", "offset": 0.1}, "まっすぐの矢印だけ"), ({"type": "arrow", "from": "a", "to": "b", "label": "x", "label_side": "left"}, "top か bottom"),
+                      ({"type": "arrow", "from": "a", "to": "c", "label": "x", "label_side": "top"}, "left か right"), ({"type": "arrow", "from": "a", "to": "b", "label_side": "top"}, "label がない")]:
+        try:
+            pair(bad)
+            raise AssertionError(bad)
+        except SystemExit as ex:
+            assert want in str(ex), (bad, ex)
+    _, els = run({"title": "t", "body": [{"type": "stack", "items": [{"type": "card", "num": 1, "head": "見出し", "text": "1 行", "valign": "middle"},
+        {"type": "card", "num": 2, "head": "見出し", "valign": "middle"}, {"type": "card", "num": 3, "head": "見出し", "text": "1 行目<br>2 行目<br>3 行目", "valign": "middle"}]}]})
+    d, _ = pair({"type": "label", "id": "t", "text": "T", "x": 4, "y": 1.2, "w": 2, "h": 1.2}, {"type": "arrow", "from": "c", "to": "t", "offset": 0.1})
+    assert any("斜めになる" in w for w in d.warnings), d.warnings  # 中央の高さの違う箱の間でずらしても斜めになる
+    one, bare, three = (e["h"] for e in els if e["call"] == "card")
+    assert one < 0.65 and near(bare, MARK + 0.24) and three > one + 0.4, (one, bare, three)  # 上下の中央の小さな箱は 1 行なら 0.6 in ほど、行が増えれば伸びる
     schema = spec_schema()
     assert {f"el_{k}" for k in SPEC_EL} <= set(schema["$defs"]) and json.dumps(schema, ensure_ascii=False)
     assert schema["$defs"]["el_text"]["properties"]["fill"]["enum"] == list(COLOR_NAMES)  # 色は役割の名前だけ（6 桁は書けない）

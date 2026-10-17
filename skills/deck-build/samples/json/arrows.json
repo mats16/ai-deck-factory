@@ -13,8 +13,12 @@
     {"type": "arrow", "from": "root", "to": "left", "route": "bent"},
     {"type": "arrow", "from": "root", "to": "right", "route": "bent", "color": "RED"},
     {"type": "arrow", "from": "from", "to": "to", "route": "bent", "dash": true}]},
-  {"type": "row", "arrows": true, "items": [
-    {"type": "label", "text": "集める", "fill": "PANEL"},
-    {"type": "label", "text": "整える", "fill": "PANEL"},
-    {"type": "label", "text": "配る", "fill": "NAVY"}]}],
- "note": "上下に離れた箱は縦の矢印。1 つの箱から上下に分かれる枝は、どれも bent にする（縦・横・縦）。左右にも上下にもずれた箱は bent で横・縦・横に折る。下は札を row の矢印でつないだ流れ。"}
+  {"type": "frame", "h": 1.3, "items": [
+    {"type": "label", "id": "ws", "text": "ワークスペース", "x": 0, "y": 0.25, "w": 2.6, "h": 0.8, "fill": "PANEL"},
+    {"type": "label", "id": "plug", "text": "プラグイン", "x": 6.0, "y": 0.25, "w": 2.6, "h": 0.8, "fill": "NAVY"},
+    {"type": "arrow", "from": "ws", "to": "plug", "offset": -0.2, "label": "Issue で上げる"},
+    {"type": "arrow", "from": "plug", "to": "ws", "offset": 0.2, "label": "update で届く", "label_side": "bottom"},
+    {"type": "label", "id": "ask", "text": "指摘", "x": 10.5, "y": 0, "w": 1.6, "h": 0.4},
+    {"type": "label", "id": "rule", "text": "決まり", "x": 10.5, "y": 0.9, "w": 1.6, "h": 0.4},
+    {"type": "arrow", "from": "ask", "to": "rule", "label": "戻す", "label_side": "left"}]}],
+ "note": "上下に離れた箱は縦の矢印。1 つの箱から上下に分かれる枝は、どれも bent にする（縦・横・縦）。左右にも上下にもずれた箱は bent で横・縦・横に折る。下は、同じ 2 つの箱の間の行きと帰りを offset で上下にずらし、札を線の上と下に置く。右下の縦の線の札は左に置く。"}
