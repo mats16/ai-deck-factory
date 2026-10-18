@@ -737,7 +737,7 @@ class Deck:
 
     def arrow(self, sid, x1, y1, x2, y2, color=SUB, head=True, dash=False, weight=1.25, link=None, bent=False):
         """細い線。横の矢印は、両側の箱の上下の中央に引く（visual.md の 4。lint が見る）。dash で点線（「できるが手間」などの意味）、weight は太さ（pt）。
-        link は (始めの図形の ID, 接続点, 終わりの図形の ID, 接続点) で、線を図形につなぐ（画面で箱を動かしても付いてくる）。接続点は四角の上 0・左 1・下 2・右 3。
+        link は (始めの図形の ID, 辺, 終わりの図形の ID, 辺) で、線を四角の図形の辺の中央（接続点）につなぐ（画面で箱を動かしても付いてくる）。辺は top・left・bottom・right。
         (x1, y1)・(x2, y2) はその接続点に置く（Google がつないだ点に引き直す）。bent は折れ線（両端をつないだときだけ。横・縦・横か縦・横・縦の形に Google が引く）。
         [slides_py-024] 2026-10-16 の sandbox で、つないだ線の形、グループの中の図形につなげること、つないでいない折れ線は形が崩れることを確かめた。"""
         if bent and not link:
@@ -748,7 +748,7 @@ class Deck:
             props["dashStyle"] = "DASH"
         if link:
             a, sa, b, sb = link
-            props |= {"startConnection": {"connectedObjectId": a, "connectionSiteIndex": sa}, "endConnection": {"connectedObjectId": b, "connectionSiteIndex": sb}}
+            props |= {"startConnection": {"connectedObjectId": a, "connectionSiteIndex": SITE[sa]}, "endConnection": {"connectedObjectId": b, "connectionSiteIndex": SITE[sb]}}
         self.reqs += [{"createLine": {"objectId": e, "category": "BENT" if bent else "STRAIGHT", "elementProperties": place(
                           sid, x1, y1, abs(x2 - x1), abs(y2 - y1), 1 if x2 >= x1 else -1, 1 if y2 >= y1 else -1)}},
                       {"updateLineProperties": {"objectId": e, "lineProperties": props, "fields": ",".join(props)}}]
@@ -894,6 +894,7 @@ STAT_PAD, HEAD_GAP = 0.2, 0.06  # 数字の強調の箱の端と文字の間、�
 G_HEAD, G_NOTE, G_COL, G_COL_MIN, G_BAR, G_LANE, G_PAD, G_INSET, G_GROW = 2.2, 2.4, 1.0, 0.4, 0.42, 0.06, 0.1, 0.04, 0.4
 # 棒グラフ: 縦の棒の既定の高さ、数字と名前の行の高さ、棒の幅（枠の幅に対する比）と最大、横の棒の行の高さと棒の太さ（in）
 B_H, B_LABEL, B_FILL, B_MAX, B_ROW, B_BAR = 2.6, 0.3, 0.6, 1.2, 0.42, 0.28
+SITE = {"top": 0, "left": 1, "bottom": 2, "right": 3}  # 四角の図形の辺 → Slides API の接続点の番号（Deck.arrow の link）
 CONNECT = ("text", "label", "card", "stat", "code", "box", "num")  # 矢印をつなげる部品（SpecPage.place が、四角の枠が箱と同じ大きさのものだけを選ぶ）
 # キーの型。s 文字列、md 記法つきの文字（spec_md）、n 数、i 整数、b 真偽、c 色、els 部品の並び、pt ID か [x, y]、ほかは SPEC_OK
 _GEO = {"id": "s", "w": "w", "h": "p", "x": "n", "y": "n"}  # どの部品にも書ける（x・y は frame の中だけ、w の "fit" は label だけ）
@@ -1558,7 +1559,7 @@ class SpecPage:
             if i in self.ids:
                 sys.exit(f"{loc}: id「{i}」が 2 つある")
             self.ids[i], self.id_loc[i] = (x, y, w, h), loc
-            # つなぐのは、文字の枠が見える箱と同じ大きさの四角になる部品だけ（接続点は四角の上 0・左 1・下 2・右 3）。楕円や矢羽根の図形と、
+            # つなぐのは、文字の枠が見える箱と同じ大きさの四角になる部品だけ（接続点は四角の辺の中央。SITE）。楕円や矢羽根の図形と、
             # 左寄せ・右寄せの塗りの文字・札・数字の強調（Deck.text が文字の枠を箱の内に縮める）と、2 字以上で文字の枠が円より広がる番号
             # （Deck.text の ring）はつながない。矢印の先が箱の中か、円の外に出る
             center = e.get("align", "center" if kind == "label" else "left") == "center"
@@ -1685,13 +1686,13 @@ class SpecPage:
             x1, x2 = (ax + aw + pa, bx - pb) if bx >= ax + aw else (ax - pa, bx + bw + pb)
             if off and not (ay < y1 < ay + ah and by < y2 < by + bh):
                 sys.exit(f"{loc}（arrow）.offset: {off} in ずらすと、線の端が箱の上下の外に出る（箱の高さの半分より小さくする）")
-            sites = (3, 1) if bx >= ax + aw else (1, 3)  # 右から左へ、左から右へ（四角の接続点は上 0・左 1・下 2・右 3）
+            sites = ("right", "left") if bx >= ax + aw else ("left", "right")  # 右の辺から左の辺へ、左の辺から右の辺へ
         elif by >= ay + ah or ay >= by + bh:
             x1, x2 = ax + aw / 2 + off, bx + bw / 2 + off
             y1, y2 = (ay + ah + pa, by - pb) if by >= ay + ah else (ay - pa, by + bh + pb)
             if off and not (ax < x1 < ax + aw and bx < x2 < bx + bw):
                 sys.exit(f"{loc}（arrow）.offset: {off} in ずらすと、線の端が箱の左右の外に出る（箱の幅の半分より小さくする）")
-            sites = (2, 0) if by >= ay + ah else (0, 2)
+            sites = ("bottom", "top") if by >= ay + ah else ("top", "bottom")
         else:
             sys.exit(f"{loc}（arrow）: 両端の部品が重なっているので引けない")
         if boxed and not bent and abs(x1 - x2) > 0.01 and abs(y1 - y2) > 0.01:  # ずらした線（offset）も、両端の箱の中央からずらすので同じ  # 2026-10-16 の依頼文の試しで、枝の 1 本だけ直線にして斜めになった
@@ -1700,8 +1701,8 @@ class SpecPage:
                   **({"link": [a, sites[0], b, sites[1]], "bent": bent} if a and b else {}))
         pts = [(x1, y1), (x2, y2)]
         if bent:  # Google は横・縦・横（縦・横・縦）の真ん中で折る（見込み）
-            m = (x1 + x2) / 2 if sites[0] in (1, 3) else (y1 + y2) / 2
-            pts[1:1] = [(m, y1), (m, y2)] if sites[0] in (1, 3) else [(x1, m), (x2, m)]
+            m = (x1 + x2) / 2 if sites[0] in ("left", "right") else (y1 + y2) / 2
+            pts[1:1] = [(m, y1), (m, y2)] if sites[0] in ("left", "right") else [(x1, m), (x2, m)]
             # 両端の中央がそろうと真ん中の区間の長さが 0 になり、札を横の線の向きに置いてしまう。1 本の直線に並ぶ折れ点を外す
             pts = [pts[0], *(b for a, b, c in zip(pts, pts[1:], pts[2:]) if abs((b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])) > 1e-9), pts[-1]]
         lab = None
@@ -3675,7 +3676,7 @@ def selftest_spec():
     assert not any(r.get("updateTextStyle", {}).get("style", {}).get("fontFamily") == MONO for r in d.reqs)  # `コード` は地の文のまま（visual-014）
     assert arr["y1"] == arr["y2"] and near(arr["y1"], Y_BODY + h / 2) and near(arr["x1"], cards[0]["x"] + cards[0]["w"])  # 箱の上下の中央に横に、箱の辺から引く
     conn = next(r["updateLineProperties"]["lineProperties"] for r in d.reqs if "startConnection" in r.get("updateLineProperties", {}).get("lineProperties", {}))
-    assert arr["link"] == ["spec.body[0].items[0]", 3, "spec.body[0].items[1]", 1] and conn["endConnection"]["connectionSiteIndex"] == 1  # 右の辺から左の辺へ、箱につなぐ
+    assert arr["link"] == ["spec.body[0].items[0]", "right", "spec.body[0].items[1]", "left"] and conn["endConnection"]["connectionSiteIndex"] == 1  # 右の辺から左の辺へ、箱につなぐ
     assert conn["startConnection"]["connectedObjectId"] in {g[1] for g in d.round_groups}  # つなぐのはカードの箱の文字の枠（角丸の図形のまとまりには、つなげない）
     assert els[-1]["call"] == "arrow" and d.notes and json.dumps(d.resolved)  # 矢印は最後に引く。解いた形は JSON にできる
     assert d.resolved[0]["title"] == "見出し" and d.resolved[0]["lead"] == "リード"  # 解いた形のページの値は、最後の部品の値で上書きしない
@@ -3691,7 +3692,7 @@ def selftest_spec():
                                                                                 {"type": "arrow", "from": [0, 0], "to": [1, 0.5]}]},
                                             {"type": "row", "arrows": True, "items": [{"type": "num", "n": 1}, {"type": "label", "text": "工程"}]}]})
     a, b, arrows = els[0], els[1], [e for e in els if e["call"] == "arrow"]
-    assert near(b["y"], a["y"] + 1 + GAP) and near(arrows[-2]["x1"], a["x"] + a["w"] / 2) and near(arrows[-2]["y1"], a["y"] + 1) and arrows[-2]["link"][1::2] == [2, 0]  # 縦に離れていれば、下の辺から上の辺へ
+    assert near(b["y"], a["y"] + 1 + GAP) and near(arrows[-2]["x1"], a["x"] + a["w"] / 2) and near(arrows[-2]["y1"], a["y"] + 1) and arrows[-2]["link"][1::2] == ["bottom", "top"]  # 縦に離れていれば、下の辺から上の辺へ
     assert "link" not in arrows[0] and "link" not in arrows[-1]  # [x, y] の端と、row の arrows はつながない
     f = next(e for e in els if e["call"] == "text")
     assert near(f["x"], X + 1) and near(f["y"], b["y"] + 1 + GAP_BODY + 0.5) and f["color"] == WHITE  # frame の中は左上からの位置。濃紺の地の文字は白
