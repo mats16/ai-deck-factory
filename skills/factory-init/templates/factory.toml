@@ -4,7 +4,7 @@
 # スクリプトは、今いるフォルダから上へたどって最初に見つかった factory.toml を読み、そのフォルダをワークスペースとして扱う。
 # 実行のたびに書く記録（lint の記録、dreaming の前回の時刻・報告・写し）は、ワークスペースの .factory/ に置かれる。
 #
-# - ここに書くもの: 人や組織で変わる値だけ（会社のテンプレートの書体と色、社名を含む）。見た目の決まり（色の役割・余白・版面）は slides.py と deck-practices/visual.md。
+# - ここに書くもの: 人や組織で変わる値だけ（社名は下の brand。会社のテンプレートの書体と色は、下のテーマのファイルに書く）。見た目の決まり（色の役割・余白・版面）は slides.py と deck-practices/visual.md。
 # - 値の形: Google Slides と Drive のフォルダは URL のまま書く（スクリプトが ID を取り出す）。
 # - テーマ: 色・書体・使い分けの description はワークスペースの themes/slides/<名前>.json に書き（組み込みは visual・company）、ここの [slides.templates] には
 #   テーマごとのテンプレートの URL だけを書く（エージェントが slides.py themes で一覧を見て、資料ごとに選ぶ）。URL は template.py <名前> --from-base が書き込む。
