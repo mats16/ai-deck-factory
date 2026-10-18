@@ -27,7 +27,7 @@ usage:
   ledger.py ask --q <ユーザーに聞くこと> [--rule <ID>] [--src c-1,c-2]   判断待ち
   ledger.py answer <Q-ID> --a <ユーザーの言葉>      判断待ちへの答え
   ledger.py questions [--all]                      判断待ち（--all は答えたものと取り下げたものも）
-  ledger.py review --deck <資料のフォルダ> --table <指摘の表のファイル>   deck-review の指摘の表から、決まりの列のある行の結果を取り込む（同じ行は 2 度数えず、周をまたぐ同じ行はあとの周の結果）
+  ledger.py review --deck <資料のフォルダ> --table <指摘の表のファイル>   deck-review の指摘の表から、決まりの列のある行の結果を取り込む（同じ行は 2 度数えず、ラウンドをまたぐ同じ行はあとのラウンドの結果）
   ledger.py --selftest
 台帳の原文には顧客のことが入る。.factory/ から外（Issue・チャット）に写さない。"""
 import argparse, difflib, hashlib, json, re, sys, tempfile, time
@@ -515,7 +515,7 @@ def rule_texts(ws):
 
 def review(ws, deck, table):
     """deck-review の指摘の表（1 件 1 行。`p3 | 出所 | 観点 | 重さ | 何が | 案 | 結果 | 決まり`）から、決まりの列のある行を取り込む。
-    資料の文は残さず、同じ行を見分けるハッシュだけにする。周をまたいで同じ行があれば、表の後ろ（あとの周）の結果にする。
+    資料の文は残さず、同じ行を見分けるハッシュだけにする。ラウンドをまたいで同じ行があれば、表の後ろ（あとのラウンド）の結果にする。
     決まりの列の ID に「」で添えた語句が、その ID の決まりの文にないときは、その ID だけ取り込まずに知らせる（ID の付け違い）。"""
     deck, last = rel(ws, deck), {r["key"]: r["result"] for r in state(ws)[3]}
     rows, skip, wrong, bare, known = {}, 0, [], set(), rule_texts(ws)
@@ -538,7 +538,7 @@ def review(ws, deck, table):
             continue
         for k in keys:
             key = hashlib.sha1(f"{deck}|{cells[0]}|{cells[4]}|{k}".encode()).hexdigest()[:12]
-            if k.startswith("lint:") or k in dict(cited):  # 周をまたぐ同じ行は、あとの周の書き方で数える
+            if k.startswith("lint:") or k in dict(cited):  # ラウンドをまたぐ同じ行は、あとのラウンドの書き方で数える
                 bare.discard(key)
             else:
                 bare.add(key)
@@ -865,7 +865,7 @@ def selftest():
                 main(["answer", "Q0001", "--a", "1 行にする"])
                 main(["withdraw", "Q0002", "--reason", "出し直す"])
                 assert questions(ws) == [] and [q["status"] for q in questions(ws, True)] == ["回答済み", "取り下げ"]
-            # レビューの表: 決まりの列のある行だけ。2 度取り込んでも数えず、周をまたぐ同じ行はあとの周の結果
+            # レビューの表: 決まりの列のある行だけ。2 度取り込んでも数えず、ラウンドをまたぐ同じ行はあとのラウンドの結果
             t = ws / "review.md"
             t.write_text("p<ページ> | 出所 | 観点 | 重さ | 何 | 案 | 結果 | 決まり\n"
                          "- p3 | 画像 | 5 | 直す | 表がはみ出す | 2 枚に | 直した | ws-visual-002\n"
@@ -880,7 +880,7 @@ def selftest():
                 s = summary(ws)
             assert (s["ws-visual-002"]["直した"], s["ws-visual-002"]["聞く"]) == (2, 0)
             assert s["lint:あおり"]["残した（誤り）"] == 1 and (s["visual-012"]["残した（誤り）"], s["visual-012"]["直した"]) == (1, 1)
-            t.write_text("p3 | 画像 | 5 | 直す | 表がはみ出す | 2 枚に | 残した（3 周で打ち切り） | ws-visual-002\n")
+            t.write_text("p3 | 画像 | 5 | 直す | 表がはみ出す | 2 枚に | 残した（3 ラウンドで打ち切り） | ws-visual-002\n")
             with quiet():
                 assert review(ws, ".", t) == 1
                 s = summary(ws)
@@ -912,7 +912,7 @@ def selftest():
             q.write_text("p1 | 画像 | 5 | 直す | 見出しが文 | 名詞句に | 直した | ws-q-001\n"
                          "p2 | 画像 | 5 | 直す | 言い切りが多い | 減らす | 残した（誤り） | ws-q-001「言い切りは 2〜3 枚」\n")
             with quiet():
-                assert review(ws, ".", q) == 1  # 語句の有無では別の行にならず、あとの周の結果に替わる
+                assert review(ws, ".", q) == 1  # 語句の有無では別の行にならず、あとのラウンドの結果に替わる
             assert (summary(ws)["ws-q-001"]["直した"], summary(ws)["ws-q-001"]["残した（誤り）"]) == (2, 1)
             # 結果ごとに、出た資料の数を数える（1 本の資料の 3 件は、2 本の資料に出たことにならない）
             t.write_text("".join(f"p{i} | 画像 | 5 | 直す | 字 {i} | 直す | 直した | ws-r-001\n" for i in (1, 2, 3)))

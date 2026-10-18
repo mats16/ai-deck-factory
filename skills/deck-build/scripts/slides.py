@@ -1735,7 +1735,7 @@ class SpecPage:
     def tangles(self):
         """矢印と部品の位置を、解いた形で確かめる（組むときの警告）。frame の図で画像を見て直していたもの（線が部品の上を通る、矢じりが 1 点に集まる、
         部品が一部だけ重なる）を、組む前に出す（2026-10-16。JSON の 1 本目の 29 枚で、1〜2 ページだけ組み直した 13 回のうち 10 回と、
-        deck-review の 2〜3 周目の画像の指摘の半分が frame の図だった）。文字の高さは見積もりなので、ぎりぎりのものは画像で確かめる。"""
+        deck-review の 2〜3 ラウンド目の画像の指摘の半分が frame の図だった）。文字の高さは見積もりなので、ぎりぎりのものは画像で確かめる。"""
         def ink(kind, r, e):  # 塗りのない文字は、文字のあるところだけ（枠は広く取ることが多い）
             if kind != "text" or e.get("fill") or e.get("line"):
                 return r
@@ -3549,7 +3549,7 @@ def selftest():
         assert got.index("def p3") < got.index("def make") and "前" in Path(pg + ".bak").read_text()
         ast.parse(got)
         Path(fb).write_text("def p2(d):\n    d.page('再')\n")
-        merge(pg, [fb])  # 同じ周に 2 回合わせても、最初の .bak は上書きしない
+        merge(pg, [fb])  # 同じラウンドに 2 回合わせても、最初の .bak は上書きしない
         assert "前" in Path(pg + ".bak").read_text() and "後" in Path(pg + ".bak1").read_text()
         Path(pg).write_text(got)
         Path(fb).write_text("def p4(d):\n    pass\n\n'''途中の文字列'''\n")  # docstring でない文字列は関数でない文として止める
