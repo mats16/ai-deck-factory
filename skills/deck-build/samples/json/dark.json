@@ -4,7 +4,7 @@
   {"type": "text", "text": "塗りのない文字は、地が濃ければ白になる。カードの番号の円は、地によらず赤"},
   {"type": "row", "items": [
     {"type": "card", "num": 1, "head": "白いカード", "text": "番号の円は赤"},
-    {"type": "card", "num": 2, "head": "濃紺のカード", "text": "文字は白、番号の円は赤", "fill": "NAVY_BLOCK"},
+    {"type": "card", "num": 10, "head": "濃紺のカード", "text": "文字は白、番号の円は赤", "fill": "NAVY_BLOCK"},
     {"type": "card", "head": "印のない濃いカード", "text": "見出しも本文も白", "fill": "NAVY_BLOCK"}]},
   {"type": "row", "widths": [2, 1], "items": [
     {"type": "grid", "cols": 2, "items": [
@@ -13,7 +13,7 @@
       {"type": "label", "text": "3 つ目（折り返し）", "fill": "PANEL"},
       {"type": "label", "text": "4 つ目", "fill": "RED_SOFT"}]},
     {"type": "row", "items": [
-      {"type": "num", "n": 1, "size": "S"},
-      {"type": "num", "n": 2, "size": "M"},
-      {"type": "num", "n": 3, "size": "L"}]}]}],
- "note": "濃い地のページ。塗りのない文字の色、濃い地のカード、cols で折り返す grid、番号の 3 つの大きさ。foot を false にすると、フッターとページ番号を置かない。"}
+      {"type": "num", "n": 10, "size": "S"},
+      {"type": "num", "n": 12, "size": "M"},
+      {"type": "num", "n": 99, "size": "L"}]}]}],
+ "note": "濃い地のページ。塗りのない文字の色、濃い地のカード、cols で折り返す grid、2 字の番号の 3 つの大きさ。foot を false にすると、フッターとページ番号を置かない。"}

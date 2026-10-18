@@ -555,10 +555,12 @@ class Deck:
         # Google は正円の文字を、内接する四角のさらに 0.1 in 内側に置く。0.3〜0.36 in の円では 14pt の数字より狭く、数字が右上にずれる
         # [slides_py-007] （0.3 in で右 3.5 pt・上 2 pt。書体を替えても直らない）。
         # 円は塗りだけにし、円と同じ大きさの透明の枠を重ねて、1 グループにする。四角の枠なら、文字の場所が数字より狭くても、はみ出しを上下・左右に
-        # 均等に振って中央に置く。ただし 2 字以上は幅が足りないと折り返す（「10」は文字の場所 0.20 in で折り返し、0.22 in で 1 行）ので、横だけ数字の幅まで広げる
+        # 均等に振って中央に置く。ただし 2 字以上は幅が足りないと折り返す（「10」は文字の場所 0.20 in で折り返し、0.22 in で 1 行）。数字の幅の見積もりちょうどでは
+        # 書体で折り返す（M の「10」は 0.218 in。#51）ので、字数によらず、横を円か数字の幅の広いほうに左右 0.05 in ずつ足した幅まで広げる。
+        # 番号でない楕円の文字（JSON の shape: ellipse）も同じ枠になり、枠が楕円より 0.1 in 広い
         ring = (x, y, w, h) if kind == "ELLIPSE" else None
         if ring:
-            fw = max(w, em_width(full) * size / 72 + 2 * INSET) if len(full) > 1 else w
+            fw = max(w, em_width(full) * size / 72 + 2 * INSET) + 0.1
             x, w, spacing = x - (fw - w) / 2, fw, spacing or 100  # 行の見込みで 125 にしない（1 行で中央に置く）
         avail = w - 2 * INSET - 2 * inner - (size * 1.3 / 72 if bullets else 0)  # 箇条書きは下の indentStart の分だけ狭い（card_h と同じ）
         if fit:
@@ -895,7 +897,7 @@ G_HEAD, G_NOTE, G_COL, G_COL_MIN, G_BAR, G_LANE, G_PAD, G_INSET, G_GROW = 2.2, 2
 # 棒グラフ: 縦の棒の既定の高さ、数字と名前の行の高さ、棒の幅（枠の幅に対する比）と最大、横の棒の行の高さと棒の太さ（in）
 B_H, B_LABEL, B_FILL, B_MAX, B_ROW, B_BAR = 2.6, 0.3, 0.6, 1.2, 0.42, 0.28
 SITE = {"top": 0, "left": 1, "bottom": 2, "right": 3}  # 四角の図形の辺 → Slides API の接続点の番号（Deck.arrow の link）
-CONNECT = ("text", "label", "card", "stat", "code", "box", "num")  # 矢印をつなげる部品（SpecPage.place が、四角の枠が箱と同じ大きさのものだけを選ぶ）
+CONNECT = ("text", "label", "card", "stat", "code", "box")  # 矢印をつなげる部品（SpecPage.place が、四角の枠が箱と同じ大きさのものだけを選ぶ）
 # キーの型。s 文字列、md 記法つきの文字（spec_md）、n 数、i 整数、b 真偽、c 色、els 部品の並び、pt ID か [x, y]、ほかは SPEC_OK
 _GEO = {"id": "s", "w": "w", "h": "p", "x": "n", "y": "n"}  # どの部品にも書ける（x・y は frame の中だけ、w の "fit" は label だけ）
 _ESC = {"raw": "raw"}  # 形の外の書き方（どの部品にも書ける。lint が要確認に出し、build が数を残す。slides-035）
@@ -1560,12 +1562,10 @@ class SpecPage:
                 sys.exit(f"{loc}: id「{i}」が 2 つある")
             self.ids[i], self.id_loc[i] = (x, y, w, h), loc
             # つなぐのは、文字の枠が見える箱と同じ大きさの四角になる部品だけ（接続点は四角の辺の中央。SITE）。楕円や矢羽根の図形と、
-            # 左寄せ・右寄せの塗りの文字・札・数字の強調（Deck.text が文字の枠を箱の内に縮める）と、2 字以上で文字の枠が円より広がる番号
-            # （Deck.text の ring）はつながない。矢印の先が箱の中か、円の外に出る
+            # 左寄せ・右寄せの塗りの文字・札・数字の強調（Deck.text が文字の枠を箱の内に縮める）はつながない。矢印の先が箱の中に出る。
+            # 番号（num）は文字の枠が円より広い（Deck.text の ring）ので、CONNECT に入れない
             center = e.get("align", "center" if kind == "label" else "left") == "center"
-            dia, npt = NUM[e.get("size", "M")] if kind == "num" else (0, 0)
-            shrink = (kind in ("text", "label", "stat") and not center and (kind == "stat" or e.get("pad") is None or e["pad"] > INSET)
-                      or kind == "num" and len(str(e["n"])) > 1 and em_width(str(e["n"])) * npt / 72 + 2 * INSET > dia)
+            shrink = kind in ("text", "label", "stat") and not center and (kind == "stat" or e.get("pad") is None or e["pad"] > INSET)
             if kind in CONNECT and (kind != "text" or e.get("fill") or e.get("line")) and e.get("shape", "rectangle") in ("rectangle", "round_rectangle") and not shrink:
                 self.anchors[i] = loc
         fill = e.get("fill")
@@ -1674,7 +1674,7 @@ class SpecPage:
         if off:  # ずらした線は辺の中央の接続点に付かないので、図形につながず、箱の辺から辺へ引く（画面で箱を動かすと付いてこない）
             a = b = None
         if bent and not (a and b):
-            sys.exit(f"{loc}（arrow）.route: 折れ線（bent）は、両端を id でつなげる部品（card・code・box・1 字の num と、中央寄せの label・stat・塗りか枠線のある text。shape は四角か角丸）に引く")
+            sys.exit(f"{loc}（arrow）.route: 折れ線（bent）は、両端を id でつなげる部品（card・code・box と、中央寄せの label・stat・塗りか枠線のある text。shape は四角か角丸）に引く")
         # 両端がつなげる部品なら、図形につなぐ（画面で動かしても付いてくる）。つないだ線は接続点（辺の中央）から引くので、間を空けない
         pa, pb = (ARROW_PAD if (aw or ah) and not boxed else 0), (ARROW_PAD if (bw or bh) and not boxed else 0)  # [x, y] の端はその点まで
         sites = None
@@ -3182,14 +3182,17 @@ def selftest():
     start = len(corners.reqs)
     square = corners.box(sid,1,1,2,1,fill=PANEL,kind="RECTANGLE")
     assert len(corners.reqs)-start == 2 and corners.reqs[start]["createShape"]["objectId"] == square
-    for n, fw in (("1", .3), ("10", em_width("10")*14/72 + 2*INSET)):  # 正円の番号: 塗りの円 + 円と同じ高さの透明の枠。幅は 1 字なら円と同じ、2 字なら数字の幅
+    for (dia, sz), n in itertools.product(NUM.values(), ("1", "10", "12", "99")):  # 正円の番号: 塗りの円 + 円と同じ高さの透明の枠
         start = len(corners.reqs)
-        frame = corners.text(sid,1,1,.3,.3,n,size=14,align="CENTER",valign="MIDDLE",fill=RED,kind="ELLIPSE")
+        frame = corners.text(sid,1,1,dia,dia,n,size=sz,align="CENTER",valign="MIDDLE",fill=RED,kind="ELLIPSE")
         made = [r["createShape"] for r in corners.reqs[start:] if "createShape" in r]
         assert [c["shapeType"] for c in made] == ["ELLIPSE","RECTANGLE"] and made[1]["objectId"] == frame == corners.round_groups[-1][1]
+        assert abs(made[0]["elementProperties"]["size"]["width"]["magnitude"] - dia*EMU) < 2  # 円の大きさは変えない
         size, move = made[1]["elementProperties"]["size"], made[1]["elementProperties"]["transform"]
-        assert abs(size["width"]["magnitude"] - fw*EMU) < 2 and abs(size["height"]["magnitude"] - .3*EMU) < 2
-        assert abs(move["translateX"] - (1.15 - fw/2)*EMU) < 2 and abs(move["translateY"] - EMU) < 2  # 円の中心にそろえる
+        fw = size["width"]["magnitude"] / EMU
+        assert abs(fw - (max(dia, em_width(n)*sz/72 + 2*INSET) + .1)) < 1e-6  # 字数によらず、円か数字の幅の広いほうに 0.1 in の余り（#51）
+        assert abs(size["height"]["magnitude"] - dia*EMU) < 2
+        assert abs(move["translateX"] - (1 + dia/2 - fw/2)*EMU) < 2 and abs(move["translateY"] - EMU) < 2  # 円の中心にそろえる
         assert not any(r.get("updateParagraphStyle",{}).get("style",{}).get("lineSpacing") == 125 for r in corners.reqs[start:])  # 行間は 100
     start = len(corners.reqs)
     corners.num(sid, 3, 2, 2, "L")  # 中心で置き、大きさと文字は NUM から
@@ -3197,7 +3200,7 @@ def selftest():
     assert abs(circle["size"]["width"]["magnitude"] - NUM["L"][0]*EMU) < 2 and abs(circle["transform"]["translateX"] - (2 - NUM["L"][0]/2)*EMU) < 2
     assert any(r.get("updateTextStyle",{}).get("style",{}).get("fontSize") == pt(NUM["L"][1]) for r in corners.reqs[start:])
     corners.finish()
-    assert len(corners.round_groups) == 12 and all(len(r["groupObjects"]["childrenObjectIds"]) >= 2 for r in corners.reqs if "groupObjects" in r)
+    assert len(corners.round_groups) == 22 and all(len(r["groupObjects"]["childrenObjectIds"]) >= 2 for r in corners.reqs if "groupObjects" in r)
     assert all(any(r.get("groupObjects",{}).get("childrenObjectIds") == [bg,e] for r in corners.reqs) for bg,e,gid in corners.round_groups)  # 文字と背景を 1 つにする
     assert any(r.get("insertText",{}).get("text") == "角丸の文字" for r in corners.reqs)
     # 塗りの箱の左寄せの文字は、箱の端から 1 字分（文字の大きさ）。中央寄せと塗りのない文字は枠のまま。四角の箱も図形と文字の枠を分ける
@@ -4049,14 +4052,10 @@ def selftest_spec():
                                                                              {"type": "stat", "id": "s", "value": "3", "x": 8, "y": 0, "w": 2},
                                                                              {"type": "arrow", "from": "l", "to": "c"}, {"type": "arrow", "from": "c", "to": "s"}]}]})
     assert not any("link" in e for e in els if e["call"] == "arrow")  # 文字の枠が箱の内に縮む部品（左寄せの塗りの文字・stat）はつながない
-    d, els = run({"type": "slide", "body": [{"type": "frame", "h": 1, "items": [{"type": "num", "id": "a", "n": 1, "x": 0, "y": 0}, {"type": "num", "id": "b", "n": 10, "x": 2, "y": 0},
+    _, els = run({"type": "slide", "body": [{"type": "frame", "h": 1, "items": [{"type": "num", "id": "a", "n": 1, "x": 0, "y": 0}, {"type": "num", "id": "b", "n": 10, "x": 2, "y": 0},
                                                                              {"type": "label", "id": "c", "text": "x", "x": 4, "y": 0, "w": 1, "h": 0.36},
                                                                              {"type": "arrow", "from": "a", "to": "c"}, {"type": "arrow", "from": "b", "to": "c"}]}]})
-    one, ten = [e for e in els if e["call"] == "arrow"]
-    assert "link" in one and "link" not in ten  # 1 字の番号は円と同じ大きさの枠につなぐ。2 字以上は枠が円より広がるのでつながない
-    to = next(r["updateLineProperties"]["lineProperties"]["startConnection"]["connectedObjectId"] for r in d.reqs if "startConnection" in r.get("updateLineProperties", {}).get("lineProperties", {}))
-    frame = next(r["createShape"]["elementProperties"]["size"] for r in d.reqs if r.get("createShape", {}).get("objectId") == to)
-    assert frame["width"]["magnitude"] == frame["height"]["magnitude"] == emu(NUM["M"][0])["magnitude"]  # つないだ枠は円と同じ大きさ
+    assert not any("link" in e for e in els if e["call"] == "arrow")  # 番号は字数によらず枠が円より広いのでつながない
     with contextlib.redirect_stderr(io.StringIO()):
         d, els = run({"type": "slide", "body": [{"type": "gantt", "cols": [f"{i} 月" for i in range(1, 13)], "rows": [{"head": "a", "bars": [{"from": 1, "to": 1, "text": "ユーザーの受け入れの試験と確かめ"}]}]},
                                                 {"type": "bars", "items": [["a", 100.0]] + [[str(i), 12345678] for i in range(15)], "unit": "件"}]})
