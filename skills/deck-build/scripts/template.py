@@ -254,7 +254,7 @@ def specimen(theme, t, origin=()):
         for i, (label, fill, fg) in enumerate([("GA", GA, STAGE_TEXT), ("Beta", PREVIEW, STAGE_TEXT), ("OSS", OSS, WHITE)]):
             d.text(s, X + i * 0.95, 5.13, 0.8, 0.4, label, color=fg, bold=True, align="CENTER", valign="MIDDLE", fill=fill)
         d.text(s, X + 3.2, 5.13, 0.8, 0.4, "推奨", color=RED_TEXT, bold=True, align="CENTER", valign="MIDDLE", fill=RED_SOFT)  # 提供ステージの札と離す（赤と緑を並べない）
-        for n, (size, cx) in enumerate((("S", 4.35), ("M", 4.85), ("L", 5.45)), 1):  # 正円の番号の 3 つの大きさ（slides.py の NUM）。札と中心をそろえる
+        for n, (size, cx) in enumerate((("small", 4.35), ("medium", 4.85), ("large", 5.45)), 1):  # 正円の番号の 3 つの大きさ（slides.py の NUM）。札と中心をそろえる
             d.num(s, n, X + cx, 5.33, size)
         rx = X + hw + 0.3
         tb = d.table(s, rx, Y_BODY, [1.6, hw - 1.6], [["役割", "使うところ"], ["NAVY", "扉、結論バンド、表の見出しの行"], ["HEAD", "見出し、表の 1 列目"], ["SUB", "出典、フッター、補足"],

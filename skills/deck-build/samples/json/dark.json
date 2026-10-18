@@ -13,7 +13,7 @@
       {"type": "label", "text": "3 つ目（折り返し）", "fill": "PANEL"},
       {"type": "label", "text": "4 つ目", "fill": "RED_SOFT"}]},
     {"type": "row", "items": [
-      {"type": "num", "n": 1, "size": "S"},
-      {"type": "num", "n": 2, "size": "M"},
-      {"type": "num", "n": 3, "size": "L"}]}]}],
+      {"type": "num", "n": 1, "size": "small"},
+      {"type": "num", "n": 2, "size": "medium"},
+      {"type": "num", "n": 3, "size": "large"}]}]}],
  "note": "濃い地のページ。塗りのない文字の色、濃い地のカード、cols で折り返す grid、番号の 3 つの大きさ。foot を false にすると、フッターとページ番号を置かない。"}

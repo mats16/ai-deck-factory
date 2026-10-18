@@ -11,7 +11,7 @@
     {"type": "label", "id": "ml", "text": "予測のモデル", "x": 9.8, "y": 1.6, "w": 2.2, "h": 0.6},
     {"type": "icon", "name": "tabler:cloud", "x": 7.55, "y": 0.35, "size": 0.5, "color": "NAVY"},
     {"type": "image", "src": "asset:gcp/bigquery.png", "x": 11.5, "y": 0.95, "w": 0.4, "h": 0.4, "alt": "BigQuery"},
-    {"type": "num", "n": 1, "x": 0.3, "y": 0.7, "size": "S", "fill": "NAVY"},
+    {"type": "num", "n": 1, "x": 0.3, "y": 0.7, "size": "small", "fill": "NAVY"},
     {"type": "box", "x": 9.55, "y": 0, "w": 2.55, "h": 2.4, "line": "SUB", "dash": true, "weight": 1, "shape": "round_rectangle", "radius": 0.15},
     {"type": "arrow", "from": "db", "to": "etl"},
     {"type": "arrow", "from": "etl", "to": "lake", "color": "RED", "weight": 2, "label": "毎晩"},
