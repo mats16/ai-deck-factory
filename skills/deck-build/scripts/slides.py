@@ -77,8 +77,8 @@ LOGO = _BRAND.get("logo")  # ドキュメントの表紙のロゴ（assets/ の�
 COPYRIGHT_PT = 9  # 著作権表示と、高さをそろえるページ番号だけは 11pt 以上の例外。本文を邪魔しない（2026-10-08、ページ番号は 2026-10-13）
 # 結論バンドの内側の余白（in）。枠と文字の間は 1 字分より大きめに取る（見た目 1-8。13pt の 1 字は 0.18 in）。左右は pptx 版と同じ 18pt
 BAND_PAD_X, BAND_PAD_Y = 0.25, 0.2
-# [slides_py-001] 正円の番号の直径（in）と数字（pt）。M・L は数字の高さが円の 4 割ほど。S は周りの 11pt の文字に合わせて 11pt（11pt の太字なので、赤に白の 3.62:1 で届く。visual.md の 3 の visual-039）
-NUM = {"S": (0.3, 11), "M": (0.36, 14), "L": (0.48, 18)}  # 図の中の印／カードと手順（既定）／大きな段
+# [slides_py-001] 正円の番号の直径（in）と数字（pt）。medium・large は数字の高さが円の 4 割ほど。small は周りの 11pt の文字に合わせて 11pt（11pt の太字なので、赤に白の 3.62:1 で届く。visual.md の 3 の visual-039）
+NUM = {"small": (0.3, 11), "medium": (0.36, 14), "large": (0.48, 18)}  # 図の中の印／カードと手順（既定）／大きな段
 # [slides_py-002] 赤（RED）の線の太さ（pt）。強調の囲みは実線でも点線でも 2pt（強調のための線なので、細くしない）。ほかの枠線は 0.75pt
 EMPH_PT = 2
 
@@ -436,7 +436,7 @@ class Deck:
         """表紙・扉のパターン n（1 から）のページを作る。戻り: (ページ, 文字の幅, 文字の色 TONES)。テンプレートにパターンがなければ、1 は Blank に濃紺の地。"""
         vs = VARIANTS.get(kind, {})
         if n not in (vs or {1: None}):
-            raise ValueError(f"{'表紙' if kind == 'cover' else '扉'}のパターン {n} がない（テンプレートにあるのは {', '.join(map(str, sorted(vs or [1])))}。見本のページで番号を見る）")
+            raise ValueError(f"{'表紙' if kind == 'cover' else '扉'}のパターン {n} がない（テンプレートにあるのは {', '.join(f'{i}（地: {vs[i][1]}）' for i in sorted(vs)) or '1'}。見本のページで番号を見る）")
         if not vs:
             return self.slide(NAVY), W + 2 * INSET, TONES["dark"]
         w, tone = vs[n]
@@ -624,9 +624,11 @@ class Deck:
                                                     "fields": "indentStart,indentFirstLine"}}]
         return e
 
-    def num(self, sid, n, cx, cy, size="M", fill=RED):
-        """正円の番号。(cx, cy) は円の中心（大きさを替えても位置が動かず、横に並べる見出しと中心をそろえやすい）。size は NUM の S・M・L。
+    def num(self, sid, n, cx, cy, size="medium", fill=RED):
+        """正円の番号。(cx, cy) は円の中心（大きさを替えても位置が動かず、横に並べる見出しと中心をそろえやすい）。size は NUM の small・medium・large。
         数字は、RED の塗りなら ON_RED、ほかの塗りなら WHITE。"""
+        if size not in NUM:
+            raise ValueError(f"番号の大きさ {size!r} は書けない（{'・'.join(NUM)}）")
         dia, pt_ = NUM[size]
         return self.text(sid, cx - dia / 2, cy - dia / 2, dia, dia, str(n), size=pt_, color=ON_RED if fill == RED else WHITE, bold=True, align="CENTER", valign="MIDDLE",
                          fill=fill, kind="ELLIPSE")
@@ -1344,7 +1346,7 @@ class SpecPage:
             size = e.get("size", 11)
             mono = e.get("mono", False)
             return max(em_width(ln, mono) for ln in spec_plain(spec_md(e["text"])).replace("\v", "\n").split("\n")) * size / 72 + 2 * size / 72 + 0.06
-        return e.get("w") or (NUM[e.get("size", "M")][0] if e["type"] == "num" else e.get("size", 0.5) if e["type"] == "icon" else None)
+        return e.get("w") or (NUM[e.get("size", "medium")][0] if e["type"] == "num" else e.get("size", 0.5) if e["type"] == "icon" else None)
 
     def slot_w(self, e, w):
         """縦に並べるときの幅。書いた幅か決まった幅、なければ並びの幅（超えない）。"""
@@ -1467,7 +1469,7 @@ class SpecPage:
         elif m == "icon":
             self.emit("icon", f"{loc}.icon", name=e["icon"], x=mx, y=my, size=size, color=hex_of(on))
         elif m == "num":
-            self.emit("num", f"{loc}.num", n=e["num"], cx=mx + size / 2, cy=my + size / 2, size="M", fill=RED)  # 地によらず赤の円（数字は ON_RED）
+            self.emit("num", f"{loc}.num", n=e["num"], cx=mx + size / 2, cy=my + size / 2, size="medium", fill=RED)  # 地によらず赤の円（数字は ON_RED）
         else:
             self.emit("image", f"{loc}.image", src=self.src({"src": e["image"]}, loc), x=mx, y=my, w=size, h=size, alt=e.get("head"))
         tx = x + MARK_IN if center or m is None else mx + size + MARK_GAP
@@ -1563,7 +1565,7 @@ class SpecPage:
             # 左寄せ・右寄せの塗りの文字・札・数字の強調（Deck.text が文字の枠を箱の内に縮める）と、2 字以上で文字の枠が円より広がる番号
             # （Deck.text の ring）はつながない。矢印の先が箱の中か、円の外に出る
             center = e.get("align", "center" if kind == "label" else "left") == "center"
-            dia, npt = NUM[e.get("size", "M")] if kind == "num" else (0, 0)
+            dia, npt = NUM[e.get("size", "medium")] if kind == "num" else (0, 0)
             shrink = (kind in ("text", "label", "stat") and not center and (kind == "stat" or e.get("pad") is None or e["pad"] > INSET)
                       or kind == "num" and len(str(e["n"])) > 1 and em_width(str(e["n"])) * npt / 72 + 2 * INSET > dia)
             if kind in CONNECT and (kind != "text" or e.get("fill") or e.get("line")) and e.get("shape", "rectangle") in ("rectangle", "round_rectangle") and not shrink:
@@ -1623,7 +1625,7 @@ class SpecPage:
         if kind == "icon":
             return self.emit("icon", loc, e, name=e["name"], x=x, y=y, size=w, color=hex_of(spec_color(e.get("color", "TEXT"))))
         if kind == "num":
-            return self.emit("num", loc, e, n=e["n"], cx=x + w / 2, cy=y + w / 2, size=e.get("size", "M"), fill=spec_color(e.get("fill", "RED")))
+            return self.emit("num", loc, e, n=e["n"], cx=x + w / 2, cy=y + w / 2, size=e.get("size", "medium"), fill=spec_color(e.get("fill", "RED")))
         if kind == "box":
             if h <= 0:
                 sys.exit(f"{loc}（box）: h がない（row・grid の中なら行の高さになる）")
@@ -1854,7 +1856,8 @@ def spec_where(deck):
 
 
 SPEC_UNIT = {"w": "幅（in）", "h": "高さ（in）", "x": "frame の左上からの位置（in。frame の中だけ）", "y": "frame の左上からの位置（in。frame の中だけ）",
-             "size": "pt", "icon.size": "in", "num.size": "S・M・L", "gap": "部品の間（in）", "id": "矢印の from・to で指す名前", "spacing": "行間（%）", "para_gap": "段落の間（pt）",
+             "size": "pt", "icon.size": "in", "num.size": "small は図の中の印、medium はカードと手順（既定）、large は大きな段",
+             "variant": "会社のテンプレートの表紙・扉のパターンの番号（テンプレートの見本のページにある。テンプレートがなければ 1 だけ）", "gap": "部品の間（in）", "id": "矢印の from・to で指す名前", "spacing": "行間（%）", "para_gap": "段落の間（pt）",
              "pad": "箱の端と文字の間（in）", "radius": "角の丸み（in）", "step": "項目の間隔（in）",
              "route": "bent は折れ線（両端を id でつないだとき）。id の両端が箱なら、線は箱につながる", "today": "今日の縦線の位置（1 が 1 列目の左端、1.5 が 1 列目の中ほど）",
              "label_side": "札の置き場所。横の線は top（既定）か bottom、縦の線は right（既定）か left",
@@ -3192,10 +3195,15 @@ def selftest():
         assert abs(move["translateX"] - (1.15 - fw/2)*EMU) < 2 and abs(move["translateY"] - EMU) < 2  # 円の中心にそろえる
         assert not any(r.get("updateParagraphStyle",{}).get("style",{}).get("lineSpacing") == 125 for r in corners.reqs[start:])  # 行間は 100
     start = len(corners.reqs)
-    corners.num(sid, 3, 2, 2, "L")  # 中心で置き、大きさと文字は NUM から
+    corners.num(sid, 3, 2, 2, "large")  # 中心で置き、大きさと文字は NUM から
+    try:
+        corners.num(sid, 1, 2, 2, "L")  # 前の略号は止める（語で書く。2026-10-18）
+        raise AssertionError
+    except ValueError as e:
+        assert "small・medium・large" in str(e)
     circle = next(r["createShape"]["elementProperties"] for r in corners.reqs[start:] if r.get("createShape",{}).get("shapeType") == "ELLIPSE")
-    assert abs(circle["size"]["width"]["magnitude"] - NUM["L"][0]*EMU) < 2 and abs(circle["transform"]["translateX"] - (2 - NUM["L"][0]/2)*EMU) < 2
-    assert any(r.get("updateTextStyle",{}).get("style",{}).get("fontSize") == pt(NUM["L"][1]) for r in corners.reqs[start:])
+    assert abs(circle["size"]["width"]["magnitude"] - NUM["large"][0]*EMU) < 2 and abs(circle["transform"]["translateX"] - (2 - NUM["large"][0]/2)*EMU) < 2
+    assert any(r.get("updateTextStyle",{}).get("style",{}).get("fontSize") == pt(NUM["large"][1]) for r in corners.reqs[start:])
     corners.finish()
     assert len(corners.round_groups) == 12 and all(len(r["groupObjects"]["childrenObjectIds"]) >= 2 for r in corners.reqs if "groupObjects" in r)
     assert all(any(r.get("groupObjects",{}).get("childrenObjectIds") == [bg,e] for r in corners.reqs) for bg,e,gid in corners.round_groups)  # 文字と背景を 1 つにする
@@ -3334,7 +3342,7 @@ def selftest():
         g.divider("02", "t", variant=2)
         raise AssertionError
     except ValueError as e:
-        assert "1, 3" in str(e)
+        assert "1（地: dark）, 3（地: light）" in str(e)  # 地の明るさを添えて、見本を見なくても選べる
     use_layouts({})
     use_theme({"TEXT": "#37352f", "DECOR": "6B8089", "copyright": "© 2026 Me. All rights reserved."})  # テーマの値で組む（既定と同じ値は置き換えない）
     assert _SWAP == {TEXT: "37352F"} and paint(TEXT) == paint("303f47") == {"rgbColor": rgb("37352F")} and paint(RULE) == {"rgbColor": rgb(RULE)} and paint(NAVY) == {"themeColor": NAVY}
@@ -3495,7 +3503,7 @@ def selftest():
     assert paint(WHITE) == {"rgbColor": rgb("FFFFFF")} and paint(SUB_ON_NAVY) == {"rgbColor": rgb("C0C0C8")} and paint(RULE) == {"rgbColor": rgb("2E3033")}
     t = make_deck(lambda d: (d.cover("t", "k"), d.divider("1", "扉"), d.num(d.page("本文"), 1, 2, 2), d.num(d.slides[-1], 2, 3, 3, fill=NAVY)), "foot")
     assert t.dark == set(t.slides[:2])  # 本文の地が暗くても、本文のページは扉に入れない（フッターは SUB）
-    fg = [r["updateTextStyle"]["style"]["foregroundColor"]["opaqueColor"] for r in t.reqs if r.get("updateTextStyle", {}).get("style", {}).get("fontSize") == pt(NUM["M"][1])]
+    fg = [r["updateTextStyle"]["style"]["foregroundColor"]["opaqueColor"] for r in t.reqs if r.get("updateTextStyle", {}).get("style", {}).get("fontSize") == pt(NUM["medium"][1])]
     assert fg == [paint(ON_RED), paint(WHITE)]  # RED の塗りの数字は ON_RED、ほかの塗りは WHITE
     assert theme_fixed(dark)["CARD"] == "0A0A0A" and theme_fixed({}) == FIXED  # NAMED は書いたものだけ
     use_theme({})
@@ -3706,7 +3714,7 @@ def selftest_spec():
     assert near(arr["y1"], Y_BODY_NOLEAD + 1.25) and near(arr["y2"], Y_BODY_NOLEAD + 0.25)  # 上下が重ならなければ、向き合う辺の中央どうしを斜めに
     n = next(e for e in els if e["call"] == "num")
     lab = next(e for e in els if e["call"] == "label")
-    assert near(lab["x"], X + NUM["M"][0] + GAP_ARROW) and near(n["cx"], X + NUM["M"][0] / 2)  # 番号は決まった幅、残りを label に
+    assert near(lab["x"], X + NUM["medium"][0] + GAP_ARROW) and near(n["cx"], X + NUM["medium"][0] / 2)  # 番号は決まった幅、残りを label に
 
     with tempfile.TemporaryDirectory() as t:
         (Path(t) / "img").mkdir()
@@ -3862,7 +3870,7 @@ def selftest_spec():
     finally:
         globals()["iconify"] = real_iconify
     ic, nm, below = gi
-    assert ic["size"] == 0.5 and near(nm["cx"], cols(2)[1][0] + NUM["M"][0] / 2) and near(below["y"], Y_BODY_NOLEAD + 0.5 + GAP_BODY)
+    assert ic["size"] == 0.5 and near(nm["cx"], cols(2)[1][0] + NUM["medium"][0] / 2) and near(below["y"], Y_BODY_NOLEAD + 0.5 + GAP_BODY)
     _, bc = run({"title": "t", "body": [{"type": "card", "text": "{64:48}"}, {"type": "text", "text": "下"}]})
     assert bc[0]["h"] > 64 * 1.2 / 72 and near(bc[-1]["y"], bc[0]["y"] + bc[0]["h"] + GAP_BODY)  # 印のないカードも文字ごとの大きさで高さを見込む
     _, mo = run({"title": "t", "body": [{"type": "text", "text": "i" * 80, "w": 1, "mono": True}, {"type": "label", "text": "iiii", "w": "fit", "mono": True}]})
@@ -4056,7 +4064,7 @@ def selftest_spec():
     assert "link" in one and "link" not in ten  # 1 字の番号は円と同じ大きさの枠につなぐ。2 字以上は枠が円より広がるのでつながない
     to = next(r["updateLineProperties"]["lineProperties"]["startConnection"]["connectedObjectId"] for r in d.reqs if "startConnection" in r.get("updateLineProperties", {}).get("lineProperties", {}))
     frame = next(r["createShape"]["elementProperties"]["size"] for r in d.reqs if r.get("createShape", {}).get("objectId") == to)
-    assert frame["width"]["magnitude"] == frame["height"]["magnitude"] == emu(NUM["M"][0])["magnitude"]  # つないだ枠は円と同じ大きさ
+    assert frame["width"]["magnitude"] == frame["height"]["magnitude"] == emu(NUM["medium"][0])["magnitude"]  # つないだ枠は円と同じ大きさ
     with contextlib.redirect_stderr(io.StringIO()):
         d, els = run({"type": "slide", "body": [{"type": "gantt", "cols": [f"{i} 月" for i in range(1, 13)], "rows": [{"head": "a", "bars": [{"from": 1, "to": 1, "text": "ユーザーの受け入れの試験と確かめ"}]}]},
                                                 {"type": "bars", "items": [["a", 100.0]] + [[str(i), 12345678] for i in range(15)], "unit": "件"}]})
