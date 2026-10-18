@@ -9,7 +9,10 @@
 切り取りは sips でできる（../../deck-practices/reuse.md の段階 2）ので、ここには入れていない。"""
 import os, re, sys
 
-from PIL import Image, ImageDraw, ImageFont
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:  # python3 で回すと、ここで落ちて 1 枚ずつ画像を開くほうへ流れていた（2026-10-16）
+    sys.exit("Pillow がない。uv run -q sheet.py … で回す（頭の # /// script が Pillow を入れる）")
 
 LABEL = (204, 43, 23)  # 赤の文字の色（visual.md の RED_TEXT）。濃紺の地でも Oat の地でも目立つ
 
