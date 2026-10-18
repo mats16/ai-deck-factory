@@ -627,6 +627,8 @@ class Deck:
     def num(self, sid, n, cx, cy, size="medium", fill=RED):
         """正円の番号。(cx, cy) は円の中心（大きさを替えても位置が動かず、横に並べる見出しと中心をそろえやすい）。size は NUM の small・medium・large。
         数字は、RED の塗りなら ON_RED、ほかの塗りなら WHITE。"""
+        if size not in NUM:
+            raise ValueError(f"番号の大きさ {size!r} は書けない（{'・'.join(NUM)}）")
         dia, pt_ = NUM[size]
         return self.text(sid, cx - dia / 2, cy - dia / 2, dia, dia, str(n), size=pt_, color=ON_RED if fill == RED else WHITE, bold=True, align="CENTER", valign="MIDDLE",
                          fill=fill, kind="ELLIPSE")
@@ -3194,6 +3196,11 @@ def selftest():
         assert not any(r.get("updateParagraphStyle",{}).get("style",{}).get("lineSpacing") == 125 for r in corners.reqs[start:])  # 行間は 100
     start = len(corners.reqs)
     corners.num(sid, 3, 2, 2, "large")  # 中心で置き、大きさと文字は NUM から
+    try:
+        corners.num(sid, 1, 2, 2, "L")  # 前の略号は止める（語で書く。2026-10-18）
+        raise AssertionError
+    except ValueError as e:
+        assert "small・medium・large" in str(e)
     circle = next(r["createShape"]["elementProperties"] for r in corners.reqs[start:] if r.get("createShape",{}).get("shapeType") == "ELLIPSE")
     assert abs(circle["size"]["width"]["magnitude"] - NUM["large"][0]*EMU) < 2 and abs(circle["transform"]["translateX"] - (2 - NUM["large"][0]/2)*EMU) < 2
     assert any(r.get("updateTextStyle",{}).get("style",{}).get("fontSize") == pt(NUM["large"][1]) for r in corners.reqs[start:])
