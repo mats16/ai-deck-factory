@@ -672,7 +672,7 @@ class Deck:
 
     def table(self, sid, x, y, widths, rows, size=11, row_h=0.36, header=True, first_col=True, zebra=True, align=None, mono_cols=(), fills=(), vlines=None):
         """rows は文字列の 2 次元の並び（1 行目が見出し）。セルの中の改行は \\n。縦の罫線なし、横の罫線は RULE（visual.md の 5）。
-        見出しの行は濃紺に白の太字、1 列目は HEAD の太字（first_col）、行は 1 行おきに PANEL（zebra）、ほかは CARD。align は列ごとの "l"・"c"・"r"（金額は右）。
+        見出しの行は濃紺に白の太字、1 列目は HEAD の太字（first_col）、行は 1 行おきに PANEL（zebra）、ほかは CARD。align は列ごとの "left"・"center"・"right" の並び（金額は右）。
         行は文字に合わせて伸びる（row_h は最小）。戻りは表の下端の見込み（in。下に置く要素の位置に使う）。
         mono_cols の列は、見出しの行を除いて英数字を等幅の MONO にする（コマンドの一覧など。visual.md の 2）。
         row_h は行ごとの並びでもよい。fills は (行, 列, 色) の並び（0 始まり。行か列が None ならその列か行の全部）で、1 行おきの塗りの上に塗る（強調するセル）。
@@ -729,7 +729,7 @@ class Deck:
                                                    "fields": "fontFamily,fontSize,bold,foregroundColor"}},
                               {"updateParagraphStyle": {"objectId": t, "cellLocation": loc, "textRange": {"type": "ALL"},
                                                         "style": {"lineSpacing": 120 if est_lines(s, avail, size) > 1 else 100, "spaceAbove": pt(0), "spaceBelow": pt(0),
-                                                                  "alignment": {"l": "START", "c": "CENTER", "r": "END"}[(align or "l" * nc)[c]]},
+                                                                  "alignment": ALIGN[(align or ["left"] * nc)[c]]},
                                                         "fields": "lineSpacing,spaceAbove,spaceBelow,alignment"}}]
                 if mono:
                     self.reqs += mono_reqs(t, s, loc)
@@ -908,7 +908,7 @@ SPEC_EL = {  # type → (要るキー, 書けるキー)
                   "icon": "s", "num": "ns", "image": "s", "align": ("left", "center"), "valign": ("top", "middle")}),  # icon・num・image は印（どれか 1 つ）
     "stat": ({"value": "s"}, {"unit": "s", "label": "s", "sub": "s", "size": "p", "color": "c", "fill": "c", "line": "c", "align": ("left", "center")}),  # 数字の強調
     "code": ({"text": "s"}, {"hot": "ints", "size": "p"}),
-    "table": ({"rows": "rows"}, {"widths": "nums", "header": "b", "first_col": "b", "zebra": "b", "align": "lcr", "mono_cols": "ints", "size": "p",
+    "table": ({"rows": "rows"}, {"widths": "nums", "header": "b", "first_col": "b", "zebra": "b", "align": "aligns", "mono_cols": "ints", "size": "p",
                                  "row_h": "nh", "fills": "fills"}),
     "image": ({"src": "s"}, {"alt": "s"}),
     "icon": ({"name": "s"}, {"size": "p", "color": "c"}),
@@ -978,8 +978,8 @@ SPEC_OK = {"s": lambda v: isinstance(v, str), "md": lambda v: isinstance(v, str)
            "bitems": lambda v: isinstance(v, list) and bool(v) and all(isinstance(x, list) and len(x) == 2 and isinstance(x[0], str) and _num(x[1]) and x[1] >= 0 for x in v),
            "rows": lambda v: isinstance(v, list) and bool(v) and all(_strs(x) and x for x in v),
            "nums": lambda v: isinstance(v, list) and all(_num(x) and x > 0 for x in v), "ints": lambda v: isinstance(v, list) and all(_int(x) and x > 0 for x in v),
-           "fills": lambda v: isinstance(v, list) and all(isinstance(x, list) and len(x) == 3 and _int(x[0]) and _int(x[1]) and x[0] >= 0 and x[1] >= 0 and _color(x[2]) for x in v),
-           "lcr": lambda v: isinstance(v, str) and bool(re.fullmatch(r"[lcr]+", v)), "ns": lambda v: isinstance(v, str) or _int(v),
+           "fills": lambda v: isinstance(v, list) and all(isinstance(x, list) and len(x) == 3 and all(i == "all" or _int(i) and i >= 1 for i in x[:2]) and _color(x[2]) for x in v),
+           "aligns": lambda v: isinstance(v, list) and bool(v) and all(a in ALIGN for a in v), "ns": lambda v: isinstance(v, str) or _int(v),
            "band": lambda v: isinstance(v, str) or isinstance(v, dict) and isinstance(v.get("text"), str) and set(v) <= {"text", "sub"} and isinstance(v.get("sub", ""), str),
            "raw": lambda v: isinstance(v, dict) and bool(v),
            "colors": lambda v: isinstance(v, dict) and all(k in (*ROLE, *FIXED, *NAMED) and isinstance(c, str) and bool(re.fullmatch(r"[0-9A-Fa-f]{6}", c)) for k, c in v.items()),
@@ -1013,8 +1013,8 @@ SPEC_TYPES = {"s": "文字列", "md": "記法つきの文字列", "n": "0 以上
               "els": "部品の並び", "kids": "1 つ以上の部品の並び", "pages": "ページかデッキのファイルのパス（.json）の並び", "pt": "部品の id か [x, y]", "items": '[["見出し", "説明"], …]',
               "rows": '[["見出しの行", …], ["セル", …], …]', "nums": "正の数の並び",
               "cols": '列の名前の並び（["10 月", "11 月", …]）', "grows": '[{"head": 項目, "bars": [{"from": 列, "to": 列, …}], "note": 補足}, …]',
-              "bitems": '[["名前", 0 以上の数], …]', "gbars": '[{"from": 列, "to": 列, "text": 文字, "fill": 色, "dash": true}, …]', "ints": "1 から始まる番号の並び", "lcr": '列ごとの l・c・r（"lrr"）',
-              "fills": '[[行, 列, 色], …]（rows の何番目かで、見出しの行が 1 行目・いちばん左の列が 1 列目。0 はその列か行の全部）', "ns": "文字列か整数", "band": '"文字" か {"text": …, "sub": …}',
+              "bitems": '[["名前", 0 以上の数], …]', "gbars": '[{"from": 列, "to": 列, "text": 文字, "fill": 色, "dash": true}, …]', "ints": "1 から始まる番号の並び", "aligns": '列ごとの left・center・right の並び（["left", "right", "right"]）',
+              "fills": '[[行, 列, 色], …]（rows の何番目かで、見出しの行が 1 行目・いちばん左の列が 1 列目。"all" はその列か行の全部）', "ns": "文字列か整数", "band": '"文字" か {"text": …, "sub": …}',
               "raw": "Deck のメソッドの引数（{\"zebra\": false} など）",
               "colors": f"役割の名前（{'・'.join([*ROLE, *FIXED, *NAMED])}）→ 6 桁の色（# は付けない）", "layouts": 'レイアウトの名前か {"layout": 名前, "w": 幅, "tone": "dark"・"accent"・"light"} の並び'}
 
@@ -1220,12 +1220,12 @@ class SpecPage:
         if len({len(r) for r in rows}) > 1:
             sys.exit(f"{loc}（table）: 行ごとのセルの数がそろっていない")
         n = len(rows[0])
-        if len(e.get("widths", [1] * n)) != n or len(e.get("align", "l" * n)) != n:
+        if len(e.get("widths", [1] * n)) != n or len(e.get("align", [None] * n)) != n:
             sys.exit(f"{loc}（table）: widths・align の数が列の数（{n}）と違う")
         if isinstance(e.get("row_h"), list) and len(e["row_h"]) != len(rows):
             sys.exit(f"{loc}（table）.row_h: 行ごとに書くなら、行の数（{len(rows)}）だけ並べる")
-        if bad := [f for f in e.get("fills", []) if f[0] > len(rows) or f[1] > n]:
-            sys.exit(f"{loc}（table）.fills: 表にない行か列 {bad}（{len(rows)} 行 {n} 列。1 から数え、0 はその列か行の全部）")
+        if bad := [f for f in e.get("fills", []) if f[0] != "all" and f[0] > len(rows) or f[1] != "all" and f[1] > n]:
+            sys.exit(f"{loc}（table）.fills: 表にない行か列 {bad}（{len(rows)} 行 {n} 列。1 から数え、\"all\" はその列か行の全部）")
         if bad := [f for f in e.get("fills", []) if f[2] in ON_FILL]:  # セルの文字の色は地で替えないので、濃い地では読めない
             sys.exit(f"{loc}（table）.fills: 濃い色 {bad} はセルの強調に使えない。淡い色（RED_SOFT・PANEL など）にする")
 
@@ -1275,7 +1275,7 @@ class SpecPage:
         n = len(e["cols"])
         hs = [v + max(h - hd - sum(hs), 0) / len(hs) for v in hs]
         self.index.append((loc, " ".join(c for r in rows for c in r)))
-        self.emit("table", loc, e, x=x, y=y, widths=widths, rows=rows, size=11, header=True, first_col=True, zebra=False, align="l" + "c" * n + "l" * (len(widths) - n - 1),
+        self.emit("table", loc, e, x=x, y=y, widths=widths, rows=rows, size=11, header=True, first_col=True, zebra=False, align=["left"] + ["center"] * n + ["left"] * (len(widths) - n - 1),
                   mono_cols=[], row_h=[hd] + hs, fills=[], vlines=(1, n))
         x0, top = x + G_HEAD, y + hd
         if "today" in e:  # バーの下に引く
@@ -1617,7 +1617,7 @@ class SpecPage:
             self.index.append((loc, " ".join(c for r in rows for c in r)))
             return self.emit("table", loc, e, x=x, y=y, widths=ws, rows=rows, size=e.get("size", 11), header=e.get("header", True), first_col=e.get("first_col", True),
                              zebra=e.get("zebra", True), align=e.get("align"), mono_cols=[c - 1 for c in e.get("mono_cols", [])], row_h=e.get("row_h", 0.36),
-                             fills=[(r - 1 if r else None, c - 1 if c else None, spec_color(col)) for r, c, col in e.get("fills", [])])
+                             fills=[(None if r == "all" else r - 1, None if c == "all" else c - 1, spec_color(col)) for r, c, col in e.get("fills", [])])
         if kind == "image":
             return self.emit("image", loc, e, src=self.src(e, loc), x=x, y=y, w=w, h=h, alt=e.get("alt"))
         if kind == "icon":
@@ -1899,6 +1899,7 @@ def spec_schema():
           "\\n で段落、どの段落も「- 」で始めると箇条書き。`コード` は ` を外して本文の書体のまま")
     color = {"enum": list(COLOR_NAMES), "description": "役割の名前。値はテーマのファイルが決める（6 桁は書けない）"}
     num, pos = {"type": "number"}, {"type": "number", "exclusiveMinimum": 0}
+    cell = {"anyOf": [{"type": "integer", "minimum": 1}, {"const": "all"}]}  # fills の行と列
     t = {"s": {"type": "string"}, "md": {"type": "string", "description": md}, "n": {"type": "number", "minimum": 0}, "f": num, "p": pos, "i": {"type": "integer"},
          "pi": {"type": "integer", "minimum": 1}, "b": {"type": "boolean"}, "c": color,
          "w": {"anyOf": [pos, {"const": "fit"}], "description": "幅（in）。label は \"fit\" で中身の文字の幅"},
@@ -1916,9 +1917,9 @@ def spec_schema():
          "bitems": {"type": "array", "items": {"type": "array", "prefixItems": [{"type": "string"}, {"type": "number", "minimum": 0}], "minItems": 2, "maxItems": 2},
                     "minItems": 1, "description": "[名前, 数]。数は棒の端に書く"},
          "ints": {"type": "array", "items": {"type": "integer", "minimum": 1}, "description": "1 から始まる番号"},
-         "fills": {"type": "array", "items": {"type": "array", "prefixItems": [{"type": "integer", "minimum": 0}, {"type": "integer", "minimum": 0}, color], "minItems": 3, "maxItems": 3},
-                   "description": "[行, 列, 色]。rows の何番目かで数え、見出しの行が 1 行目、いちばん左の列が 1 列目。0 はその列か行の全部（[3, 0, \"RED_SOFT\"] は見出しの次の次の行）"},
-         "lcr": {"type": "string", "pattern": "^[lcr]+$"}, "ns": {"type": ["string", "integer"]},
+         "fills": {"type": "array", "items": {"type": "array", "prefixItems": [cell, cell, color], "minItems": 3, "maxItems": 3},
+                   "description": "[行, 列, 色]。rows の何番目かで数え、見出しの行が 1 行目、いちばん左の列が 1 列目。\"all\" はその列か行の全部（[3, \"all\", \"RED_SOFT\"] は見出しの次の次の行）"},
+         "aligns": {"type": "array", "items": {"enum": list(ALIGN)}, "minItems": 1, "description": "列ごとの寄せ"}, "ns": {"type": ["string", "integer"]},
          "band": {"anyOf": [{"type": "string"}, {"type": "object", "properties": {"text": {"type": "string"}, "sub": {"type": "string"}}, "required": ["text"], "additionalProperties": False}]},
          "raw": {"type": "object", "description": "形の外の書き方: Deck のメソッドの引数（lint が要確認に出す）"},
          "colors": {"type": "object", "properties": {k: {"type": "string", "pattern": "^[0-9A-Fa-f]{6}$"} for k in (*ROLE, *FIXED, *NAMED)}, "additionalProperties": False,
@@ -1962,7 +1963,7 @@ DECK_ENUM = {"START": "left", "CENTER": "center", "END": "right", "TOP": "top", 
 
 def spec_from_deck(kind, key, v):
     """raw に書いた Deck の値 v を、形のキー key の値に直す（揃えは小文字の名前、形は小文字、色はテーマの枠の名前を役割の名前に）。形の型に合わなければ None。"""
-    if key in ("align", "valign"):
+    if key in ("align", "valign") and isinstance(v, str):  # 表の align は Deck でも形でも語の並び
         v = DECK_ENUM.get(v, v)
     elif key == "shape" and isinstance(v, str):
         v = v.lower()
@@ -3767,7 +3768,7 @@ def selftest_spec():
     assert big > spec_text_h("48<br>モデル".replace("<br>", "\v"), 3, 11)  # 大きな文字の段落は高く見込む
     d, els = run({"title": "t", "body": [
         {"type": "row", "items": [{"type": "label", "text": "GA", "w": "fit"}, {"type": "text", "text": "説明", "bold": True, "spacing": 110, "para_gap": 4, "shape": "chevron", "fill": "PANEL"}]},
-        {"type": "table", "rows": [["a", "b"], ["c", "d"], ["e", "f"]], "row_h": [0.5, 0.4, 0.4], "fills": [[2, 0, "RED_SOFT"], [3, 2, "PANEL"]],
+        {"type": "table", "rows": [["a", "b"], ["c", "d"], ["e", "f"]], "row_h": [0.5, 0.4, 0.4], "fills": [[2, "all", "RED_SOFT"], [3, 2, "PANEL"]],
          "raw": {"zebra": False}},
         {"type": "card", "head": "h", "items": [["a", "b"]], "step": 0.6},
         {"type": "box", "h": 0.5, "fill": "PANEL", "shape": "ellipse", "raw": {"radius": 0.2}}]})
@@ -3986,7 +3987,7 @@ def selftest_spec():
                       ({"title": "t", "body": [{"type": "table", "rows": [[]]}]}, "rows"),
                       ({"title": "t", "body": [{"type": "grid", "cols": 2, "h": 1, "items": [{"type": "card", "head": "a", "text": "b"}]}]}, "知らないキー h"),
                       ({"title": "t", "body": [{"type": "card", "fill": "NAVY", "items": [["a", "b"]], "step": 0.6}]}, "step は使えない"),
-                      ({"title": "t", "body": [{"type": "table", "rows": [["a"], ["b"]], "fills": [[2, 0, "NAVY"]]}]}, "濃い色"),
+                      ({"title": "t", "body": [{"type": "table", "rows": [["a"], ["b"]], "fills": [[2, "all", "NAVY"]]}]}, "濃い色"),
                       ({"title": "t", "body": [{"type": "table", "rows": [["a", "b", "c"]], "widths": [1, 2]}]}, "列の数（3）と違う"),
                       ({"title": "t", "body": [{"type": "table", "rows": [["a"], ["b"]], "row_h": [0.4]}]}, "行の数（2）だけ"),
                       ({"title": "t", "body": [{"type": "row", "raw": {"gap": 0.5}, "items": [{"type": "box", "h": 1, "fill": "PANEL"}]}]}, "知らないキー raw"),
