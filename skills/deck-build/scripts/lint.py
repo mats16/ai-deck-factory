@@ -434,7 +434,8 @@ def src_without_link(sh):  # [lint-015] 出典の行なのに、リンクが 1 �
 
 
 def off_center_arrows(lines, boxes):  # [lint-016] 2 つの箱をつなぐ横の線の高さが、どちらかの箱の上下の中央から 0.02 in を超えてずれている（言葉の置き場所のために矢印をずらすことがある）
-    out, gap, tol = [], 0.3 * EMU, 0.02 * EMU
+    # 同じ 2 つの箱の間に 2 本以上の横の線があれば、上下にずらすのが意図なので見ない（行きと帰りの矢印。slides.md の arrow の offset）
+    pairs, gap, tol = {}, 0.3 * EMU, 0.02 * EMU
     for x, y, w, h in lines:
         if h > 0:
             continue
@@ -442,10 +443,8 @@ def off_center_arrows(lines, boxes):  # [lint-016] 2 つの箱をつなぐ横の
         left = [b for b in inside if 0 <= x - (b[0] + b[2]) <= gap]
         right = [b for b in inside if 0 <= b[0] - (x + w) <= gap]
         if left and right:
-            d = max(abs(y - (b[1] + b[3] / 2)) for b in (left[0], right[0]))
-            if d > tol:
-                out.append(f"{d / EMU:.2f} in ずれている（y={y / EMU:.2f} in）")
-    return out
+            pairs.setdefault((tuple(left[0]), tuple(right[0])), []).append((max(abs(y - (b[1] + b[3] / 2)) for b in (left[0], right[0])), y))
+    return [f"{d / EMU:.2f} in ずれている（y={y / EMU:.2f} in）" for ys in pairs.values() if len(ys) == 1 for d, y in ys if d > tol]
 
 
 def column_shift(cards, filled):
@@ -1212,6 +1211,7 @@ def selftest():
            {"objectId": "b", "shape": {"shapeType": "RECTANGLE", "shapeProperties": {}}, **box(3, 1, 2, 0.46)}]
     for ln, hit in ((line(1.58, 1.23, 1.34, 0), 0), (line(2.92, 1.31, 1.34, 1, sx=-1), 1), (line(1.58, 1.31, 1.34, 1), 1)):
         assert len(run(deck([(NAVY, two + [ln])]))[0].hits[ARROW_MID]) == hit
+    assert not run(deck([(NAVY, two + [line(1.58, 1.1, 1.34, 0, oid="m"), line(1.58, 1.36, 1.34, 0, oid="n")])]))[0].hits[ARROW_MID]  # 同じ 2 つの箱の間の 2 本はずらすのが意図
     thin = [{"objectId": f"v{k}", "shape": {"shapeType": "RECTANGLE", "shapeProperties": {}}, **box(k, 1, 0.03, 4)} for k in range(3)]
     assert len(run(deck([(NAVY, thin)]))[0].hits[LINE_GRID]) == 1  # 細い四角の格子も見る
     dashed = lambda kind: [{"objectId": "d", "shape": {"shapeType": kind, "shapeProperties": {"outline": {"dashStyle": "DASH"}}}, **box(1, 1, 3, 2)}]
