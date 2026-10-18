@@ -197,17 +197,17 @@ def est_h(s, avail, size, spacing=100):
 def card_h(w, head=None, body=None, items=None, step=None, bullets=False, size=11, least=False):
     """[slides_py-012] d.card の高さの見込み（in）。d.card の h を省くと、これで中身から決める。隣の列やページの下端に合わせて伸ばすと、
     中身より大きい箱になる（代表の 3 枚の記録で、ほぼすべてのデッキに出た）。列の高さをそろえるなら、並ぶカードの card_h の最大を渡す。
-    least なら、最終行と下端の間（0.15）と、step の最後の項目の後ろの空きを除く（文字が収まる最小。JSON のページの h の警告。#52）。
+    least なら、文字が枠に収まる最小（JSON のページの h の警告。#52）。最終行と下端の間は、本文の枠の下の 0.1 in だけを残し、step は最後の項目の後ろの空きを除く。
     ponytail: 本文は size の 1 つの大きさで見積もる。大きさの違う run（大きな数字など）が混ざるなら h を渡す"""
-    top, tail = 0.5 if head else 0.1, 0 if least else 0.15
+    top = 0.5 if head else 0.1
     avail = w - 2 * PAD - 2 * INSET - (size * 1.3 / 72 if bullets else 0)
     if step is not None:  # 最後の項目の文字が step の間隔より高ければ、その分を足す（下端との間を下の 0.15 と同じだけ空ける）
         n = len(items or [])
-        last = est_h(items[-1][0] + "\n" + items[-1][1], avail, size, 125) + 2 * INSET + tail if n else 0.1
+        last = est_h(items[-1][0] + "\n" + items[-1][1], avail, size, 125) + 2 * INSET + (0 if least else 0.15) if n else 0.1
         return top + ((n - 1) * step + last if least and n else max(n * step + 0.1, (n - 1) * step + last))
     parts = [body] if isinstance(body, str) else body or []
     s = "\n\n".join(h2 + "\n" + b for h2, b in items) if items else "".join(p if isinstance(p, str) else p[0] for p in parts)
-    return top + (est_h(s, avail, size, 125) + 2 * INSET if s else 0) + tail  # 最終行と下端の間を、白いカードの決まり（box_pad の 0.28 in）より広く
+    return top + (est_h(s, avail, size, 125) + 2 * INSET if s else 0) + (0.1 if least else 0.15)  # 本文の枠は下端の 0.1 in 上まで（d.card）。最終行と下端の間を、白いカードの決まり（box_pad の 0.28 in）より広く
 
 
 def table_h(widths, rows, size=11, row_h=0.36, header=True, mono_cols=()):
@@ -1400,7 +1400,7 @@ class SpecPage:
                 return card_h(w, e.get("head"), items=[tuple(x) for x in e.get("items", [])], step=e["step"], least=least)
             body, bul = self.card_body(e, loc)  # card_h は本文をすべて 11pt で数えるので、文字ごとの大きさを見る spec_text_h で、d.card の本文の枠と同じ幅に見込む
             avail = w - 2 * PAD - 2 * INSET - (11 * 1.3 / 72 if bul else 0)
-            return (0.5 if e.get("head") else 0.1) + (spec_text_h(body, avail, 11, 125) + 2 * INSET if body else 0) + (0 if least else 0.15)
+            return (0.5 if e.get("head") else 0.1) + (spec_text_h(body, avail, 11, 125) + 2 * INSET if body else 0) + (0.1 if least else 0.15)  # 本文の枠は下端の 0.1 in 上まで（d.card）
         if kind == "code":
             return sum(est_lines(ln, w - 0.4, size, True) for ln in e["text"].split("\n")) * size * 1.2 * 1.1 / 72 + 0.28
         if kind == "table":
@@ -3923,14 +3923,15 @@ def selftest_spec():
     small = {"type": "label", "text": "小さい札", "size": 8}
     assert sp.measure(small, 2, "s") == 0.4 and sp.measure(small, 2, "s", least=True) < 0.35  # 札の 0.4 in は既定の下限で、文字に要る高さではない
     steps = {"type": "card", "head": "見出し", "items": [["項目", "説明の文"]] * 3, "step": 1.0}
-    assert near(card_h(4, "見出し", items=[("項目", "説明の文")] * 3, step=1.0, least=True), 2.5 + card_h(4, items=[("項目", "説明の文")], least=True) - 0.1)  # 最後の項目の下端まで（後ろの空きは要らない）
+    assert near(card_h(4, "見出し", items=[("項目", "説明の文")] * 3, step=1.0, least=True), 2.5 + card_h(4, items=[("項目", "説明の文")], least=True) - 0.2)  # 最後の項目の下端まで（後ろの空きは要らない）
     assert sp.measure(steps, 4, "c") > sp.measure(steps, 4, "c", least=True) + 0.25
     d, _ = run({"title": "t", "body": [{"type": "stack", "items": [  # 文字に要る高さより 0.05 in を超えて低いものだけ。row の中も、伸ばす前の h で見る
         mid(one, 0.6), mid(two, round(need - 0.04, 2)), mid(two, 0.6), {"type": "row", "items": [mid(two, 0.6), {"type": "card", "head": "高い", "text": two * 6}]},
         {"type": "text", "text": two * 3, "h": 0.2}, {"type": "text", "text": two * 3, "fill": "PANEL", "h": 0.2}, {"type": "stat", "value": "3", "label": "件", "h": 0.3},
-        small | {"h": 0.3}, {"type": "card", "num": 1, "head": "見出し", "w": 5, "h": 0.4}]}]})  # 上寄せの印のあるカードは、印（MARK_IN + 0.36 in）が収まるかも見る
+        small | {"h": 0.3}, {"type": "card", "num": 1, "head": "見出し", "w": 5, "h": 0.4},  # 上寄せの印のあるカードは、印（MARK_IN + 0.36 in）が収まるかも見る
+        {"type": "card", "head": "Heading", "text": "Body", "w": 5, "h": 0.9}]}]})  # 印のないカードの本文の枠は、下端の 0.1 in 上で終わる（PR #54 のレビュー）
     w = "\n".join(d.warnings)
-    assert w.count("収まらない見込み") == 5 and "items[2]（card）: h 0.6 in では" in w and "items[3].items[0]（card）" in w and "items[5]（text）" in w and "items[6]（stat）" in w, w  # 塗りのない文字は見ない
+    assert w.count("収まらない見込み") == 6 and "items[9]（card）" in w and "items[2]（card）: h 0.6 in では" in w and "items[3].items[0]（card）" in w and "items[5]（text）" in w and "items[6]（stat）" in w, w  # 塗りのない文字は見ない
     assert "items[8]（card）" in w and "items[7]" not in w, w
     d, els = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [  # 位置の確かめ（tangles）。囲みの中の線と、線の両端の部品は数えない
         {"type": "box", "x": 0, "y": 0, "w": 9, "h": 3, "fill": "PANEL"},
