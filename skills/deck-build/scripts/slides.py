@@ -194,19 +194,20 @@ def est_h(s, avail, size, spacing=100):
     return est_lines(s, avail, size) * size * 1.2 * spacing / 100 / 72
 
 
-def card_h(w, head=None, body=None, items=None, step=None, bullets=False, size=11):
+def card_h(w, head=None, body=None, items=None, step=None, bullets=False, size=11, least=False):
     """[slides_py-012] d.card の高さの見込み（in）。d.card の h を省くと、これで中身から決める。隣の列やページの下端に合わせて伸ばすと、
     中身より大きい箱になる（代表の 3 枚の記録で、ほぼすべてのデッキに出た）。列の高さをそろえるなら、並ぶカードの card_h の最大を渡す。
+    least なら、最終行と下端の間（0.15）と、step の最後の項目の後ろの空きを除く（文字が収まる最小。JSON のページの h の警告。#52）。
     ponytail: 本文は size の 1 つの大きさで見積もる。大きさの違う run（大きな数字など）が混ざるなら h を渡す"""
-    top = 0.5 if head else 0.1
+    top, tail = 0.5 if head else 0.1, 0 if least else 0.15
     avail = w - 2 * PAD - 2 * INSET - (size * 1.3 / 72 if bullets else 0)
     if step is not None:  # 最後の項目の文字が step の間隔より高ければ、その分を足す（下端との間を下の 0.15 と同じだけ空ける）
         n = len(items or [])
-        last = est_h(items[-1][0] + "\n" + items[-1][1], avail, size, 125) + 2 * INSET + 0.15 if n else 0.1
-        return top + max(n * step + 0.1, (n - 1) * step + last)
+        last = est_h(items[-1][0] + "\n" + items[-1][1], avail, size, 125) + 2 * INSET + tail if n else 0.1
+        return top + ((n - 1) * step + last if least and n else max(n * step + 0.1, (n - 1) * step + last))
     parts = [body] if isinstance(body, str) else body or []
     s = "\n\n".join(h2 + "\n" + b for h2, b in items) if items else "".join(p if isinstance(p, str) else p[0] for p in parts)
-    return top + (est_h(s, avail, size, 125) + 2 * INSET if s else 0) + 0.15  # 最終行と下端の間を、白いカードの決まり（box_pad の 0.28 in）より広く
+    return top + (est_h(s, avail, size, 125) + 2 * INSET if s else 0) + tail  # 最終行と下端の間を、白いカードの決まり（box_pad の 0.28 in）より広く
 
 
 def table_h(widths, rows, size=11, row_h=0.36, header=True, mono_cols=()):
@@ -1371,10 +1372,10 @@ class SpecPage:
         n = e["cols"] if e["type"] == "grid" else len(items)
         return [items[i:i + n] for i in range(0, len(items), n)]
 
-    def measure(self, e, w, loc):
-        """幅 w に置いたときの高さ（in）。"""
+    def measure(self, e, w, loc, least=False):
+        """幅 w に置いたときの高さ（in）。least なら、文字（と印）が箱に収まる最小の高さ（見た目の余白と既定の下限を除く。h を書いて詰めてよい分。#52）。"""
         kind, size = e["type"], e.get("size", 11)
-        if "h" in e:  # frame は h が要る
+        if "h" in e and not least:  # frame は h が要る
             return e["h"]
         if kind in ("text", "label"):
             s, bul = spec_bullets(e["text"], f"{loc}（text）") if kind == "text" else (e["text"], False)
@@ -1383,21 +1384,23 @@ class SpecPage:
             inner = max((size / 72 if e.get("pad") is None else e["pad"]) - INSET, 0) if boxed and not center and e.get("shape") != "ellipse" else 0  # Deck.text と同じ
             avail = (w - 2 * INSET - 2 * inner if boxed else w) - (size * 1.3 / 72 if bul else 0)
             body = spec_text_h(spec_md(s, loc=loc), avail, size, e.get("spacing"), e.get("para_gap", 0), e.get("mono", False))
+            if least:  # 文字の枠の余白（INSET）だけを残す
+                return body + 2 * INSET
             if kind == "label":
                 return max(0.4, body + 2 * size / 72)
             return body + (2 * size / 72 + 0.1 if boxed else 0.02)  # 塗りか枠線があれば、上下に 1 字分（visual-027）
         if kind == "card" and (self.mark(e) or self.dark_card(e, loc)):
-            return self.marked(e, 0, 0, w, None, loc)["h"]
+            return self.marked(e, 0, 0, w, None, loc)["least" if least else "h"]
         if kind == "stat":
             parts, kw = self.stat_parts(e)
             inner = 0 if e.get("align") == "center" else STAT_PAD - INSET
-            return spec_text_h(parts, w - 2 * INSET - 2 * inner, 11, 110, 2) + 2 * STAT_PAD + 0.1
+            return spec_text_h(parts, w - 2 * INSET - 2 * inner, 11, 110, 2) + (2 * INSET if least else 2 * STAT_PAD + 0.1)
         if kind == "card":
             if "step" in e:
-                return card_h(w, e.get("head"), items=[tuple(x) for x in e.get("items", [])], step=e["step"])
+                return card_h(w, e.get("head"), items=[tuple(x) for x in e.get("items", [])], step=e["step"], least=least)
             body, bul = self.card_body(e, loc)  # card_h は本文をすべて 11pt で数えるので、文字ごとの大きさを見る spec_text_h で、d.card の本文の枠と同じ幅に見込む
             avail = w - 2 * PAD - 2 * INSET - (11 * 1.3 / 72 if bul else 0)
-            return (0.5 if e.get("head") else 0.1) + (spec_text_h(body, avail, 11, 125) + 2 * INSET if body else 0) + 0.15
+            return (0.5 if e.get("head") else 0.1) + (spec_text_h(body, avail, 11, 125) + 2 * INSET if body else 0) + (0 if least else 0.15)
         if kind == "code":
             return sum(est_lines(ln, w - 0.4, size, True) for ln in e["text"].split("\n")) * size * 1.2 * 1.1 / 72 + 0.28
         if kind == "table":
@@ -1424,13 +1427,6 @@ class SpecPage:
         it = iter(ws)
         return sum(max(self.measure(c, next(it), loc) for c in row) for row in self.rows_of(e)) + gap * (len(self.rows_of(e)) - 1)
 
-    def slack(self, e, loc):
-        """measure の高さのうち、見た目のために空ける余白（in）。h を書いてこの分を詰めても、文字は箱に収まる（#52。1 行の上下中央のカードを 0.6 in に詰める）。"""
-        kind, size = e["type"], e.get("size", 11)
-        if kind == "card" and (self.mark(e) or self.dark_card(e, loc)):
-            return 0.4 if e.get("valign") == "middle" else CARD_BOTTOM  # 上下中央は印と文字の上下、ほかは最終行の下
-        return {"card": 0.15, "stat": 2 * STAT_PAD + 0.1 - 2 * INSET, "label": 2 * size / 72 - 2 * INSET}.get(kind, 2 * size / 72 + 0.1 - 2 * INSET)  # 文字の枠の余白（INSET）は残す
-
     def mark(self, e):
         """カードの印（icon・num・image のどれか）。2 つ以上なら止める。"""
         ms = [k for k in ("icon", "num", "image") if k in e]
@@ -1447,7 +1443,7 @@ class SpecPage:
         return True
 
     def marked(self, e, x, y, w, h, loc):
-        """印のあるカード。印を左（align left）か上の中央（center）に置き、見出し（太字 12pt）と本文を横か下に置く。h が None なら置かずに高さを返す。
+        """印のあるカード。印を左（align left）か上の中央（center）に置き、見出し（太字 12pt）と本文を横か下に置く。h が None なら置かずに高さ（と、文字と印が収まる最小の高さ least）を返す。
         白いカードの最終行と下端の間は 0.28 in（visual-027）。valign middle は、印と文字を上下の中央にそろえる（1〜2 行の小さな箱）。"""
         m, fill = self.mark(e), e.get("fill", "CARD")
         on, emph = (spec_color(c) for c in ON_FILL.get(fill, ("TEXT", "RED_TEXT")))
@@ -1463,8 +1459,8 @@ class SpecPage:
         th = hh + (HEAD_GAP if head and body else 0) + bh
         need = (CARD_TOP + size + MARK_GAP + th + CARD_BOTTOM if center else max(th + 0.4, size + 0.36) if middle else
                 max(CARD_TOP + th + CARD_BOTTOM, MARK_IN + size + MARK_IN))
-        if h is None:
-            return {"h": need}
+        if h is None:  # least は下の置き方で、文字と印の下端（上下中央は、文字と印の高いほう）
+            return {"h": need, "least": CARD_TOP + 0.04 + size + MARK_GAP + th if center else max(th, size) if middle else max(CARD_TOP + th, MARK_IN + size)}
         self.index.append((loc, spec_plain(head) + spec_plain(body or "")))
         self.emit("card", loc, e, x=x, y=y, w=w, h=h, fill=spec_color(fill), line=spec_color(e.get("line", "RULE" if fill == "CARD" else None)))
         mx = x + (w - size) / 2 if center else x + MARK_IN
@@ -1581,9 +1577,9 @@ class SpecPage:
         if kind not in ("row", "stack", "grid", "frame"):
             self.placed.append((kind, loc, (x, y, w, h), kind == "box" and bool(fill), kind == "text" and not (fill or e.get("line")), e))
         if "h" in e and (kind in ("card", "stat", "label") or kind == "text" and (fill or e.get("line"))):  # 書いた h は中身を見ずに使うので、収まらなくても組んだ画像まで分からない（#52）
-            full = self.measure({k: v for k, v in e.items() if k != "h"}, w, loc)
-            if (need := full - self.slack(e, loc)) > e["h"] + 0.05:  # 文字の高さは見積もりなので 0.05 in まで許す
-                self.warns.append(f"{loc}（{kind}）: h {e['h']} in では中身が収まらない見込み（文字に要る高さ {need:.2f} in。h を省くと {full:.2f} in）。h を外すか、文字を短くする")
+            if (need := self.measure(e, w, loc, least=True)) > e["h"] + 0.05:  # 文字の高さは見積もりなので 0.05 in まで許す
+                full = self.measure({k: v for k, v in e.items() if k != "h"}, w, loc)
+                self.warns.append(f"{loc}（{kind}）: h {e['h']} in では中身が収まらない見込み（中身に要る高さ {need:.2f} in。h を省くと {full:.2f} in）。h を外すか、文字を短くする")
         if e.get("shape") == "rectangle" and (fill or kind == "label"):
             self.warns.append(f"{loc}: 塗りの箱を四角（shape: rectangle）にした。塗りの箱は、書かなければ角丸（visual.md の 4）。四角にする理由がなければ shape を外す")
         if kind in ("text", "label"):
@@ -3922,13 +3918,20 @@ def selftest_spec():
     mid = lambda t, h=None: {"type": "card", "num": 1, "valign": "middle", "head": "見出し", "text": t, "w": 5, **({"h": h} if h else {})}  # #52 の番号のある上下中央のカード（幅 5 in）
     one, two = "1 行の本文", "2 行になる本文。" * 4
     sp = SpecPage(Path("."))
-    need = sp.measure(mid(two), 5, "m") - sp.slack(mid(two), "m")
+    need = sp.measure(mid(two), 5, "m", least=True)
     assert sp.measure(mid(one), 5, "m") > 0.65 and need > 0.65  # 1 行でも h を省けば 0.6 in より高い（詰めるのは使い方のうち）。2 行は文字が 0.6 in に収まらない
+    small = {"type": "label", "text": "小さい札", "size": 8}
+    assert sp.measure(small, 2, "s") == 0.4 and sp.measure(small, 2, "s", least=True) < 0.35  # 札の 0.4 in は既定の下限で、文字に要る高さではない
+    steps = {"type": "card", "head": "見出し", "items": [["項目", "説明の文"]] * 3, "step": 1.0}
+    assert near(card_h(4, "見出し", items=[("項目", "説明の文")] * 3, step=1.0, least=True), 2.5 + card_h(4, items=[("項目", "説明の文")], least=True) - 0.1)  # 最後の項目の下端まで（後ろの空きは要らない）
+    assert sp.measure(steps, 4, "c") > sp.measure(steps, 4, "c", least=True) + 0.25
     d, _ = run({"title": "t", "body": [{"type": "stack", "items": [  # 文字に要る高さより 0.05 in を超えて低いものだけ。row の中も、伸ばす前の h で見る
         mid(one, 0.6), mid(two, round(need - 0.04, 2)), mid(two, 0.6), {"type": "row", "items": [mid(two, 0.6), {"type": "card", "head": "高い", "text": two * 6}]},
-        {"type": "text", "text": two * 3, "h": 0.2}, {"type": "text", "text": two * 3, "fill": "PANEL", "h": 0.2}, {"type": "stat", "value": "3", "label": "件", "h": 0.3}]}]})
+        {"type": "text", "text": two * 3, "h": 0.2}, {"type": "text", "text": two * 3, "fill": "PANEL", "h": 0.2}, {"type": "stat", "value": "3", "label": "件", "h": 0.3},
+        small | {"h": 0.3}, {"type": "card", "num": 1, "head": "見出し", "w": 5, "h": 0.4}]}]})  # 上寄せの印のあるカードは、印（MARK_IN + 0.36 in）が収まるかも見る
     w = "\n".join(d.warnings)
-    assert w.count("収まらない見込み") == 4 and "items[2]（card）: h 0.6 in では" in w and "items[3].items[0]（card）" in w and "items[5]（text）" in w and "items[6]（stat）" in w, w  # 塗りのない文字は見ない
+    assert w.count("収まらない見込み") == 5 and "items[2]（card）: h 0.6 in では" in w and "items[3].items[0]（card）" in w and "items[5]（text）" in w and "items[6]（stat）" in w, w  # 塗りのない文字は見ない
+    assert "items[8]（card）" in w and "items[7]" not in w, w
     d, els = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [  # 位置の確かめ（tangles）。囲みの中の線と、線の両端の部品は数えない
         {"type": "box", "x": 0, "y": 0, "w": 9, "h": 3, "fill": "PANEL"},
         {"type": "label", "id": "a", "text": "A", "x": 0.2, "y": 1, "w": 2, "h": 0.6}, {"type": "label", "id": "m", "text": "途中", "x": 3.5, "y": 1, "w": 1.2, "h": 0.6},
