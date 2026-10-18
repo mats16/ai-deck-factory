@@ -1,10 +1,11 @@
-# git で管理するのは、このワークスペースの決まりと設定と、調べ直しの記録（Research/deck_research/）だけ。資料（Customers/・Internal/・ほかの Research/）と台帳、スクリプトの記録（.factory/）は入れない。
+# git で管理するのは、このワークスペースの決まりと設定（テーマのファイルの themes/ を含む）と、調べ直しの記録（Research/deck_research/）だけ。資料（Customers/・Internal/・ほかの Research/）と台帳、スクリプトの記録（.factory/）は入れない。
 /*
 !/.gitignore
 !/AGENTS.md
 !/CLAUDE.md
 !/factory.toml
 !/rules/
+!/themes/
 !/assets/
 !/Research/
 /Research/*

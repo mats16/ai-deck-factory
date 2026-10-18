@@ -25,7 +25,7 @@ description: AI Deck Factory のワークスペース（資料と決まりを置
    - `[slides.templates]`: `[drive] factory` を埋めたら、`python3 <deck-build のフォルダ>/scripts/template.py visual --from-base`（会社の色なら `company` も）でテンプレートを作る。元にするテンプレートを言われたら、その URL を `--from-base <元の URL>` で渡す（`factory.toml` には持たない。渡さなければ白紙の pptx〔`deck-build/assets/blank.pptx`〕から作る）（`[drive] factory` の下の Themes に作る）。URL は `[slides.templates]` に書き込まれる。visual・company の色と説明はプラグインの組み込みのテーマのファイルにある。会社のテンプレートを使うなら、スキル `deck-template` で作る（`[brand]` と、ワークスペースのテーマのファイル `themes/slides/<名前>.json`。テーマを 2 つ以上使うなら、それぞれに `description`〔どの資料・聞き手に使うか〕を書いてもらう）。
    - `[slides] default_theme`: 上の 2 つでテンプレートがそろったら、既定のテーマを選択式で聞く（`deck-template` の「既定のテーマを選ぶ」）。
    - `[drive]`: 顧客向け・社内向けのスライドとドキュメントの置き場所の根元。
-   - `[review]`: 聞かない。雛形の既定（構成のレビューは AI、`/deck-review` は 3 周まで）のままにする。ユーザーが言ったときだけ変える。
+   - `[review]`: 聞かない。雛形の既定（構成のレビューは AI、`/deck-review` は 3 ラウンドまで）のままにする。ユーザーが言ったときだけ変える。
    - `[sources]`: 材料を集める道具（社内の検索・チャット・会議の記録・wiki・顧客の台帳・利用額）。自分の道具の一覧にある MCP とスキルから候補を出して聞く。道具ごとの使い方を決まりにするときは `rules/deck-practices/materials.md` に書く。
 4. **`AGENTS.md` を合わせる。** 「顧客とフォルダ」の表に担当の顧客を足す。足した顧客の profile を今作るかを聞き、作るならスキル `customer-profile` で作る（`[sources]` を埋めたあと）。置いた雛形の決まりで合わないものは、ユーザーに聞いてから直す（ワークスペースの決まりが優先するので、ここで直したことが効く）。
 5. **git にするかを聞く。** 決まりと点検を育てていく履歴を残すなら、ワークスペースで `git init` し、最初の commit をする（置いた `.gitignore` が、決まりと設定だけを入れる）。リモートに上げるかはユーザーが決める。

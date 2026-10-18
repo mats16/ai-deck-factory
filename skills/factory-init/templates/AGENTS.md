@@ -2,7 +2,7 @@
 
 AI Deck Factory（プラグイン）で、スライドとドキュメントを作るワークスペース。使う人の名前・役割・担当の顧客は、`factory.toml` の `user.profile` が指すファイルにある。要るときに読み、このフォルダの文書には写さない。顧客向けの資料（`Customers/`）、社内向けの資料（`Internal/`）、調べものの結果（`Research/`）を作り、置いておく。
 
-このファイルには、どの会話でも要ることだけを書く。資料を作る・直すときにだけ要ることは、プラグインのスキルと、ここから指す `rules/` にある（下の「場面ごとに開くファイル」）。
+このファイルには、どの会話でも要ることだけを書く。資料を作る・直すときにだけ要ることは、プラグインのスキルと、ここから指す `rules/` にある（下の「資料を作る・直すとき」）。
 
 ## 決まりの優先
 
@@ -33,28 +33,10 @@ AI Deck Factory（プラグイン）で、スライドとドキュメントを�
 
 ## 資料を作る・直すとき
 
-「〇〇の資料を作って」「このページを直して」と言われたら、作業に入る前にスキル `deck-practices` の SKILL.md の「作業の始め方」を開き、その順に進める。スライドもドキュメントも同じ。次の 2 つは、開く前から守る。
+「〇〇の資料を作って」「このページを直して」と言われたら、作業に入る前にスキル `deck-practices` の SKILL.md を開き、「全体の流れ」と「作業の始め方」の順に進める（スライドもドキュメントも同じ）。場面ごとに開くファイルは、同じ SKILL.md の「いつ何を読むか」の表。開く前から、次の 2 つは守る。
 
-- 作り始める前に、資料の種類・聞き手・聞き手の問い・読んだあと聞き手ができることをユーザーに確かめる。依頼から書けても確かめる。方針を決めたあとを AI のレビューでそのまま作るか、人がレビューするかは、`factory.toml` の `[review] plan_reviewer` に従う（その資料で言われたら、そちらにする）。
+- 作り始める前に、資料の種類・聞き手・聞き手の問い・読んだあと聞き手ができることをユーザーに確かめる（依頼から書けても確かめる）。
 - ユーザーに返す前に、スキル `deck-review` で全体をレビューする。
-
-### 場面ごとに開くファイル
-
-スキルが自動で呼ばれるのを待たず、その場面になったら次のファイルを開く。パスは `<スキル>/<ファイル>`（プラグインの `skills/` の下）。開くと、ワークスペースの同じパスの `rules/<スキル>/<ファイル>` がプラグインの hook で続けて出る。そちらを優先する（出ない環境では自分で開く）。
-
-| 場面 | 開くファイル |
-|---|---|
-| 資料を作る・直す（最初に） | `deck-practices/SKILL.md`（作業の始め方、残すもの、場面ごとに読むファイル） |
-| 顧客の profile を作る・取り直す | `customer-profile/SKILL.md`（事業・組織・技術の構成・エンジニアの好み。memory との分け方） |
-| 材料を集める | `deck-practices/materials.md`（検索・会議の記録・社内のチャットの使い方、`references.md` の台帳） |
-| 社内資料の流用 | `deck-practices/reuse.md`（4 つの段階の決め方、Google Slides の書き出しとページの画像） |
-| 構成案と言葉 | `deck-practices/content.md`（資料の種類ごとの書き分け、見出し、文体と出典） |
-| スライド | `deck-build/slides.md`（コマンド、ページの書き方〔JSON〕、テンプレートとテーマ、Slides API の落とし穴、画像）と `deck-practices/visual.md`（色・配置・文字サイズ、和文の組み方） |
-| ドキュメント | `doc-build/SKILL.md`（doc.md の書き方と確かめるループ、テンプレート、Docs API の落とし穴）と `deck-practices/visual_doc.md`（版面・見出し・表と図） |
-| テンプレートを作る・整える（会社のテンプレートから） | `deck-template/SKILL.md`（3 つの場合、役割への色の当て方、書体、コントラストの直し方） |
-| 仕上げと納品 | `deck-build/SKILL.md`（`gslides.py check` と lint の見方、納品物、Drive への置き方）、ドキュメントは `doc-build/SKILL.md`、`deck-review/SKILL.md`（返す前の全体のレビュー） |
-| 修正の指示を受けた・決まりを足す | `deck-practices/rules.md`（決まりの層、修正の指示の戻し方、決まりの確かめ方） |
-| プラグインを直す | `factory-kaizen/SKILL.md`（過去の資料での検証と Issue） |
 
 ### 修正の指示
 
@@ -98,7 +80,8 @@ Research/<内容>_<YYYYMMDD>.md                    … 調べもの
 Research/deck_research/                           … deck-research の調べ直しの記録（state.md・log/）
 rules/<スキル>/<ファイル>                         … このワークスペースの決まり（プラグインの同じファイルへの足しと上書き）
 rules/deck-build/checks.py                        … このワークスペースの点検（lint が読み込む）
-assets/                                           … 自分だけの画像（slides.asset() が先に探す）
+themes/slides/<名前>.json                         … スライドのテーマ（色・書体・表紙と扉のレイアウト。テンプレートの URL は factory.toml の [slides.templates]）
+assets/                                           … 自分だけの画像（ページの JSON の "src": "asset:<名前>" が先に探す）
 .factory/                                         … スクリプトが書く記録（lint・dreaming）と、顧客の profile の前の版。手で直さない
 factory.toml                                      … 人ごとに変わる設定値（スクリプトが読む）
 references_index.md                               … 過去に使った資料の索引
@@ -109,7 +92,7 @@ references_index.md                               … 過去に使った資料�
 - **過去に使った資料は、直下の `references_index.md` にまとめる。** 探すときは、検索より先に `grep -n <語> references_index.md`。
 - **エージェントが読み書きするファイルの名前は、英数字とハイフン・アンダーバーだけにする。** 納品物と、ユーザーが読む `構成案*.md`・`社内メモ_*.md` は日本語の名前のまま。
 - ワークスペースの直下に、上に書いたもののほかのファイルを作らない。
-- git で管理するのは、決まりと設定（`AGENTS.md`・`CLAUDE.md`・`factory.toml`・`rules/`・`assets/`）と、調べ直しの記録（`Research/deck_research/`）だけ（`.gitignore`）。資料と台帳は入れない。
+- git で管理するのは、決まりと設定（`AGENTS.md`・`CLAUDE.md`・`factory.toml`・`rules/`・`themes/`・`assets/`）と、調べ直しの記録（`Research/deck_research/`）だけ（`.gitignore`）。資料と台帳は入れない。
 
 ### 顧客とフォルダ
 

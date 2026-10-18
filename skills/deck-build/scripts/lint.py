@@ -85,7 +85,7 @@ NO_HEAD = "、。，．）」』】〕・ー!?！？：；"  # 行頭に来な�
 OPEN_HEAD = "手の改行のあとの行頭に全角の開き括弧"  # [lint-007] visual.md の 2 の「改行」。行頭の「（」「「」は半字下がって見え、左端がそろわない
 COL_SHIFT = "隣り合う列の箱の上端か下端がずれている"  # [lint-008] visual.md の 4。片方の列にだけ小見出しを置くと、箱の上下がそろわない
 BIG_NUM_PT, COL_TOL, COL_MAX, NEST = 28, 0.03 * EMU, 1.0 * EMU, 0.25 * EMU  # 大きな数字の大きさ。列のずれは 0.03〜1.0 in を出す（それより大きいのは中身の量の違いとみなす）
-DASH_ROUND = "点線の角丸が Google 標準の丸み"  # slides.md の 5。中のカード（半径 0.1 in）と曲率が合わない。d.box(…, dash=True) にする（2026-10-08）
+DASH_ROUND = "点線の角丸が Google 標準の丸み"  # slides.md の 5。中のカード（半径 0.1 in）と曲率が合わない。JSON の box の dash にする（2026-10-08）
 CODE_NOT_MONO = f"濃紺の地のコードが等幅の {MONO_DEFAULT} でない"  # [lint-009] visual.md の 2。pages.py に残った古いコードの箱の部品で、等幅にならなかった（レビューでも見落としやすい）
 CODE_LINE = re.compile(r"\s*(SELECT|UPDATE|INSERT|DELETE|CREATE|ALTER|WITH|FROM|WHERE|SET|ANALYZE|GROUP BY|ORDER BY|import|def|pip|uv|curl|psql|python3?|databricks)(?=[\s(;]|$)")  # コードの行の頭（URL の databricks.com などは数えない）
 BLOCK_ON_NAVY = "濃紺の箱の上に NAVY_BLOCK の箱"  # [lint-010] visual.md の 1。地との差が小さく、群の境が見えない。本文ページでは淡色（PANEL・CARD）にする。扉（濃紺の地）は見ない
@@ -565,7 +565,7 @@ def lint_slides(p, r, reuse=False, talk=False, only=None, scope="deck"):
                 if got != want:
                     r.hits[STAGE_NG].append(f"p{i}: 「{''.join(ptext(x) for x in paras(sh.get('text'))).strip()}」の塗りが {got}（{want} にする。slides.py の STAGE_FILL）")
             if sh.get("shapeType") == "ROUND_RECTANGLE" and sh.get("shapeProperties", {}).get("outline", {}).get("dashStyle", "SOLID") not in ("SOLID", "DASH_STYLE_UNSPECIFIED"):
-                r.hits[DASH_ROUND].append(f"p{i}: {b[2]:.2f} × {b[3]:.2f} in。d.box(…, kind=\"ROUND_RECTANGLE\", dash=True) で半径 0.1 in の点線にする")
+                r.hits[DASH_ROUND].append(f"p{i}: {b[2]:.2f} × {b[3]:.2f} in。JSON の box に \"shape\": \"round_rectangle\", \"dash\": true を書き、半径 0.1 in の点線にする（pages.py は d.box(…, kind=\"ROUND_RECTANGLE\", dash=True)）")
             if "shape" in e and src_without_link(e["shape"]):
                 r.hits[NO_LINK].append(f"p{i}: 「{''.join(ptext(x) for x in paras(e['shape'].get('text'))).strip()[:30]}」")
             for text, f in texts:
@@ -588,7 +588,7 @@ def lint_slides(p, r, reuse=False, talk=False, only=None, scope="deck"):
                     if m := re.search(r"\v\s*[（「『]", raw):
                         r.hits[OPEN_HEAD].append(f"p{i}: 「{raw[max(0, m.start() - 12):m.end() + 12].replace(chr(11), '⏎')}」。括弧の前で改行せず、括弧の後か句読点で改行する")
                     if (f or under) == scheme.get("DARK1") and CODE_LINE.match(t) and any(st.get("fontFamily") != MONO and re.search("[A-Za-z]", c) for c, st in para[1]):
-                        r.hits[CODE_NOT_MONO].append(f"p{i}: 「{t.strip()[:30]}」。d.code か d.text(…, mono=True) にする")
+                        r.hits[CODE_NOT_MONO].append(f"p{i}: 「{t.strip()[:30]}」。JSON の code か、text の \"mono\": true にする（pages.py は d.code か d.text(…, mono=True)）")
                     if not dark[-1] and re.fullmatch(r"[\d.,]+", t.strip()) and max((size_of(st) or 0) for _, st in para[1]) >= BIG_NUM_PT:
                         r.hits[NUM_NO_UNIT].append(f"p{i}: 「{t.strip()}」。単位と何の数かを数字と同じ枠に書く（例: 16 モデル）")
                     if "出典" in t:

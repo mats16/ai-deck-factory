@@ -28,7 +28,7 @@ python3 $K/docs.py export <URL> /tmp/<資料名>.docx                 # 相手�
 [doc-build-002] まず markdown で中身を詰め、それからテンプレートとともに API で組み、確かめて直すことを繰り返す。スライドのページの JSON と同じく、**直すのは doc.md（中身）と docs.py のテーマ・部品（見た目）で、組んだ文書は手で直さない**。markdown をアップロードしてできた文書を直してテンプレートに近づけるやり方は取らない（直しが文書にしか残らず、上げ直すと消える）。
 
 1. `docs.py init <テンプレート>` で doc.md を作る（テンプレートがなければ、下の 1.2 の形で書き始める）。
-2. 中身を書く。構成案と同じく、ユーザーと doc.md で中身を詰めてよい（読む人に見せるのは、組んだ Google Docs）。
+2. 中身を書く。構成案で合意した中身を、ユーザーを待たずに doc.md に書く（`../deck-practices/SKILL.md` の deck-practices-006）。ユーザーが doc.md で中身を詰めたいと言ったときは、そうしてよい（読む人に見せるのは、組んだ Google Docs）。
 3. `docs.py new`（初回）か `docs.py build` で組み、`docs.py check` で確かめる。
 4. 要修正を 0 にし、要確認を 1 件ずつ見て、画像を開いて見る（下の 5）。直しは doc.md か docs.py に入れ、3 に戻る。
 5. 返す前に `/deck-review`（`../deck-review/SKILL.md`）。指摘も doc.md に入れて組み直す。

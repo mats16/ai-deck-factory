@@ -100,7 +100,7 @@ def check(ws, local=False):
         warn("docs.themes の説明", f"{', '.join(bad)} に description がない。エージェントが資料ごとにテーマを選べない")
     if (d := docs.get("default_theme")) and d not in docs.get("themes", {}) and d != "standard":  # standard は組み込み（docs.py の STANDARD）
         ng("docs.default_theme", f"{d} が [docs.themes] にない。theme を書かない doc.md が組めない")
-    review = cfg.get("review", {})  # 書いていなければ既定。読むのはエージェント（deck-practices の 5 と 6）
+    review = cfg.get("review", {})  # 書いていなければ既定。読むのはエージェント（deck-practices の 5 と 9）
     if (p := review.get("plan_reviewer", "ai")) not in ("ai", "human"):
         ng("review.plan_reviewer", f"{p!r} は使えない。\"ai\" か \"human\" にする")
     if type(n := review.get("deck_review_max_rounds", 3)) is not int or not 1 <= n <= 3:  # bool は int の子なので type で見る

@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
 """Google Slides を Slides API で直接組む（2026-10-07 に pptx から切り替えた。組み方と落とし穴は ../slides.md）。
-資料ごとの build/pages.py に NAME（資料名・秘密区分）と、ページの関数・共通の関数と定数・make(d) だけを書き、部品は Deck のメソッドを使う。
-JSON のページ（build/deck.json と、そこから指すページのファイル）でも書ける（Deck.spec。../slides.md の slides-034）。
-usage（資料の build/ で。pages.py・deck.json は今いるフォルダのもの）:
+資料ごとの build/deck.json（kind Deck。資料名と、ページのファイルの並び）と、1 ページ 1 つの build/p<番号>.json（kind Page）に書く（../slides.md の slides-034。書く形は schema）。
+前の資料の build/pages.py（NAME・ページの関数・make(d)。部品は Deck のメソッド）も組める。
+usage（資料の build/ で。deck.json か pages.py は今いるフォルダのもの）:
   slides.py new <Drive のフォルダの URL か ID> <Drive 上の名前> [--theme <テーマ>]   テンプレートを複製して組む（テンプレートは factory.toml の [slides.templates] の <テーマ>。
                                           組む前にマスターをテーマのファイルの値にそろえる。build も同じ）
   slides.py plan <URL か ID> [<ファイル>...]   build が書くもの（マスターのテーマの違い・作り直すページ・選んでいないので残すページ・消す枚数・並べ替え・画面での直し）を出す。書かない
   slides.py build <URL か ID> [<ファイル>...] [--force]   組み直す（中身の変わったページだけを作り直し、順をそろえる。URL は変わらない）。JSON のページ・デッキのファイルを渡すと、
                                           そのページだけを作り直し、ほかのページは前のまま残す（テーマはいつもそろえる）。前に組んだあとに画面で直されているか、
-                                          未解決のコメントがあれば止まる。直しを pages.py に入れてから --force で組み直す（--force は全ページ〔ファイルを渡せばそのページ〕を作り直す）。
+                                          未解決のコメントがあれば止まる。直しをページの JSON（前の資料は pages.py）に入れてから --force で組み直す（--force は全ページ〔ファイルを渡せばそのページ〕を作り直す）。
                                           作り直したページを /tmp/slides_<ID の頭 8 字>/changed.json に、工程ごとの秒を標準エラーに出す
   slides.py lint [<ファイル>] [<URL か ID>] [--pages 3,5 | --all] [--talk]   組まずに、組む要求を手元で presentations.get の形にして lint をかける（テストの unit。
                                           直すたびに回す）。既定は前に回したときから変わったページ（と要修正が残ったページ。テーマか規則が変わったら全ページ）。テーマはテーマのファイルから読み、Google を読まない
                                           （URL はテーマのファイルがないデッキだけに要る）。テーマのファイル（kind Theme）を渡すと、形と役割の組のコントラストを見る
-  slides.py dry [<ファイル>] [<URL か ID>]   組まずに make を走らせ、組むときの警告・枚数・ノートのないページを出す（既定は pages.py。子が書いた build/pages_<担当>.py か、JSON のページの .json を確かめる。
+  slides.py dry [<ファイル>] [<URL か ID>]   組まずに make を走らせ、組むときの警告・枚数・ノートのないページを出す（既定は deck.json か pages.py。子が書いた JSON のページの .json か build/pages_<担当>.py を確かめる。
                                           テーマは lint と同じ。../slides.md の 2）
   slides.py resolve [<ファイル>.json] [<URL か ID>]   JSON のページを解いた形（in の位置とすべての値。Deck のメソッドの呼び出し）を出す（../slides.md の slides-034）
-  slides.py schema   JSON のページの書く形の JSON Schema を出す
+  slides.py schema [--brief]   JSON のページの書く形の JSON Schema を出す（--brief は型・キー・色の早見表）
   slides.py stats   JSON のページの形の外の書き方（raw）を、キーごとに使った資料の数で出す（ワークスペースの .factory/spec_raw.jsonl。形に足す候補）
   slides.py upgrade <ファイル>...   JSON のページの raw のうち、形のキーで書けるものを書き換える
   slides.py themes   テーマの名前・説明・テンプレートがあるか・既定か。資料ごとに選ぶ（../../deck-practices/SKILL.md の「作業の始め方」の 5）。
                      [drive] shared_themes と [drive] factory の下の Themes の、[slides.templates] にないテンプレートも候補に出す
   slides.py theme <URL か ID> [<名前>] [--force]   テンプレートかデッキが持つテーマ（マスターの配色・書体・目印）を、ワークスペースの themes/slides/<名前>.json に書く。
                      テンプレートなら [slides.templates] にも書く（共有テーマを使い始めるとき、画面で直した色を戻すとき）
-  slides.py merge <ファイル>...   子が別のファイルに書いたページの関数を pages.py に合わせる（組まない。../../deck-review/SKILL.md の手順 5）
+  slides.py merge <ファイル>...   pages.py の資料で、子が別のファイルに書いたページの関数を pages.py に合わせる（組まない。../../deck-review/SKILL.md の手順 5）
   slides.py --selftest
 テンプレートの管理は template.py。色は下の「色の役割」の名前で渡す。役割の名前はテーマの色（マスターの配色）を指すので、テンプレートを替えると色が変わる。
 見た目の決まりは ../../deck-practices/visual.md の 1。"""
@@ -1735,7 +1735,7 @@ class SpecPage:
     def tangles(self):
         """矢印と部品の位置を、解いた形で確かめる（組むときの警告）。frame の図で画像を見て直していたもの（線が部品の上を通る、矢じりが 1 点に集まる、
         部品が一部だけ重なる）を、組む前に出す（2026-10-16。JSON の 1 本目の 29 枚で、1〜2 ページだけ組み直した 13 回のうち 10 回と、
-        deck-review の 2〜3 周目の画像の指摘の半分が frame の図だった）。文字の高さは見積もりなので、ぎりぎりのものは画像で確かめる。"""
+        deck-review の 2〜3 ラウンド目の画像の指摘の半分が frame の図だった）。文字の高さは見積もりなので、ぎりぎりのものは画像で確かめる。"""
         def ink(kind, r, e):  # 塗りのない文字は、文字のあるところだけ（枠は広く取ることが多い）
             if kind != "text" or e.get("fill") or e.get("line"):
                 return r
@@ -3549,7 +3549,7 @@ def selftest():
         assert got.index("def p3") < got.index("def make") and "前" in Path(pg + ".bak").read_text()
         ast.parse(got)
         Path(fb).write_text("def p2(d):\n    d.page('再')\n")
-        merge(pg, [fb])  # 同じ周に 2 回合わせても、最初の .bak は上書きしない
+        merge(pg, [fb])  # 同じラウンドに 2 回合わせても、最初の .bak は上書きしない
         assert "前" in Path(pg + ".bak").read_text() and "後" in Path(pg + ".bak1").read_text()
         Path(pg).write_text(got)
         Path(fb).write_text("def p4(d):\n    pass\n\n'''途中の文字列'''\n")  # docstring でない文字列は関数でない文として止める
