@@ -1424,6 +1424,13 @@ class SpecPage:
         it = iter(ws)
         return sum(max(self.measure(c, next(it), loc) for c in row) for row in self.rows_of(e)) + gap * (len(self.rows_of(e)) - 1)
 
+    def slack(self, e, loc):
+        """measure の高さのうち、見た目のために空ける余白（in）。h を書いてこの分を詰めても、文字は箱に収まる（#52。1 行の上下中央のカードを 0.6 in に詰める）。"""
+        kind, size = e["type"], e.get("size", 11)
+        if kind == "card" and (self.mark(e) or self.dark_card(e, loc)):
+            return 0.4 if e.get("valign") == "middle" else CARD_BOTTOM  # 上下中央は印と文字の上下、ほかは最終行の下
+        return {"card": 0.15, "stat": 2 * STAT_PAD + 0.1 - 2 * INSET, "label": 2 * size / 72 - 2 * INSET}.get(kind, 2 * size / 72 + 0.1 - 2 * INSET)  # 文字の枠の余白（INSET）は残す
+
     def mark(self, e):
         """カードの印（icon・num・image のどれか）。2 つ以上なら止める。"""
         ms = [k for k in ("icon", "num", "image") if k in e]
@@ -1573,6 +1580,10 @@ class SpecPage:
         on, emph = (spec_color(c) for c in ON_FILL.get(ground, ("TEXT", "RED_TEXT")))
         if kind not in ("row", "stack", "grid", "frame"):
             self.placed.append((kind, loc, (x, y, w, h), kind == "box" and bool(fill), kind == "text" and not (fill or e.get("line")), e))
+        if "h" in e and (kind in ("card", "stat", "label") or kind == "text" and (fill or e.get("line"))):  # 書いた h は中身を見ずに使うので、収まらなくても組んだ画像まで分からない（#52）
+            full = self.measure({k: v for k, v in e.items() if k != "h"}, w, loc)
+            if (need := full - self.slack(e, loc)) > e["h"] + 0.05:  # 文字の高さは見積もりなので 0.05 in まで許す
+                self.warns.append(f"{loc}（{kind}）: h {e['h']} in では中身が収まらない見込み（文字に要る高さ {need:.2f} in。h を省くと {full:.2f} in）。h を外すか、文字を短くする")
         if e.get("shape") == "rectangle" and (fill or kind == "label"):
             self.warns.append(f"{loc}: 塗りの箱を四角（shape: rectangle）にした。塗りの箱は、書かなければ角丸（visual.md の 4）。四角にする理由がなければ shape を外す")
         if kind in ("text", "label"):
@@ -3908,6 +3919,16 @@ def selftest_spec():
     assert any("横 1 列" in w for w in d.warnings)
     d, _ = run({"title": "t", "body": [{"type": "box", "h": 0.5, "fill": "PANEL", "shape": "rectangle"}, {"type": "box", "h": 0.5, "line": "RULE", "shape": "rectangle"}]})
     assert sum("四角（shape: rectangle）" in w for w in d.warnings) == 1  # 塗りの箱だけ知らせる（枠線だけの箱は四角が既定）
+    mid = lambda t, h=None: {"type": "card", "num": 1, "valign": "middle", "head": "見出し", "text": t, "w": 5, **({"h": h} if h else {})}  # #52 の番号のある上下中央のカード（幅 5 in）
+    one, two = "1 行の本文", "2 行になる本文。" * 4
+    sp = SpecPage(Path("."))
+    need = sp.measure(mid(two), 5, "m") - sp.slack(mid(two), "m")
+    assert sp.measure(mid(one), 5, "m") > 0.65 and need > 0.65  # 1 行でも h を省けば 0.6 in より高い（詰めるのは使い方のうち）。2 行は文字が 0.6 in に収まらない
+    d, _ = run({"title": "t", "body": [{"type": "stack", "items": [  # 文字に要る高さより 0.05 in を超えて低いものだけ。row の中も、伸ばす前の h で見る
+        mid(one, 0.6), mid(two, round(need - 0.04, 2)), mid(two, 0.6), {"type": "row", "items": [mid(two, 0.6), {"type": "card", "head": "高い", "text": two * 6}]},
+        {"type": "text", "text": two * 3, "h": 0.2}, {"type": "text", "text": two * 3, "fill": "PANEL", "h": 0.2}, {"type": "stat", "value": "3", "label": "件", "h": 0.3}]}]})
+    w = "\n".join(d.warnings)
+    assert w.count("収まらない見込み") == 4 and "items[2]（card）: h 0.6 in では" in w and "items[3].items[0]（card）" in w and "items[5]（text）" in w and "items[6]（stat）" in w, w  # 塗りのない文字は見ない
     d, els = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [  # 位置の確かめ（tangles）。囲みの中の線と、線の両端の部品は数えない
         {"type": "box", "x": 0, "y": 0, "w": 9, "h": 3, "fill": "PANEL"},
         {"type": "label", "id": "a", "text": "A", "x": 0.2, "y": 1, "w": 2, "h": 0.6}, {"type": "label", "id": "m", "text": "途中", "x": 3.5, "y": 1, "w": 1.2, "h": 0.6},
