@@ -258,12 +258,53 @@ def card_h(w, head=None, body=None, items=None, step=None, bullets=False, size=1
     return top + (spec_text_h(parts, avail, size, 125) + 2 * INSET if any(p if isinstance(p, str) else p[0] for p in parts) else 0) + (0.1 if least else 0.15)  # 本文の枠は下端の 0.1 in 上まで（d.card）。最終行と下端の間を、白いカードの決まり（box_pad の 0.28 in）より広く
 
 
+def table_grid(rows, n, pad=False):
+    """d.table の行を、置く位置ごとのセルにする。セルは文字列、parts の並び、dict（text・colspan・rowspan・fill・align・valign・color・bullets）。
+    結合したセルが覆う位置には、セルを書かない（HTML の colspan・rowspan と同じ）。戻り: (行, 列, dict) の並び（行の順、行の中は書いた順）。
+    セルが n 列に合わない・表の下を越える・重なるなら ValueError。pad なら、足りない位置は空のセルにする（前の d.table と同じ。pages.py の短い行）。"""
+    taken, out = set(), []
+    for r, row in enumerate(rows):
+        c = 0
+        for cell in row:
+            while (r, c) in taken:
+                c += 1
+            d = dict(cell) if isinstance(cell, dict) else {"text": cell}
+            rs, cs = d.get("rowspan", 1), d.get("colspan", 1)
+            if c + cs > n:
+                raise ValueError(f"{r + 1} 行目のセルが列の数（{n}）を越える（上の行の rowspan と colspan が覆う位置には、セルを書かない）")
+            if r + rs > len(rows):
+                raise ValueError(f"{r + 1} 行目 {c + 1} 列目の rowspan {rs} が表の下を越える（{len(rows)} 行）")
+            cover = {(r + i, c + j) for i in range(rs) for j in range(cs)}
+            if cover & taken:
+                raise ValueError(f"{r + 1} 行目 {c + 1} 列目のセルが、上の行の rowspan のセルと重なる")
+            taken |= cover
+            out.append((r, c, d))
+            c += cs
+        if pad:
+            for j in [j for j in range(n) if (r, j) not in taken]:
+                taken.add((r, j))
+                out.append((r, j, {"text": ""}))
+        if (have := sum((r, j) in taken for j in range(n))) < n:
+            raise ValueError(f"{r + 1} 行目のセルが {have} 列分しかない（列は {n}。colspan は覆う列の数だけ数える）")
+    return out
+
+
+def cell_parts(d):
+    """table_grid のセルの文字を parts の並びにする。"""
+    t = d.get("text", "")
+    return [t] if isinstance(t, str) else t
+
+
 def table_h(widths, rows, size=11, row_h=0.36, header=True, mono_cols=(), first_col=True):
-    """d.table の高さの見込み（in）。行は文字に合わせて伸びる（row_h は最小。行ごとの並びでもよい）。見出しの行と 1 列目（first_col）は太字で見込む。"""
-    hs = list(row_h) if isinstance(row_h, (list, tuple)) else [row_h] * len(rows)
-    return sum(max(hs[r], 0.16 + max([1] + [est_lines(s, widths[c] - 2 * INSET, size, c in mono_cols and not (header and r == 0), header and r == 0 or first_col and c == 0)
-                                            for c, s in enumerate(row)])
-                   * size * 1.2 * 1.2 / 72) for r, row in enumerate(rows))
+    """d.table の高さの見込み（in）。行は文字に合わせて伸びる（row_h は最小。行ごとの並びでもよい）。見出しの行（header は行の数か真偽）と 1 列目（first_col）は太字で見込む。
+    rowspan のセルは、覆う行の高さの合計に足りない分を、覆う最後の行に足す（ponytail: Google の配り方は測っていない）。"""
+    hs, nh = list(row_h) if isinstance(row_h, (list, tuple)) else [row_h] * len(rows), int(header)
+    for r, c, d in sorted(table_grid(rows, len(widths), pad=True), key=lambda t: t[2].get("rowspan", 1)):  # 1 行のセルで行の高さを決めてから、rowspan のセルを見る
+        head, cs, rs = r < nh, d.get("colspan", 1), d.get("rowspan", 1)
+        avail = sum(widths[c:c + cs]) - 2 * INSET - (size * 1.3 / 72 if d.get("bullets") else 0)
+        h = 0.16 + spec_text_h(cell_parts(d), avail, size, 120, mono=c in mono_cols and not head, bold=head or first_col and c == 0)
+        hs[r + rs - 1] += max(h - sum(hs[r:r + rs]), 0)
+    return sum(hs)
 
 
 def band_h(head, sub=None):
@@ -650,31 +691,11 @@ class Deck:
                       {"updateParagraphStyle": {"objectId": e, "textRange": {"type": "ALL"},
                                                 "style": {"alignment": align, "lineSpacing": spacing, "spaceAbove": pt(0), "spaceBelow": pt(0)},
                                                 "fields": "alignment,lineSpacing,spaceAbove,spaceBelow"}}]
-        i = 0
-        for p in parts:
-            s, st = (p, {}) if isinstance(p, str) else p
-            if st:
-                style, fields = run_style(st, color)
-                req = {"updateTextStyle": {"objectId": e, "textRange": {"type": "FIXED_RANGE", "startIndex": i, "endIndex": i + u16(s)},
-                                           "style": style, "fields": fields}}
-                if isinstance(st.get("link"), (int, dict)):  # ページの番号か、JSON のページの名前（{"page": "p12"}）
-                    self.links.append((req, st["link"]))
-                else:
-                    self.reqs.append(req)
-            i += u16(s)
+        self.runs(e, parts, color)
         if mono:
             self.reqs += mono_reqs(e, full)
-        start, big, i = 0, 0, 0  # 段落ごとに、いちばん大きい文字を見る
-        for s, sz in [(p, size) if isinstance(p, str) else (p[0], p[1].get("size", size)) for p in parts] + [("\n", 0)]:
-            for k, piece in enumerate(s.split("\n")):
-                if k:  # 段落の終わり
-                    if big >= 2 * size and spacing > 100:
-                        self.reqs.append({"updateParagraphStyle": {"objectId": e, "textRange": {"type": "FIXED_RANGE", "startIndex": start, "endIndex": min(i + 1, u16(full))},
-                                                                   "style": {"lineSpacing": 100}, "fields": "lineSpacing"}})
-                    i += 1
-                    start, big = i, 0
-                i += u16(piece)
-                big = max(big, sz) if piece else big
+        if spacing > 100:
+            self.big_paras(e, parts, size)
         if gap and "\n" in full:
             self.reqs.append({"updateParagraphStyle": {"objectId": e, "textRange": {"type": "FIXED_RANGE", "startIndex": 0, "endIndex": u16(full[:full.rindex("\n")]) + 1},
                                                        "style": {"spaceBelow": pt(gap)}, "fields": "spaceBelow"}})
@@ -683,6 +704,36 @@ class Deck:
                           {"updateParagraphStyle": {"objectId": e, "textRange": {"type": "ALL"}, "style": {"indentStart": pt(size * 1.3), "indentFirstLine": pt(size / 2)},
                                                     "fields": "indentStart,indentFirstLine"}}]
         return e
+
+    def big_paras(self, oid, parts, size, cell=None):
+        """基準（size）の 2 倍以上の文字の段落（大きな数字）の行間を 100 にする（spec_text_h の見込みと同じ。d.text の docstring）。"""
+        loc, full = {"cellLocation": cell} if cell else {}, spec_plain(parts)
+        start, big, i = 0, 0, 0  # 段落ごとに、いちばん大きい文字を見る
+        for s, sz in [(p, size) if isinstance(p, str) else (p[0], p[1].get("size", size)) for p in parts] + [("\n", 0)]:
+            for k, piece in enumerate(s.split("\n")):
+                if k:  # 段落の終わり
+                    if big >= 2 * size:
+                        self.reqs.append({"updateParagraphStyle": {"objectId": oid, **loc, "textRange": {"type": "FIXED_RANGE", "startIndex": start, "endIndex": min(i + 1, u16(full))},
+                                                                   "style": {"lineSpacing": 100}, "fields": "lineSpacing"}})
+                    i += 1
+                    start, big = i, 0
+                i += u16(piece)
+                big = max(big, sz) if piece else big
+
+    def runs(self, oid, parts, color, cell=None):
+        """parts の run の書式（太字・大きさ・色・リンク）を、文字の枠か表のセル（cell は cellLocation）に付ける。ページへのリンクは finish で付ける。"""
+        loc, i = {"cellLocation": cell} if cell else {}, 0
+        for p in parts:
+            s, st = (p, {}) if isinstance(p, str) else p
+            if st:
+                style, fields = run_style(st, color)
+                req = {"updateTextStyle": {"objectId": oid, **loc, "textRange": {"type": "FIXED_RANGE", "startIndex": i, "endIndex": i + u16(s)},
+                                           "style": style, "fields": fields}}
+                if isinstance(st.get("link"), (int, dict)):  # ページの番号か、JSON のページの名前（{"page": "p12"}）
+                    self.links.append((req, st["link"]))
+                else:
+                    self.reqs.append(req)
+            i += u16(s)
 
     def num(self, sid, n, cx, cy, size="medium", fill=RED):
         """正円の番号。(cx, cy) は円の中心（大きさを替えても位置が動かず、横に並べる見出しと中心をそろえやすい）。size は NUM の small・medium・large。
@@ -730,14 +781,19 @@ class Deck:
             self.text(sid, x + PAD, top, w - 2 * PAD, bh, body, spacing=125, bullets=bullets)
         return y + h
 
-    def table(self, sid, x, y, widths, rows, size=11, row_h=0.36, header=True, first_col=True, zebra=True, align=None, mono_cols=(), fills=(), vlines=None):
-        """rows は文字列の 2 次元の並び（1 行目が見出し）。セルの中の改行は \\n。縦の罫線なし、横の罫線は RULE（visual.md の 5）。
-        見出しの行は濃紺に白の太字、1 列目は HEAD の太字（first_col）、行は 1 行おきに PANEL（zebra）、ほかは CARD。align は列ごとの "left"・"center"・"right" の並び（金額は右）。
+    def table(self, sid, x, y, widths, rows, size=11, row_h=0.36, header=True, first_col=True, zebra=True, align=None, mono_cols=(), fills=(), vlines=None,
+              valign="middle", borders="rows"):
+        """rows は行の並びで、セルは文字列か、parts の並び（d.text と同じ書式。改行は \\n）か、dict。header は見出しの行の数（True は 1）。
+        見出しの行は濃紺に白の太字、1 列目は HEAD の太字（first_col）、行は 1 行おきに PANEL（zebra）、ほかは CARD。align は列ごとの "left"・"center"・"right" の並び（金額は右）、
+        valign はセルの上下の寄せ（top・middle・bottom）。罫線は borders で、rows は横の罫線だけを RULE で引き（visual.md の 5。既定）、grid は縦横と外枠、none は引かない。
+        dict のセルは text（文字列か parts）と、colspan・rowspan（右と下へ結合する数。覆う位置にはセルを書かない。HTML と同じ）、fill（そのセルの塗り）、
+        align・valign（そのセルの寄せ）、color（文字の色。濃い fill なら WHITE などを渡す）、bullets（箇条書き）。
         行は文字に合わせて伸びる（row_h は最小）。戻りは表の下端の見込み（in。下に置く要素の位置に使う）。
         mono_cols の列は、見出しの行を除いて英数字を等幅の MONO にする（コマンドの一覧など。visual.md の 2）。
-        row_h は行ごとの並びでもよい。fills は (行, 列, 色) の並び（0 始まり。行か列が None ならその列か行の全部）で、1 行おきの塗りの上に塗る（強調するセル）。
+        row_h は行ごとの並びでもよい。fills は (行, 列, 色) の並び（0 始まり。行か列が None ならその列か行の全部）で、1 行おきの塗りの上に塗る（行か列の強調）。
         vlines は (始めの列, 列の数) で、見出しの行の下のその列の左右と間に縦の罫線を引く（ガントの月の区切り。線の図形で引くと lint の格子に出る）。"""
-        t, nr, nc = self.oid(), len(rows), len(widths)
+        t, nr, nc, nh = self.oid(), len(rows), len(widths), int(header)
+        grid = table_grid(rows, nc, pad=True)
         hs = list(row_h) if isinstance(row_h, (list, tuple)) else [row_h] * nr
         if len(hs) != nr:
             raise ValueError(f"row_h の数（{len(hs)}）が行の数（{nr}）と違う")
@@ -746,53 +802,60 @@ class Deck:
         def rng(r, c, rs=1, cs=1):
             return {"location": {"rowIndex": r, "columnIndex": c}, "rowSpan": rs, "columnSpan": cs}
 
-        def border(pos, alpha):
-            return {"updateTableBorderProperties": {"objectId": t, "tableRange": whole, "borderPosition": pos,
+        def border(pos, alpha, at=whole):
+            return {"updateTableBorderProperties": {"objectId": t, "tableRange": at, "borderPosition": pos,
                                                     "tableBorderProperties": {"tableBorderFill": {"solidFill": {"color": paint(RULE), "alpha": alpha}}, "weight": pt(0.75)},
                                                     "fields": "tableBorderFill,weight"}}
 
-        def fill(r, color):
-            return {"updateTableCellProperties": {"objectId": t, "tableRange": rng(r, 0, 1, nc),
-                                                  "tableCellProperties": {"tableCellBackgroundFill": {"solidFill": {"color": paint(color)}}},
-                                                  "fields": "tableCellBackgroundFill"}}
+        def cell_props(at, props, fields):
+            return {"updateTableCellProperties": {"objectId": t, "tableRange": at, "tableCellProperties": props, "fields": fields}}
 
-        self.reqs += [{"createTable": {"objectId": t, "rows": nr, "columns": nc, "elementProperties": place(sid, x, y, sum(widths), sum(hs))}},
-                      border("ALL", 0), border("INNER_HORIZONTAL", 1), border("BOTTOM", 1),
-                      *[{"updateTableBorderProperties": {"objectId": t, "tableRange": rng(int(header), vlines[0], nr - int(header), vlines[1]), "borderPosition": pos,
-                                                         "tableBorderProperties": {"tableBorderFill": {"solidFill": {"color": paint(RULE), "alpha": 1}}, "weight": pt(0.75)},
-                                                         "fields": "tableBorderFill,weight"}} for pos in ("LEFT", "INNER_VERTICAL", "RIGHT") if vlines],
-                      {"updateTableCellProperties": {"objectId": t, "tableRange": whole, "tableCellProperties": {"contentAlignment": "MIDDLE"},
-                                                     "fields": "contentAlignment"}},
+        def fill(at, color):
+            return cell_props(at, {"tableCellBackgroundFill": {"solidFill": {"color": paint(color)}}}, "tableCellBackgroundFill")
+
+        lines = {"rows": [border("ALL", 0), border("INNER_HORIZONTAL", 1), border("BOTTOM", 1)], "grid": [border("ALL", 1)], "none": [border("ALL", 0)]}[borders]
+        self.reqs += [{"createTable": {"objectId": t, "rows": nr, "columns": nc, "elementProperties": place(sid, x, y, sum(widths), sum(hs))}}, *lines,
+                      *[border(pos, 1, rng(nh, vlines[0], nr - nh, vlines[1])) for pos in ("LEFT", "INNER_VERTICAL", "RIGHT") if vlines],
+                      cell_props(whole, {"contentAlignment": VALIGN[valign]}, "contentAlignment"),
                       *[{"updateTableRowProperties": {"objectId": t, "rowIndices": [r for r in range(nr) if hs[r] == h], "tableRowProperties": {"minRowHeight": emu(h)},
                                                       "fields": "minRowHeight"}} for h in dict.fromkeys(hs)]]
         self.reqs += [{"updateTableColumnProperties": {"objectId": t, "columnIndices": [j], "tableColumnProperties": {"columnWidth": emu(w)}, "fields": "columnWidth"}}
                       for j, w in enumerate(widths)]
-        self.reqs += [fill(r, NAVY if header and r == 0 else PANEL if zebra and (r - header) % 2 else CARD) for r in range(nr)]
-        self.reqs += [{"updateTableCellProperties": {"objectId": t, "tableRange": rng(0 if r is None else r, 0 if c is None else c, nr if r is None else 1, nc if c is None else 1),
-                                                     "tableCellProperties": {"tableCellBackgroundFill": {"solidFill": {"color": paint(color)}}}, "fields": "tableCellBackgroundFill"}}
-                      for r, c, color in fills]
-        for r, row in enumerate(rows):
-            head = header and r == 0
-            for c, s in enumerate(row):
-                avail, mono = widths[c] - 2 * INSET, c in mono_cols and not head
-                first = first_col and c == 0 and not head
-                for ln in s.split("\n"):
-                    if ln and est_lines(ln, avail, size, mono, head or first) > 1:
-                        self.warn(f"表のセルが折り返す見込み「{ln}」（列の幅 {widths[c]:.2f} in）")
-                if not s:
-                    continue
-                loc = {"rowIndex": r, "columnIndex": c}
-                self.reqs += [{"insertText": {"objectId": t, "cellLocation": loc, "insertionIndex": 0, "text": s}},
-                              {"updateTextStyle": {"objectId": t, "cellLocation": loc, "textRange": {"type": "ALL"},
-                                                   "style": {"fontFamily": FONT, "fontSize": pt(size), "bold": head or first,
-                                                             "foregroundColor": {"opaqueColor": paint(WHITE if head else HEAD if first else TEXT)}},
-                                                   "fields": "fontFamily,fontSize,bold,foregroundColor"}},
+        self.reqs += [fill(rng(r, 0, 1, nc), NAVY if r < nh else PANEL if zebra and (r - nh) % 2 else CARD) for r in range(nr)]
+        self.reqs += [fill(rng(0 if r is None else r, 0 if c is None else c, nr if r is None else 1, nc if c is None else 1), color) for r, c, color in fills]
+        # セルの塗りと寄せは、結合する前に覆う範囲の全部に付ける（結合したあとに、結合したセルの一部にかかる範囲を送らない）
+        span = {(r, c): rng(r, c, d.get("rowspan", 1), d.get("colspan", 1)) for r, c, d in grid}
+        self.reqs += [fill(span[r, c], d["fill"]) for r, c, d in grid if d.get("fill")]
+        self.reqs += [cell_props(span[r, c], {"contentAlignment": VALIGN[d["valign"]]}, "contentAlignment") for r, c, d in grid if d.get("valign")]
+        self.reqs += [{"mergeTableCells": {"objectId": t, "tableRange": span[r, c]}} for r, c, d in grid if d.get("rowspan", 1) > 1 or d.get("colspan", 1) > 1]
+        for r, c, d in grid:
+            head, parts, bul = r < nh, cell_parts(d), d.get("bullets", False)
+            first, mono, s = first_col and c == 0 and not head, c in mono_cols and not head, spec_plain(parts)
+            avail = sum(widths[c:c + d.get("colspan", 1)]) - 2 * INSET - (size * 1.3 / 72 if bul else 0)
+            for ln in re.split(r"[\n\v]", s):
+                if ln and est_lines(ln, avail, size, mono, head or first) > 1:
+                    self.warn(f"表のセルが折り返す見込み「{ln}」（列の幅 {avail + 2 * INSET:.2f} in）")
+            if not s:
+                continue
+            loc, color = {"rowIndex": r, "columnIndex": c}, d.get("color") or (WHITE if head else HEAD if first else TEXT)
+            spacing = 120 if est_lines(s, avail, size, bold=head or first) > 1 else 100
+            self.reqs += [{"insertText": {"objectId": t, "cellLocation": loc, "insertionIndex": 0, "text": s}},
+                          {"updateTextStyle": {"objectId": t, "cellLocation": loc, "textRange": {"type": "ALL"},
+                                               "style": {"fontFamily": FONT, "fontSize": pt(size), "bold": head or first, "foregroundColor": {"opaqueColor": paint(color)}},
+                                               "fields": "fontFamily,fontSize,bold,foregroundColor"}},
+                          {"updateParagraphStyle": {"objectId": t, "cellLocation": loc, "textRange": {"type": "ALL"},
+                                                    "style": {"lineSpacing": spacing, "spaceAbove": pt(0), "spaceBelow": pt(0),
+                                                              "alignment": ALIGN[d.get("align") or (align or ["left"] * nc)[c]]},
+                                                    "fields": "lineSpacing,spaceAbove,spaceBelow,alignment"}}]
+            self.runs(t, parts, color, loc)
+            if spacing > 100:  # 大きな文字の段落は 100（table_h の spec_text_h と同じ見込み）
+                self.big_paras(t, parts, size, loc)
+            if mono:
+                self.reqs += mono_reqs(t, s, loc)
+            if bul:  # d.text の箇条書きと同じ字下げ
+                self.reqs += [{"createParagraphBullets": {"objectId": t, "cellLocation": loc, "textRange": {"type": "ALL"}, "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE"}},
                               {"updateParagraphStyle": {"objectId": t, "cellLocation": loc, "textRange": {"type": "ALL"},
-                                                        "style": {"lineSpacing": 120 if est_lines(s, avail, size, bold=head or first) > 1 else 100, "spaceAbove": pt(0), "spaceBelow": pt(0),
-                                                                  "alignment": ALIGN[(align or ["left"] * nc)[c]]},
-                                                        "fields": "lineSpacing,spaceAbove,spaceBelow,alignment"}}]
-                if mono:
-                    self.reqs += mono_reqs(t, s, loc)
+                                                        "style": {"indentStart": pt(size * 1.3), "indentFirstLine": pt(size / 2)}, "fields": "indentStart,indentFirstLine"}}]
         return y + table_h(widths, rows, size, hs, header, mono_cols, first_col)
 
     def arrow(self, sid, x1, y1, x2, y2, color=SUB, head=True, dash=False, weight=1.25, link=None, bent=False):
@@ -958,6 +1021,7 @@ G_MARK, G_MARK_GAP = 0.2, 0.06  # 節目の印（赤の菱形）の大きさ、�
 # 棒グラフ: 縦の棒の既定の高さ、数字と名前の行の高さ、棒の幅（枠の幅に対する比）と最大、横の棒の行の高さと棒の太さ、
 # 折れ線の段の高さ（点の数字の行と、いちばん下の点と棒の段の間を含む）と、その下の間、点の大きさ（in）
 B_H, B_LABEL, B_FILL, B_MAX, B_ROW, B_BAR, B_LINE, B_LINE_GAP, B_DOT = 2.6, 0.3, 0.6, 1.2, 0.42, 0.28, 0.8, 0.1, 0.1
+TABLE_BORDERS = ("rows", "grid", "none")  # 表の罫線: 横の罫線だけ（既定。visual.md の 5）、縦横と外枠、なし
 SITE = {"top": 0, "left": 1, "bottom": 2, "right": 3}  # 四角の図形の辺 → Slides API の接続点の番号（Deck.arrow の link）
 CONNECT = ("text", "label", "card", "stat", "code", "box")  # 矢印をつなげる部品（SpecPage.place が、四角の枠が箱と同じ大きさのものだけを選ぶ）
 # キーの型。s 文字列、md 記法つきの文字（spec_md）、n 数、i 整数、b 真偽、c 色、els 部品の並び、pt ID か [x, y]、ほかは SPEC_OK
@@ -972,8 +1036,8 @@ SPEC_EL = {  # type → (要るキー, 書けるキー)
                   "icon": "s", "num": "ns", "image": "s", "align": ("left", "center"), "valign": ("top", "middle")}),  # icon・num・image は印（どれか 1 つ）
     "stat": ({"value": "s"}, {"unit": "s", "label": "s", "sub": "s", "size": "p", "color": "c", "fill": "c", "line": "c", "align": ("left", "center")}),  # 数字の強調
     "code": ({"text": "s"}, {"hot": "ints", "size": "p"}),
-    "table": ({"rows": "rows"}, {"widths": "nums", "header": "b", "first_col": "b", "zebra": "b", "align": "aligns", "mono_cols": "ints", "size": "p",
-                                 "row_h": "nh", "fills": "fills"}),
+    "table": ({"rows": "rows"}, {"widths": "nums", "header": "hn", "first_col": "b", "zebra": "b", "align": "aligns", "valign": tuple(VALIGN), "borders": TABLE_BORDERS,
+                                 "mono_cols": "ints", "size": "p", "row_h": "nh", "fills": "fills"}),  # セルは記法つきの文字か TABLE_CELL
     "image": ({"src": "s"}, {"alt": "s"}),
     "icon": ({"name": "s"}, {"size": "p", "color": "c"}),
     "num": ({"n": "ns"}, {"size": tuple(NUM), "fill": "c"}),
@@ -987,6 +1051,7 @@ SPEC_EL = {  # type → (要るキー, 書けるキー)
     "grid": ({"items": "kids", "cols": "pi"}, {"gap": "n"}),
     "frame": ({"items": "kids", "h": "p"}, {}),
 }
+TABLE_CELL = ({"text": "md"}, {"colspan": "pi", "rowspan": "pi", "fill": "c", "color": "c", "align": tuple(ALIGN), "valign": tuple(VALIGN)})  # 表のセル（HTML の td にならった）
 GANTT_ROW = ({"head": "s"}, {"bars": "gbars", "marks": "gmarks", "note": "s"})  # ガントの行: 項目、バーの並び、節目の並び、補足（右の列。どれかの行に書くと列ができる）
 GANTT_STATUS = {"plan": "NAVY", "tbd": "CARD", "done": "PANEL", "hot": "RED_SOFT"}  # バーの状態 → 塗り（決まった予定・未定〔点線の枠〕・終わった・強調〔赤の文字〕）。色は書かせず、資料をまたいで意味をそろえる
 # 強調を RED の地にしないのは、9pt の白の文字が 3.62:1 で 4.5:1 に届かないから（2026-10-19、見本を組んで lint が止めた）。淡い赤の地に RED_TEXT は 4.69:1
@@ -1011,7 +1076,7 @@ SPEC_THEME = ({}, {"description": "s", "font": "s", "mono": "s", "copyright": "s
 # raw に書いた Deck の引数のうち、形のキーで書けるもの（type, 引数 → 形のキー）。lint が知らせ、slides.py upgrade が書き換える。形に足したらここにも足す
 # 同じ名前で同じ意味のもの（数え始めや単位の違う mono_cols・hot・fills・widths と、stat の size・color〔数字の大きさと色〕は入れない。2026-10-16 のレビュー）
 _SAME = {"text": "size color bold align valign mono fill line dash weight radius pad spacing", "label": "size color fill bold align mono pad radius",
-         "card": "head fill line step", "code": "size", "table": "size header first_col zebra align row_h", "image": "alt", "icon": "size color",
+         "card": "head fill line step", "code": "size", "table": "size header first_col zebra align valign borders row_h", "image": "alt", "icon": "size color",
          "num": "size fill", "box": "fill line dash weight radius", "arrow": "color head dash weight", "stat": "fill line align"}
 SPEC_PROMOTED = {(t, k): k for t, ks in _SAME.items() for k in ks.split()} | {("text", "gap"): "para_gap", ("text", "kind"): "shape", ("box", "kind"): "shape"}
 MD = re.compile(r"\\([\\*`\[\]<{}])|\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\{(\d+(?:\.\d+)?):(.+?)\}|`([^`]+)`|\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)|<br>")  # URL の中の 1 段の () も読む
@@ -1047,7 +1112,8 @@ SPEC_OK = {"s": lambda v: isinstance(v, str), "md": lambda v: isinstance(v, str)
            "bline": lambda v: isinstance(v, dict), "bthr": lambda v: isinstance(v, dict),
            "bvals": lambda v: isinstance(v, list) and bool(v) and all(_num(x) and x >= 0 for x in v),
            "bitems": lambda v: isinstance(v, list) and bool(v) and all(isinstance(x, list) and len(x) == 2 and isinstance(x[0], str) and _num(x[1]) and x[1] >= 0 for x in v),
-           "rows": lambda v: isinstance(v, list) and bool(v) and all(_strs(x) and x for x in v),
+           "rows": lambda v: isinstance(v, list) and bool(v) and all(isinstance(x, list) and all(isinstance(c, (str, dict)) for c in x) for x in v) and bool(v[0]),  # 上の rowspan が全部の列を覆う行は []
+           "hn": lambda v: isinstance(v, bool) or _int(v) and v >= 0,
            "nums": lambda v: isinstance(v, list) and all(_num(x) and x > 0 for x in v), "ints": lambda v: isinstance(v, list) and all(_int(x) and x > 0 for x in v),
            "fills": lambda v: isinstance(v, list) and all(isinstance(x, list) and len(x) == 3 and all(i == "all" or _int(i) and i >= 1 for i in x[:2]) and _color(x[2]) for x in v),
            "aligns": lambda v: isinstance(v, list) and bool(v) and all(a in ALIGN for a in v), "ns": lambda v: isinstance(v, str) or _int(v),
@@ -1082,7 +1148,7 @@ def spec_check(o, schema, loc, extra=None):
 SPEC_TYPES = {"s": "文字列", "md": "記法つきの文字列", "n": "0 以上の数", "f": "数（負の数も書ける）", "p": "0 より大きい数", "i": "整数", "pi": "1 以上の整数", "b": "true か false", "c": f"色の名前（{'・'.join(COLOR_NAMES)}。6 桁は書けない。値はテーマのファイルで決める）",
               "w": '0 より大きい数（in）か "fit"（label だけ。中身の文字の幅にする）', "nh": "0 より大きい数（in）か、行ごとのその並び",
               "els": "部品の並び", "kids": "1 つ以上の部品の並び", "pages": "ページかデッキのファイルのパス（.json）の並び", "pt": "部品の id（\"<id>.<辺>\" で出る辺・入る辺。辺は top・bottom・left・right）か [x, y]", "items": '[["見出し", "説明"], …]',
-              "rows": '[["見出しの行", …], ["セル", …], …]', "nums": "正の数の並び",
+              "rows": '[["見出しの行", …], ["セル", {"text": "セル", "colspan": 2}, …], …]（セルは記法つきの文字か {"text": …, …}）', "hn": "true・false か、見出しの行の数（0 以上の整数）", "nums": "正の数の並び",
               "cols": '列の名前の並び（["10 月", "11 月", …]）', "grows": '[{"head": 項目, "bars": [{"from": 列, "to": 列, …}], "marks": [{"at": 位置, "text": 言葉}], "note": 補足}, …]',
               "bitems": '[["名前", 0 以上の数], …]', "bvals": "0 以上の数の並び（items の順）", "bline": '{"values": [数, …], "unit": 単位, "label": 何の数か}',
               "bthr": '{"value": 数, "label": 何の線か}', "gbars": '[{"from": 列, "to": 列, "text": 文字, "status": "plan"・"tbd"・"done"・"hot"}, …]', "gmarks": '[{"at": 位置, "text": 言葉}, …]', "ints": "1 から始まる番号の並び", "aligns": '列ごとの left・center・right の並び（["left", "right", "right"]）',
@@ -1293,21 +1359,62 @@ class SpecPage:
                 sys.exit(f"{loc}.items[{i}]: row・grid の中の矢印は、row の \"arrows\": true で引く")
         return kind
 
+    @staticmethod
+    def table_cols(e):
+        """表の列の数（1 行目のセルの colspan の合計。1 行目の上には rowspan のセルがない）。"""
+        return sum(c.get("colspan", 1) if isinstance(c, dict) else 1 for c in e["rows"][0])
+
+    def table_cells(self, e, w, loc):
+        """表の列の幅（in）と、Deck.table に渡す行（セルは dict）。記法は parts にし、「- 」で始まる段落だけのセルは箇条書きにする。
+        塗り（セルの fill か、そのセルにかかる fills）が濃ければ、文字と ***強調*** の色を ON_FILL にする。見出しの行に淡い塗りを書いたら、文字は本文の色にする。"""
+        n, nh = self.table_cols(e), int(e.get("header", True))
+        ws = [w * r / sum(e["widths"]) for r in e["widths"]] if e.get("widths") else [w / n] * n
+        grid, out = iter(table_grid(e["rows"], n)), []
+        for i, row in enumerate(e["rows"]):
+            out.append([])
+            for j, src in enumerate(row):
+                r, c, d = next(grid)
+                l = f"{loc}（table）.rows[{i}][{j}]"
+                fill = d.get("fill") or next((f for fr, fc, f in reversed(e.get("fills", [])) if fr in ("all", r + 1) and fc in ("all", c + 1)), None)
+                if fill in ON_FILL:
+                    on, emph = ON_FILL[fill]
+                elif fill and r < nh:  # 見出しの行の淡い塗り
+                    on, emph = "TEXT", "RED_TEXT"
+                else:  # 文字の色は Deck.table の既定（見出しの行は白、1 列目は HEAD）
+                    on, emph = None, "RED_ON_NAVY" if r < nh else "RED_TEXT"
+                text, bul = spec_bullets(d["text"], l)
+                cell = {"text": spec_md(text, spec_color(emph), l), "bullets": bul, **{k: d[k] for k in ("colspan", "rowspan", "align", "valign") if k in d}}
+                if d.get("fill"):
+                    cell["fill"] = spec_color(d["fill"])
+                if color := d.get("color") or on:
+                    cell["color"] = spec_color(color)
+                out[-1].append(cell)
+        return ws, out
+
     def table_check(self, e, loc):
         rows = e["rows"]
-        if bad := next((c for r in rows for c in r if re.search(r"\*\*|`|\]\(|<br>", c)), None):
-            sys.exit(f"{loc}（table）: 表のセルには記法を書けない（セルの改行は \\n）: {bad!r}")
-        if len({len(r) for r in rows}) > 1:
-            sys.exit(f"{loc}（table）: 行ごとのセルの数がそろっていない")
-        n = len(rows[0])
-        if len(e.get("widths", [1] * n)) != n or len(e.get("align", [None] * n)) != n:
-            sys.exit(f"{loc}（table）: widths・align の数が列の数（{n}）と違う")
+        for i, r in enumerate(rows):
+            for j, c in enumerate(r):
+                if isinstance(c, dict):
+                    spec_check(c, TABLE_CELL, f"{loc}（table）.rows[{i}][{j}]")
+        n = self.table_cols(e)
+        if len(e.get("widths", [1] * n)) != n:
+            sys.exit(f"{loc}（table）: widths の数（{len(e['widths'])}）が列の数（{n}。1 行目のセルの colspan の合計）と違う")
+        try:
+            grid = table_grid(rows, n)
+        except ValueError as x:
+            sys.exit(f"{loc}（table）.rows: {x}")
+        covered = {(r + i, c + j) for r, c, d in grid for i in range(d.get("rowspan", 1)) for j in range(d.get("colspan", 1)) if i or j}
+        if bad := [f for f in e.get("fills", []) if (f[0] - 1 if f[0] != "all" else None, f[1] - 1 if f[1] != "all" else None) in covered]:
+            sys.exit(f"{loc}（table）.fills: {bad} は結合したセルが覆う位置（塗っても出ない）。結合したセルは、そのセルの fill に書く")
+        if int(e.get("header", True)) > len(rows):
+            sys.exit(f"{loc}（table）.header: 見出しの行の数（{int(e['header'])}）が行の数（{len(rows)}）より多い")
+        if len(e.get("align", [None] * n)) != n:
+            sys.exit(f"{loc}（table）: align の数が列の数（{n}）と違う")
         if isinstance(e.get("row_h"), list) and len(e["row_h"]) != len(rows):
             sys.exit(f"{loc}（table）.row_h: 行ごとに書くなら、行の数（{len(rows)}）だけ並べる")
         if bad := [f for f in e.get("fills", []) if f[0] != "all" and f[0] > len(rows) or f[1] != "all" and f[1] > n]:
             sys.exit(f"{loc}（table）.fills: 表にない行か列 {bad}（{len(rows)} 行 {n} 列。1 から数え、\"all\" はその列か行の全部）")
-        if bad := [f for f in e.get("fills", []) if f[2] in ON_FILL]:  # セルの文字の色は地で替えないので、濃い地では読めない
-            sys.exit(f"{loc}（table）.fills: 濃い色 {bad} はセルの強調に使えない。淡い色（RED_SOFT・PANEL など）にする")
 
     def bars_check(self, e, loc):
         n = len(e["items"])
@@ -1325,12 +1432,12 @@ class SpecPage:
     def gantt_check(self, e, loc):
         n = len(e["cols"])
         if bad := next((c for c in e["cols"] if re.search(r"\*\*|`|\]\(|<br>", c)), None):
-            sys.exit(f"{loc}（gantt）.cols: 列の名前は表の見出しのセルなので記法を書けない: {bad!r}")
+            sys.exit(f"{loc}（gantt）.cols: ガントの列の名前には記法を書けない: {bad!r}")
         for i, r in enumerate(e["rows"]):
             l = f"{loc}（gantt）.rows[{i}]"
             spec_check(r, GANTT_ROW, l)
             if bad := next((r[k] for k in ("head", "note") if re.search(r"\*\*|`|\]\(|<br>", r.get(k, ""))), None):
-                sys.exit(f"{l}: 項目と補足は表のセルなので記法を書けない（改行は \\n）: {bad!r}")
+                sys.exit(f"{l}: ガントの項目と補足には記法を書けない（改行は \\n）: {bad!r}")
             for j, b in enumerate(r.get("bars", [])):
                 spec_check(b, GANTT_BAR, f"{l}.bars[{j}]")
                 if not b["from"] <= b["to"] <= n:
@@ -1581,8 +1688,8 @@ class SpecPage:
         if kind == "code":
             return sum(est_lines(ln, w - 0.4, size, True) for ln in e["text"].split("\n")) * size * 1.2 * 1.1 / 72 + 0.28
         if kind == "table":
-            ws = [w * r / sum(e["widths"]) for r in e["widths"]] if e.get("widths") else [w / len(e["rows"][0])] * len(e["rows"][0])
-            return table_h(ws, e["rows"], size, e.get("row_h", 0.36), e.get("header", True), [c - 1 for c in e.get("mono_cols", [])], e.get("first_col", True))
+            ws, rows = self.table_cells(e, w, loc)
+            return table_h(ws, rows, size, e.get("row_h", 0.36), e.get("header", True), [c - 1 for c in e.get("mono_cols", [])], e.get("first_col", True))
         if kind == "gantt":
             _, _, _, hd, hs, _ = self.gantt_layout(e, w, loc)
             return hd + sum(hs)
@@ -1796,11 +1903,11 @@ class SpecPage:
             self.index.append((loc, e["text"]))
             return self.emit("code", loc, e, x=x, y=y, w=w, h=h, lines=e["text"].split("\n"), hot=[n - 1 for n in e.get("hot", [])], size=e.get("size", 11))
         if kind == "table":
-            rows, n = e["rows"], len(e["rows"][0])
-            ws = [w * r / sum(e["widths"]) for r in e["widths"]] if e.get("widths") else [w / n] * n
-            self.index.append((loc, " ".join(c for r in rows for c in r)))
+            ws, rows = self.table_cells(e, w, loc)
+            self.index.append((loc, " ".join(spec_plain(c["text"]) for r in rows for c in r)))
             return self.emit("table", loc, e, x=x, y=y, widths=ws, rows=rows, size=e.get("size", 11), header=e.get("header", True), first_col=e.get("first_col", True),
-                             zebra=e.get("zebra", True), align=e.get("align"), mono_cols=[c - 1 for c in e.get("mono_cols", [])], row_h=e.get("row_h", 0.36),
+                             zebra=e.get("zebra", True), align=e.get("align"), valign=e.get("valign", "middle"), borders=e.get("borders", "rows"),
+                             mono_cols=[c - 1 for c in e.get("mono_cols", [])], row_h=e.get("row_h", 0.36),
                              fills=[(None if r == "all" else r - 1, None if c == "all" else c - 1, spec_color(col)) for r, c, col in e.get("fills", [])])
         if kind == "image":
             return self.emit("image", loc, e, src=self.src(e, loc), x=x, y=y, w=w, h=h, alt=e.get("alt"))
@@ -2091,7 +2198,11 @@ SPEC_UNIT = {"w": "幅（in）", "h": "高さ（in）", "x": "frame の左上か
              "bars.unit": "数のあとに付ける単位", "stat.unit": "単位（数字の半分の大きさ）", "horizontal": "横の棒（名前が長い・順位）。既定は縦の棒（時の流れ）", "bars.hot": "強調する棒の番号（1 から。赤）",
              "bars.line": "折れ線（縦の棒だけ）。棒と別の目盛りで、棒の上の段に引く（率・累計など単位の違う数）。threshold と一緒に書ける",
              "bars.threshold": "目標・上限などの直線（いつも棒と同じ目盛り。赤の点線）。折れ線の目盛りの線は引けない", "values": "棒ごとの数（items の順）",
-             "code.hot": "赤の太字にする行（1 から）"}
+             "code.hot": "赤の太字にする行（1 から）", "table.header": "見出しの行の数（true は 1、false は 0）", "table.valign": "セルの上下の寄せ（既定は middle）",
+             "borders": "罫線。rows は横の罫線だけ（既定）、grid は縦横と外枠（結合したセルの区切りを見せるとき）、none はなし",
+             "colspan": "右へ結合する列の数（覆う位置にはセルを書かない。HTML と同じ）", "rowspan": "下へ結合する行の数（下の行の、覆う位置にはセルを書かない）",
+             "cell.fill": "そのセルの塗り（濃い色なら文字は白）。行か列の全部は表の fills", "cell.color": "文字の色（書かなければ塗りから決まる）",
+             "cell.align": "そのセルの横の寄せ（書かなければ列の align）", "cell.valign": "そのセルの上下の寄せ（書かなければ表の valign）"}
 
 
 def spec_unit(kind, k):
@@ -2103,7 +2214,7 @@ def spec_brief():
     """書く形の早見表（slides.py schema --brief）。SPEC_EL・SPEC_PAGE・SPEC_DECK と型の説明から作るので、形と食い違わない。* は要るキー。
     pom の llm.txt にならい、ページを書く子が JSON Schema の全文の代わりに読む（prompt_pages.md）。"""
     short = {"s": "文字", "md": "記法", "n": "数", "f": "正か負の数", "p": "正の数", "i": "整数", "pi": "1 以上", "b": "真偽", "c": "色", "els": "部品の並び", "kids": "部品の並び",
-             "w": '正の数か "fit"', "nh": "正の数か行ごとの並び", "ints": "1 からの番号の並び", "nums": "比の並び", "ns": "文字か整数", "pt": "id（id.辺）か [x, y]"}
+             "w": '正の数か "fit"', "nh": "正の数か行ごとの並び", "ints": "1 からの番号の並び", "nums": "比の並び", "ns": "文字か整数", "hn": "真偽か行の数", "rows": "行の並び。セルは記法か {…}", "pt": "id（id.辺）か [x, y]"}
     def keys(schema, kind=""):
         need, opt = schema
         out = []
@@ -2120,7 +2231,7 @@ def spec_brief():
     lines += ["", "## 部品（type）", "どの部品にも: id（矢印の from・to で指す）、w（幅 in）、h（高さ in。row・stack・grid・gantt と icon・num・arrow は書かない）。"
               "x・y は frame の中だけ。raw は形の外の書き方（lint が要確認に出す）"]
     lines += [f"{k}: {keys(v, k)}" for k, v in SPEC_EL.items()]
-    lines += ["  gantt の rows: " + keys(GANTT_ROW), "  gantt の bars: " + keys(GANTT_BAR), "  gantt の marks: " + keys(GANTT_MARK), "  bars の line: " + keys(BARS_LINE), "  bars の threshold: " + keys(BARS_THRESHOLD)]
+    lines += ["  table の rows のセル（記法つきの文字か {…}）: " + keys(TABLE_CELL, "cell"), "  gantt の rows: " + keys(GANTT_ROW), "  gantt の bars: " + keys(GANTT_BAR), "  gantt の marks: " + keys(GANTT_MARK), "  bars の line: " + keys(BARS_LINE), "  bars の threshold: " + keys(BARS_THRESHOLD)]
     return "\n".join(lines)
 
 
@@ -2138,7 +2249,7 @@ def spec_schema():
          "els": {"type": "array", "items": {"$ref": "#/$defs/element"}}, "kids": {"type": "array", "items": {"$ref": "#/$defs/element"}, "minItems": 1}, "pages": {"type": "array", "items": {"type": "string", "pattern": "\\.json$"}, "minItems": 1, "description": "ページかデッキのファイルのパス"},
          "pt": {"anyOf": [{"type": "string", "description": "部品の id。\"<id>.<辺>\"（辺は top・bottom・left・right）で出る辺・入る辺を指す（両端に書く）"}, {"type": "array", "items": num, "minItems": 2, "maxItems": 2}]},
          "items": {"type": "array", "items": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 2, "description": "[見出し, 説明（記法つき）]"}},
-         "rows": {"type": "array", "items": {"type": "array", "items": {"type": "string"}, "minItems": 1}, "minItems": 1, "description": "1 行目が見出しの行。セルに記法は書けない"},
+         "hn": {"anyOf": [{"type": "boolean"}, {"type": "integer", "minimum": 0}]},
          "nums": {"type": "array", "items": {"type": "number", "exclusiveMinimum": 0}, "description": "比"},
          "cols": {"type": "array", "items": {"type": "string"}, "minItems": 1, "description": "列の名前（月・週）。左から 1 列目"},
          "gbars": {"type": "array", "items": {"type": "object", "properties": {"from": {"type": "integer", "minimum": 1}, "to": {"type": "integer", "minimum": 1},
@@ -2166,6 +2277,13 @@ def spec_schema():
          "layouts": {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object", "properties": {"layout": {"type": "string"}, "w": pos, "tone": {"enum": list(TONES)}},
                                                                              "required": ["layout"], "additionalProperties": False}]},
                      "description": "会社のテンプレートから残す表紙・扉のレイアウトの名前（並びの順が variant の番号）。w（文字の幅）と tone（地の明るさ）は template.py が書き込む"}}
+    cell = {"type": "object", "properties": {k: dict(t[v]) if isinstance(v, str) else {"enum": list(v)} for k, v in {**TABLE_CELL[0], **TABLE_CELL[1]}.items()},
+            "required": list(TABLE_CELL[0]), "additionalProperties": False}
+    for k in cell["properties"]:
+        cell["properties"][k] |= {"description": u} if (u := spec_unit("cell", k)) else {}
+    row = {"type": "array", "items": {"anyOf": [t["md"], cell]}}
+    t["rows"] = {"type": "array", "prefixItems": [row | {"minItems": 1}], "items": row, "minItems": 1,  # 1 行目は空にできない（列の数を決める）
+                 "description": "1 行目が見出しの行。セルは記法つきの文字か {\"text\": …}。結合したセルが覆う位置には、セルを書かない（HTML と同じ。上の rowspan が全部の列を覆う行は []）"}
     t["grows"] = {"type": "array", "minItems": 1, "items": {"type": "object", "properties": {"head": {"type": "string", "description": "項目（表のセル。記法なし）"}, "bars": t["gbars"],
                                                                                            "marks": t["gmarks"], "note": {"type": "string", "description": "補足（右の列。記法なし）"}},
                                                              "required": ["head"], "additionalProperties": False}}
@@ -3032,6 +3150,9 @@ def local_json(reqs, deck, p):
             for row in rows[r0:r0 + rng["rowSpan"]]:
                 for cell in row["tableCells"][c0:c0 + rng["columnSpan"]]:
                     merge(cell["tableCellProperties"], v["tableCellProperties"], v["fields"])
+        elif k == "mergeTableCells":  # 結合したセルは、左上のセルが rowSpan・columnSpan を持つ
+            rng = v["tableRange"]
+            els[o][0]["table"]["tableRows"][rng["location"]["rowIndex"]]["tableCells"][rng["location"]["columnIndex"]] |= {"rowSpan": rng["rowSpan"], "columnSpan": rng["columnSpan"]}
     for (o, *cell), t in texts.items():
         e = els[o][0]
         (e["table"]["tableRows"][cell[0]]["tableCells"][cell[1]] if cell else e["shape"])["text"] = emit(t)
@@ -3872,6 +3993,8 @@ def selftest_sample():
                 used["gantt.bars"] |= set(b) | {f"status:{b.get('status', 'plan')}"}
             for m in r.get("marks", []):
                 used["gantt.marks"] |= set(m)
+        for c in (c for r in e["rows"] for c in r if isinstance(c, dict)) if e["type"] == "table" else ():  # 表のセルのキーも
+            used["table.cell"] |= set(c)
         for k in ("line", "threshold") if e["type"] == "bars" else ():  # 棒の折れ線と直線のキーも
             used[f"bars.{k}"] |= set(e.get(k, {}))
         for c in e["items"] if e["type"] in ("row", "stack", "grid", "frame") else []:
@@ -3895,7 +4018,7 @@ def selftest_sample():
     want["theme"] = set(SPEC_THEME[1])
     want |= {"gantt.rows": set(GANTT_ROW[0]) | set(GANTT_ROW[1]), "gantt.bars": set(GANTT_BAR[0]) | set(GANTT_BAR[1]) | {f"status:{k}" for k in GANTT_STATUS},
              "gantt.marks": set(GANTT_MARK[0]),  # バーの状態は、どれも見本で組む
-             "bars.line": set(BARS_LINE[0]) | set(BARS_LINE[1]), "bars.threshold": set(BARS_THRESHOLD[0]) | set(BARS_THRESHOLD[1])}
+             "table.cell": set(TABLE_CELL[0]) | set(TABLE_CELL[1]), "bars.line": set(BARS_LINE[0]) | set(BARS_LINE[1]), "bars.threshold": set(BARS_THRESHOLD[0]) | set(BARS_THRESHOLD[1])}
     miss = {t: sorted(k - used[t]) for t, k in want.items() if k - used[t]}
     assert not miss and geo == set(_GEO) and kinds == set(KINDS), ("見本に足りない型とキー", miss, set(_GEO) - geo, set(KINDS) - kinds)
     real = {k: globals()[k] for k in ("iconify", "asset")}
@@ -4037,6 +4160,34 @@ def selftest_spec():
     assert near(lab["w"], em_width("GA", bold=True) * 11 / 72 + 2 * 11 / 72 + 0.06) and txt["kind"] == "CHEVRON" and txt["bold"] and txt["spacing"] == 110 and txt["gap"] == 4
     assert tab["row_h"] == [0.5, 0.4, 0.4] and tab["fills"] == [(1, None, RED_SOFT), (2, 1, PANEL)] and tab["zebra"] is False and card["step"] == 0.6 and box["kind"] == "ELLIPSE"
     assert [r["updateTableRowProperties"]["rowIndices"] for r in d.reqs if "updateTableRowProperties" in r] == [[0], [1, 2]]  # 行ごとの高さ
+    dt, _ = run({"title": "t", "body": [{"type": "table", "header": 2, "borders": "grid", "valign": "top", "fills": [[3, 2, "NAVY"]], "rows": [
+        [{"text": "a", "rowspan": 2}, {"text": "[b](https://x)", "colspan": 2}], ["c", {"text": "***d***", "fill": "RED"}],
+        ["**e**", "f", {"text": "- g\n- h", "valign": "bottom"}]]}]})
+    by = lambda k: [r[k] for r in dt.reqs if k in r and "cellLocation" in r[k]]
+    at = lambda v: (v["cellLocation"]["rowIndex"], v["cellLocation"]["columnIndex"])
+    assert [m["mergeTableCells"]["tableRange"] for m in dt.reqs if "mergeTableCells" in m] == [
+        {"location": {"rowIndex": 0, "columnIndex": 0}, "rowSpan": 2, "columnSpan": 1}, {"location": {"rowIndex": 0, "columnIndex": 1}, "rowSpan": 1, "columnSpan": 2}]
+    assert {at(v): v["text"] for v in by("insertText")} == {(0, 0): "a", (0, 1): "b", (1, 1): "c", (1, 2): "d", (2, 0): "e", (2, 1): "f", (2, 2): "g\nh"}  # 覆う位置は飛ばす
+    base = {at(v): v["style"] for v in by("updateTextStyle") if v["textRange"]["type"] == "ALL"}
+    assert base[0, 0]["foregroundColor"] == base[1, 1]["foregroundColor"] == {"opaqueColor": paint(WHITE)} and base[0, 0]["bold"]  # 見出しの 2 行
+    assert base[1, 2]["foregroundColor"] == {"opaqueColor": paint(ON_RED)} and base[2, 1]["foregroundColor"] == {"opaqueColor": paint(WHITE)}  # 濃い塗りのセルは白い文字（fills も）
+    runs = {at(v): v["style"] for v in by("updateTextStyle") if v["textRange"]["type"] == "FIXED_RANGE"}
+    assert runs[0, 1]["link"] == {"url": "https://x"} and runs[1, 2]["foregroundColor"] == {"opaqueColor": paint(ON_RED)} and runs[2, 0]["bold"]  # 記法（赤の地の強調は ON_RED）
+    assert [at(v) for v in by("createParagraphBullets")] == [(2, 2)]  # 「- 」の段落だけのセルは箇条書き
+    props = [r["updateTableCellProperties"] for r in dt.reqs if "updateTableCellProperties" in r]
+    assert props[0]["tableCellProperties"] == {"contentAlignment": "TOP"} and {"contentAlignment": "BOTTOM"} in [p["tableCellProperties"] for p in props]
+    assert [r["updateTableBorderProperties"]["borderPosition"] for r in dt.reqs if "updateTableBorderProperties" in r] == ["ALL"]  # grid は縦横すべて
+    assert [p["tableCellProperties"]["tableCellBackgroundFill"]["solidFill"]["color"] for p in props[1:3]] == [paint(NAVY)] * 2  # 見出しの 2 行は濃紺
+    _, et = run({"title": "t", "body": [{"type": "table", "header": False, "rows": [[{"text": "a", "colspan": 2, "rowspan": 2}], []]}]})
+    assert next(e for e in et if e["call"] == "table")["rows"][1] == []  # 上の rowspan が全部の列を覆う行は []（HTML の空の tr）
+    assert near(table_h([1, 1], [["a", "b"], ["c"]]), table_h([1, 1], [["a", "b"], ["c", ""]]))  # pages.py の短い行は、前の d.table と同じく空のセルで埋める
+    make_deck(lambda d: d.table(d.page("t"), 0, 0, [1, 1], [["a", "b"], ["c"]]), "short")
+    db, _ = run({"title": "t", "body": [{"type": "table", "header": False, "first_col": False, "rows": [["{32:A}<br>{32:B}\n小"]]}]})
+    assert [r["updateParagraphStyle"]["style"] for r in db.reqs if "updateParagraphStyle" in r and r["updateParagraphStyle"].get("cellLocation") and
+            r["updateParagraphStyle"]["textRange"]["type"] == "FIXED_RANGE"] == [{"lineSpacing": 100}]  # 大きな文字の段落の行間は見込みと同じ 100（PR #72 のレビュー）
+    tall = {"text": "1\n2\n3\n4", "rowspan": 2}
+    assert near(table_h([1, 1], [[tall, "x"], ["y"]], row_h=0.1, header=False), 0.16 + spec_text_h("1\n2\n3\n4", 0.8, 11, 120))  # 覆う行に足りない分を足す
+    assert near(table_h([1, 1], [[{"text": "x", "rowspan": 2}, "x"], ["y"]], row_h=0.1, header=False), 2 * (0.16 + spec_text_h("x", 0.8, 11, 120)))
     hits = spec_out_hits(d)
     assert [h.split("（")[0] for h in hits] == ["p1: table.raw.zebra", "p1: box.raw.radius"], hits
     assert "形の radius で書ける" in hits[-1] and "形の zebra で書ける" in hits[0]
@@ -4296,7 +4447,15 @@ def selftest_spec():
                       ({"title": "t", "body": [{"type": "box", "h": 1, "id": "a"}, {"type": "box", "h": 1, "id": "a"}]}, "id「a」が 2 つ"),
                       ({"title": "t", "body": [{"type": "arrow", "from": "a", "to": "b"}]}, "id「a」の部品がない"),
                       ({"title": "t", "body": [{"type": "row", "items": [{"type": "arrow", "from": "a", "to": "b"}]}]}, "arrows"),
-                      ({"title": "t", "body": [{"type": "table", "rows": [["**a**"]]}]}, "記法を書けない"),
+                      ({"title": "t", "body": [{"type": "table", "rows": [["a", "b"], ["c"]]}]}, "2 行目のセルが 1 列分しかない"),
+                      ({"title": "t", "body": [{"type": "table", "rows": [[{"text": "a", "rowspan": 2}, "b"], ["c", "d"]]}]}, "列の数（2）を越える"),
+                      ({"title": "t", "body": [{"type": "table", "rows": [["a", {"text": "b", "rowspan": 3}], ["c"]]}]}, "表の下を越える"),
+                      ({"title": "t", "body": [{"type": "table", "rows": [["a", "b"], [{"text": "c", "colspan": 3}]]}]}, "列の数（2）を越える"),
+                      ({"title": "t", "body": [{"type": "table", "rows": [["a"]], "header": 2}]}, "見出しの行の数（2）"),
+                      ({"title": "t", "body": [{"type": "table", "rows": [[{"text": "a", "rowspan": 2}, "b"], ["c"]], "fills": [[2, 1, "PANEL"]]}]}, "結合したセルが覆う位置"),
+                      ({"title": "t", "body": [{"type": "table", "rows": [[], ["a"]]}]}, "rows"),
+                      ({"title": "t", "body": [{"type": "table", "rows": [[{"text": "a", "span": 2}]]}]}, "知らないキー span"),
+                      ({"title": "t", "body": [{"type": "table", "rows": [["[a](#x/y)"]]}]}, "ページへのリンクは"),
                       ({"title": "t", "body": [{"type": "image", "src": "nai.png", "h": 1}]}, "画像がない"),
                       ({"title": "t", "body": [{"type": "image", "src": "https://x/a.png"}]}, "h を書く"),
                       ({"type": "chart"}, "type「chart」はない"),
@@ -4317,8 +4476,7 @@ def selftest_spec():
                       ({"title": "t", "body": [{"type": "table", "rows": [[]]}]}, "rows"),
                       ({"title": "t", "body": [{"type": "grid", "cols": 2, "h": 1, "items": [{"type": "card", "head": "a", "text": "b"}]}]}, "知らないキー h"),
                       ({"title": "t", "body": [{"type": "card", "fill": "NAVY", "items": [["a", "b"]], "step": 0.6}]}, "step は使えない"),
-                      ({"title": "t", "body": [{"type": "table", "rows": [["a"], ["b"]], "fills": [[2, "all", "NAVY"]]}]}, "濃い色"),
-                      ({"title": "t", "body": [{"type": "table", "rows": [["a", "b", "c"]], "widths": [1, 2]}]}, "列の数（3）と違う"),
+                      ({"title": "t", "body": [{"type": "table", "rows": [["a", "b", "c"]], "widths": [1, 2]}]}, "widths の数（2）が列の数（3。"),
                       ({"title": "t", "body": [{"type": "table", "rows": [["a"], ["b"]], "row_h": [0.4]}]}, "行の数（2）だけ"),
                       ({"title": "t", "body": [{"type": "row", "raw": {"gap": 0.5}, "items": [{"type": "box", "h": 1, "fill": "PANEL"}]}]}, "知らないキー raw"),
                       ({"title": "t", "body": [{"type": "text", "text": "- a\n- b\n\n詳しくは c"}]}, "別の text に分ける"),
@@ -4340,7 +4498,7 @@ def selftest_spec():
                                                                                       {"type": "arrow", "from": "a", "to": "b", "route": "bent"}]}]}, "折れ線（bent）は"),
                           ({"type": "slide", "body": [{"type": "gantt", "cols": ["1 月"], "rows": [{"head": "a", "bars": [{"from": 1, "to": 2}]}]}]}, "from・to は 1〜1"),
                           ({"type": "slide", "body": [{"type": "gantt", "cols": ["1 月"], "rows": [{"head": "**a**"}]}]}, "記法を書けない"),
-                          ({"type": "slide", "body": [{"type": "gantt", "cols": ["**1 月**"], "rows": [{"head": "a"}]}]}, "列の名前は"),
+                          ({"type": "slide", "body": [{"type": "gantt", "cols": ["**1 月**"], "rows": [{"head": "a"}]}]}, "列の名前には記法を書けない"),
                           ({"type": "slide", "body": [{"type": "gantt", "cols": ["1 月"], "rows": [{"head": "a", "marks": [{"at": 2.5, "text": "x"}]}]}]}, "at: 1〜2"),
                           ({"type": "slide", "body": [{"type": "gantt", "cols": ["1 月"], "rows": [{"head": "a", "marks": [{"at": 1, "text": "x\ny"}]}]}]}, "節目の言葉は 1 行"),
                           ({"type": "slide", "body": [{"type": "gantt", "cols": ["1 月"], "rows": [{"head": "a", "marks": [{"at": 1, "text": "**本番**"}]}]}]}, "節目の言葉には記法を書けない"),
@@ -4475,7 +4633,7 @@ def selftest_diff():
             s = d.page("見出し", lead)
             d.text(s, X, Y_BODY, W, 1, ["本文𝄞の", ("太字", {"bold": True}), "\n2 段落目"], bullets=True)
             d.label(s, "札", X, 3, 2, 0.4)  # 角丸の箱と文字の枠のグループ
-            d.table(s, X, 4, [2, 2], [["見出し", "列"], ["行", "値"]])
+            d.table(s, X, 4, [2, 2], [[{"text": "見出し", "colspan": 2}], ["行", "値"]])
             d.note(s, "ノート。")
             d.text(d.page("付録"), X, Y_BODY, W, 1, ["出典: ", ("前のページ", {"link": 2})])
         return m
@@ -4490,6 +4648,7 @@ def selftest_diff():
     assert next(x["textRun"]["style"] for x in te if x.get("textRun", {}).get("content") == "太字")["bold"] is True
     table = next(e for e in s2["pageElements"] if "table" in e)
     assert table["size"]["width"]["magnitude"] == 3000000 and table["table"]["tableRows"][1]["tableCells"][1]["text"]["textElements"][1]["textRun"]["content"] == "値\n"
+    assert table["table"]["tableRows"][0]["tableCells"][0]["columnSpan"] == 2  # 結合したセルは左上のセルが持つ
     assert any("elementGroup" in e for e in s2["pageElements"]) and s2["slideProperties"]["notesPage"]["pageElements"][0]["shape"]["text"]["textElements"][1]["textRun"]["content"] == "ノート。\n"
     assert not any(e["objectId"] == s2["objectId"] + "_n" for e in s2["pageElements"])  # ページ番号の枠は Google が作るので、手元にはない
     import lint
