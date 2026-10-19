@@ -694,17 +694,8 @@ class Deck:
         self.runs(e, parts, color)
         if mono:
             self.reqs += mono_reqs(e, full)
-        start, big, i = 0, 0, 0  # 段落ごとに、いちばん大きい文字を見る
-        for s, sz in [(p, size) if isinstance(p, str) else (p[0], p[1].get("size", size)) for p in parts] + [("\n", 0)]:
-            for k, piece in enumerate(s.split("\n")):
-                if k:  # 段落の終わり
-                    if big >= 2 * size and spacing > 100:
-                        self.reqs.append({"updateParagraphStyle": {"objectId": e, "textRange": {"type": "FIXED_RANGE", "startIndex": start, "endIndex": min(i + 1, u16(full))},
-                                                                   "style": {"lineSpacing": 100}, "fields": "lineSpacing"}})
-                    i += 1
-                    start, big = i, 0
-                i += u16(piece)
-                big = max(big, sz) if piece else big
+        if spacing > 100:
+            self.big_paras(e, parts, size)
         if gap and "\n" in full:
             self.reqs.append({"updateParagraphStyle": {"objectId": e, "textRange": {"type": "FIXED_RANGE", "startIndex": 0, "endIndex": u16(full[:full.rindex("\n")]) + 1},
                                                        "style": {"spaceBelow": pt(gap)}, "fields": "spaceBelow"}})
@@ -713,6 +704,21 @@ class Deck:
                           {"updateParagraphStyle": {"objectId": e, "textRange": {"type": "ALL"}, "style": {"indentStart": pt(size * 1.3), "indentFirstLine": pt(size / 2)},
                                                     "fields": "indentStart,indentFirstLine"}}]
         return e
+
+    def big_paras(self, oid, parts, size, cell=None):
+        """基準（size）の 2 倍以上の文字の段落（大きな数字）の行間を 100 にする（spec_text_h の見込みと同じ。d.text の docstring）。"""
+        loc, full = {"cellLocation": cell} if cell else {}, spec_plain(parts)
+        start, big, i = 0, 0, 0  # 段落ごとに、いちばん大きい文字を見る
+        for s, sz in [(p, size) if isinstance(p, str) else (p[0], p[1].get("size", size)) for p in parts] + [("\n", 0)]:
+            for k, piece in enumerate(s.split("\n")):
+                if k:  # 段落の終わり
+                    if big >= 2 * size:
+                        self.reqs.append({"updateParagraphStyle": {"objectId": oid, **loc, "textRange": {"type": "FIXED_RANGE", "startIndex": start, "endIndex": min(i + 1, u16(full))},
+                                                                   "style": {"lineSpacing": 100}, "fields": "lineSpacing"}})
+                    i += 1
+                    start, big = i, 0
+                i += u16(piece)
+                big = max(big, sz) if piece else big
 
     def runs(self, oid, parts, color, cell=None):
         """parts の run の書式（太字・大きさ・色・リンク）を、文字の枠か表のセル（cell は cellLocation）に付ける。ページへのリンクは finish で付ける。"""
@@ -832,15 +838,18 @@ class Deck:
             if not s:
                 continue
             loc, color = {"rowIndex": r, "columnIndex": c}, d.get("color") or (WHITE if head else HEAD if first else TEXT)
+            spacing = 120 if est_lines(s, avail, size, bold=head or first) > 1 else 100
             self.reqs += [{"insertText": {"objectId": t, "cellLocation": loc, "insertionIndex": 0, "text": s}},
                           {"updateTextStyle": {"objectId": t, "cellLocation": loc, "textRange": {"type": "ALL"},
                                                "style": {"fontFamily": FONT, "fontSize": pt(size), "bold": head or first, "foregroundColor": {"opaqueColor": paint(color)}},
                                                "fields": "fontFamily,fontSize,bold,foregroundColor"}},
                           {"updateParagraphStyle": {"objectId": t, "cellLocation": loc, "textRange": {"type": "ALL"},
-                                                    "style": {"lineSpacing": 120 if est_lines(s, avail, size, bold=head or first) > 1 else 100, "spaceAbove": pt(0), "spaceBelow": pt(0),
+                                                    "style": {"lineSpacing": spacing, "spaceAbove": pt(0), "spaceBelow": pt(0),
                                                               "alignment": ALIGN[d.get("align") or (align or ["left"] * nc)[c]]},
                                                     "fields": "lineSpacing,spaceAbove,spaceBelow,alignment"}}]
             self.runs(t, parts, color, loc)
+            if spacing > 100:  # 大きな文字の段落は 100（table_h の spec_text_h と同じ見込み）
+                self.big_paras(t, parts, size, loc)
             if mono:
                 self.reqs += mono_reqs(t, s, loc)
             if bul:  # d.text の箇条書きと同じ字下げ
@@ -4173,6 +4182,9 @@ def selftest_spec():
     assert next(e for e in et if e["call"] == "table")["rows"][1] == []  # 上の rowspan が全部の列を覆う行は []（HTML の空の tr）
     assert near(table_h([1, 1], [["a", "b"], ["c"]]), table_h([1, 1], [["a", "b"], ["c", ""]]))  # pages.py の短い行は、前の d.table と同じく空のセルで埋める
     make_deck(lambda d: d.table(d.page("t"), 0, 0, [1, 1], [["a", "b"], ["c"]]), "short")
+    db, _ = run({"title": "t", "body": [{"type": "table", "header": False, "first_col": False, "rows": [["{32:A}<br>{32:B}\n小"]]}]})
+    assert [r["updateParagraphStyle"]["style"] for r in db.reqs if "updateParagraphStyle" in r and r["updateParagraphStyle"].get("cellLocation") and
+            r["updateParagraphStyle"]["textRange"]["type"] == "FIXED_RANGE"] == [{"lineSpacing": 100}]  # 大きな文字の段落の行間は見込みと同じ 100（PR #72 のレビュー）
     tall = {"text": "1\n2\n3\n4", "rowspan": 2}
     assert near(table_h([1, 1], [[tall, "x"], ["y"]], row_h=0.1, header=False), 0.16 + spec_text_h("1\n2\n3\n4", 0.8, 11, 120))  # 覆う行に足りない分を足す
     assert near(table_h([1, 1], [[{"text": "x", "rowspan": 2}, "x"], ["y"]], row_h=0.1, header=False), 2 * (0.16 + spec_text_h("x", 0.8, 11, 120)))
