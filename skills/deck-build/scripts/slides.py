@@ -1435,8 +1435,8 @@ class SpecPage:
                 self.emit("box", l, x=sx + (slot - bw) / 2, y=base - bh, w=bw, h=bh, fill=bar(i), kind="RECTANGLE", title=BAR_MARK, alt=f"{n} {fmt(v)}")
             vy, inside = base - bh - B_LABEL, False
             if th and vy <= ty <= base - bh:  # 直線が数字を通る
-                if bh < B_LABEL + pad:
-                    self.warns.append(f"{l}: 直線（threshold）が数字「{fmt(v)}」に重なる見込み（棒が低くて数字を中に入れられない）")
+                if bh < B_LABEL + pad or em_width(fmt(v)) * 11 / 72 + 2 * INSET > bw:  # 白い数字は棒の塗りの中に収める（はみ出すと地の上で読めない。中央寄せなので左右は枠の余白だけ）
+                    self.warns.append(f"{l}: 直線（threshold）が数字「{fmt(v)}」に重なる見込み（棒が低いか細くて数字を中に入れられない）")
                 else:
                     vy, inside = base - bh + pad, True
             self.emit("text", f"{l}.value", x=sx, y=vy, w=slot, h=B_LABEL - 0.04, parts=num(i, v, inside), align="CENTER", valign="TOP" if inside else "BOTTOM", **common)
@@ -4353,7 +4353,9 @@ def selftest_spec():
     assert not d.warnings and th["y1"] > max(e["y"] + B_DOT for e in dots) + B_LABEL and all(e["x"] + B_DOT < tl["x"] for e in dots)
     _, els = run({"type": "slide", "body": [{"type": "bars", "items": [["a", 95], ["b", 3]], "threshold": {"value": 100}}]})
     assert next(e for e in els if e["loc"].endswith("items[0].value"))["parts"][0][1]["color"] == WHITE  # 直線が通る数字は棒の中に白で
-    assert any("棒が低くて" in w for w in run({"type": "slide", "body": [{"type": "bars", "items": [["a", 100], ["b", 2]], "threshold": {"value": 3}}]})[0].warnings)
+    assert any("棒が低いか細くて" in w for w in run({"type": "slide", "body": [{"type": "bars", "items": [["a", 100], ["b", 2]], "threshold": {"value": 3}}]})[0].warnings)
+    d, els = run({"type": "slide", "body": [{"type": "bars", "w": 3.2, "items": [["Q1", 99999], ["Q2", 100000], ["Q3", 99999], ["Q4", 99999]], "threshold": {"value": 100000}}]})
+    assert any("棒が低いか細くて" in w for w in d.warnings) and not any(e["loc"].endswith(".value") and e["parts"][0][1]["color"] == WHITE for e in els)  # 数字が棒の幅に入らなければ白にしない
     _, els = run({"type": "slide", "body": [{"type": "bars", "horizontal": True, "items": [["a", 78], ["b", 100]], "threshold": {"value": 80}}]})
     v = next(e for e in els if e["loc"].endswith("items[0].value"))
     assert v["parts"][0][1]["color"] == WHITE and v["x"] + v["w"] < next(e for e in els if e["loc"].endswith("threshold"))["x1"]  # 棒の中に白で
