@@ -18,7 +18,7 @@ usage（資料の build/ で。deck.json か pages.py は今いるフォルダ�
   slides.py resolve [<ファイル>.json] [<URL か ID>]   JSON のページを解いた形（in の位置とすべての値。Deck のメソッドの呼び出し）を出す（../slides.md の slides-034）
   slides.py schema [--brief]   JSON のページの書く形の JSON Schema を出す（--brief は型・キー・色の早見表）
   slides.py stats   JSON のページの形の外の書き方（raw）を、キーごとに使った資料の数で出す（ワークスペースの .factory/spec_raw.jsonl。形に足す候補）
-  slides.py upgrade <ファイル>...   JSON のページの raw のうち、形のキーで書けるものと、大文字の kind を書き換える
+  slides.py upgrade <ファイル>...   JSON のページの raw のうち、形のキーで書けるものを書き換える
   slides.py themes   テーマの名前・説明・テンプレートがあるか・既定か。資料ごとに選ぶ（../../deck-practices/SKILL.md の「作業の始め方」の 5）。
                      [drive] shared_themes と [drive] factory の下の Themes の、[slides.templates] にないテンプレートも候補に出す
   slides.py theme <URL か ID> [<名前>] [--force]   テンプレートかデッキが持つテーマ（マスターの配色・書体・目印）を、ワークスペースの themes/slides/<名前>.json に書く。
@@ -893,7 +893,6 @@ def make_deck(make, name):
 # 形の版は k8s にならい、ファイルの頭の apiVersion と kind で持つ。上げるのは、キーの意味が変わるときだけ（足すときは上げない。../slides.md の slides-035）
 API_VERSION = "slides/v1"
 KINDS = ("deck", "page", "component", "theme")
-OLD_KINDS = tuple(k.capitalize() for k in KINDS)  # 2026-10-19 より前の kind。止めて、slides.py upgrade が小文字に書き換える
 COLOR_NAMES = ("NAVY", "BG", "RED_ON_NAVY", "PANEL", "NAVY_BLOCK", "GA", "RED_TEXT", "PREVIEW", "SUB", "OSS", "RED", "WHITE", "PUBLIC_PREVIEW",
                "TEXT", "RULE", "RED_SOFT", "STAGE_TEXT", "DECOR", "HEAD", "CARD", "SUB_ON_NAVY", "ON_RED")
 ON_FILL = {"NAVY": ("WHITE", "RED_ON_NAVY"), "NAVY_BLOCK": ("WHITE", "RED_ON_NAVY"), "RED": ("ON_RED", "ON_RED"), "OSS": ("WHITE", "WHITE")}  # 濃い塗り → (文字の色, ***強調*** の色)。ほかの地は TEXT・RED_TEXT
@@ -1950,7 +1949,7 @@ def spec_files(src, base=None, where=None, file=False):
             sys.exit(f'{where}: ' + (f'apiVersion がない（頭に "apiVersion": "{API_VERSION}" を書く）' if v is None else
                                      f"apiVersion {v!r} は読めない（この slides.py は {API_VERSION}。新しい形ならプラグインを update する）"))
         if (kind := src.get("kind")) not in KINDS:
-            bad_kind(where, kind)
+            sys.exit(f"{where}: kind {kind!r} はない（{'・'.join(KINDS)}）")
     else:
         kind = "deck" if "pages" in src else "component" if src.get("type") in SPEC_EL else "page"
     src = {k: v for k, v in src.items() if k not in ("apiVersion", "kind")}
@@ -2214,7 +2213,7 @@ def spec_stats(path=None):
 
 
 def spec_upgrade(paths):
-    """JSON のページのファイルの raw のうち、形のキーで書けるもの（spec_promoted）を、そのキーに書き換える。前の版の大文字の kind（OLD_KINDS）も小文字にする。書き換えた数を返す。
+    """JSON のページのファイルの raw のうち、形のキーで書けるもの（spec_promoted）を、そのキーに書き換える。書き換えた数を返す。
     書き換えたファイルは、JSON を整え直して書く（手で付けた改行の位置は残らない。標準ライブラリだけで書き方を保つと、JSON の書き換えの仕組みが要る）。
     形の版（apiVersion）を上げたときの書き換えも、ここに足す（slides-035）。"""
     total = 0
@@ -2232,9 +2231,6 @@ def spec_upgrade(paths):
                 return
             if not isinstance(x, dict):
                 return
-            if "apiVersion" in x and x.get("kind") in OLD_KINDS:  # ファイルの頭と、pages に直に書いたページの頭（部品の raw の kind は別のもの）
-                x["kind"] = x["kind"].lower()
-                n += 1
             raw = x.get("raw")
             for k in list(raw) if isinstance(raw, dict) else []:
                 key = spec_promoted(x.get("type"), k)
@@ -2250,7 +2246,7 @@ def spec_upgrade(paths):
         walk(o)
         if n:
             Path(path).write_text(json.dumps(o, ensure_ascii=False, indent=1) + "\n")
-        print(f"{path}: {n} 個を書き換えた")
+        print(f"{path}: {n} 個を形のキーに書き換えた")
         total += n
     return total
 
@@ -2370,7 +2366,7 @@ def read_theme(path):
     except (OSError, json.JSONDecodeError) as e:
         sys.exit(f"{path}: 読めない（{e}）")
     if not isinstance(o, dict) or o.get("apiVersion") != API_VERSION or o.get("kind") != "theme":
-        sys.exit(f'{path}: ファイルの頭は {{"apiVersion": "{API_VERSION}", "kind": "theme", …}}' + ("（kind は小文字。slides.py upgrade で書き換える）" if isinstance(o, dict) and o.get("kind") == "Theme" else ""))
+        sys.exit(f'{path}: ファイルの頭は {{"apiVersion": "{API_VERSION}", "kind": "theme", …}}')
     o = {k: v for k, v in o.items() if k not in ("apiVersion", "kind")}
     spec_check(o, SPEC_THEME, f"{path}（theme）")
     t = {k: v for k, v in o.items() if k != "colors"} | {k: v.upper() for k, v in o.get("colors", {}).items()}
@@ -3125,7 +3121,7 @@ def load_make(path):
         data = json.loads(Path(path).read_text())
     except (OSError, json.JSONDecodeError) as e:
         sys.exit(f"{path}: 読めない（{e}）")
-    deck = file_kind(path) == "deck"  # 前の版の大文字の kind は、ここで直し方を付けて止める
+    deck = isinstance(data, dict) and data.get("kind") == "deck"
     return types.SimpleNamespace(NAME=data["name"] if deck and "name" in data else "dry", THEME=data.get("theme") if deck else None, make=lambda d: d.spec(path))
 
 
@@ -3134,21 +3130,13 @@ def declared_theme(path):
     return load_make(path).THEME if path.endswith(".json") else None
 
 
-def bad_kind(where, kind):
-    """kind が KINDS にないので止める。前の版の大文字の kind（OLD_KINDS）なら、直し方を添える。"""
-    sys.exit(f"{where}: kind {kind!r} はない（{'・'.join(KINDS)}" + ("。小文字で書く。slides.py upgrade で書き換える）" if kind in OLD_KINDS else "）"))
-
-
 def file_kind(path):
-    """JSON のファイル path の kind。JSON でない・読めない・頭が dict でなければ None（読めないことは、あとで読むところが場所を付けて止める）。
-    前の版の大文字の kind は、ここで直し方を付けて止める（build・plan・lint がファイルを振り分ける前に）。"""
+    """JSON のファイル path の kind。JSON でない・読めない・頭が dict でなければ None（読めないことは、あとで読むところが場所を付けて止める）。"""
     try:
         o = json.loads(Path(path).read_text()) if path.endswith(".json") else None
     except (OSError, json.JSONDecodeError):
         return None
-    if (kind := o.get("kind") if isinstance(o, dict) else None) in OLD_KINDS:
-        bad_kind(path, kind)
-    return kind
+    return o.get("kind") if isinstance(o, dict) else None
 
 
 def lint_scope(path):
@@ -3583,7 +3571,7 @@ def selftest():
             except SystemExit as e:
                 assert want in str(e), (bad, str(e))
         for path, text, want in ((f, json.dumps({"apiVersion": API_VERSION, "kind": "page", "title": "x"}), '"kind": "theme"'), (f, "[]", '"kind": "theme"'),
-                                 (f, json.dumps({"apiVersion": API_VERSION, "kind": "Theme"}), "小文字"), (Path(d, "a b.json"), "{}", "英数字")):
+                                 (Path(d, "a b.json"), "{}", "英数字")):
             path.write_text(text)
             try:
                 read_theme(path)
@@ -3937,8 +3925,7 @@ def selftest_spec():
         (Path(t) / "cover.json").write_text(json.dumps({**head, "kind": "page", "type": "cover", "title": "表紙", "kicker": "k", "note": "[画像のページ](#p)"}))
         (Path(t) / "deck.json").write_text(json.dumps({**head, "kind": "deck", "name": "資料", "theme": "visual", "pages": ["pages_a.json", "cover.json"]}))
         for bad, want in [({"kind": "page", "title": "t"}, "apiVersion がない"), ({"apiVersion": "slides/v2", "kind": "page", "title": "t"}, "apiVersion 'slides/v2' は読めない"),
-                          ({**head, "kind": "Slide", "title": "t"}, "kind 'Slide' はない（deck"),
-                          ({**head, "kind": "Page", "title": "t"}, "小文字で書く"), ([{"title": "t"}], "ファイルの頭は")]:
+                          ({**head, "kind": "Slide", "title": "t"}, "kind 'Slide' はない"), ([{"title": "t"}], "ファイルの頭は")]:
             (Path(t) / "bad.json").write_text(json.dumps(bad))
             try:
                 make_deck(lambda x: x.spec(Path(t) / "bad.json"), "x")
@@ -4029,23 +4016,13 @@ def selftest_spec():
         finally:
             globals()["spec_log_path"] = real_log
         f = Path(t) / "p.json"
-        f.write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Page", "title": "t", "body": [  # 大文字の kind も小文字に直す
+        f.write_text(json.dumps({"apiVersion": API_VERSION, "kind": "page", "title": "t", "body": [
             {"type": "box", "h": 1, "raw": {"kind": "CAN", "radius": 0.2, "dash": True}}, {"type": "stack", "items": [{"type": "table", "rows": [["a"]], "raw": {"row_h": 0.5}}]},
             {"type": "text", "text": "a", "raw": {"align": "CENTER", "fill": NAVY, "kind": "STAR"}},
             {"type": "table", "rows": [["a"]], "raw": {"mono_cols": [0], "zebra": False}}]}))
         with contextlib.redirect_stdout(io.StringIO()):
-            assert spec_upgrade([f]) == 8
+            assert spec_upgrade([f]) == 7
         up = json.loads(f.read_text())
-        assert up["kind"] == "page"
-        f.write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Deck", "name": "d", "pages": [{"apiVersion": API_VERSION, "kind": "Page", "title": "t"}]}))
-        with contextlib.redirect_stdout(io.StringIO()):
-            assert spec_upgrade([f]) == 2 and json.loads(f.read_text())["pages"][0]["kind"] == "page"  # pages に直に書いたページの頭も
-        f.write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Deck", "name": "d", "theme": "company", "pages": []}))
-        try:
-            declared_theme(str(f))
-            raise AssertionError("大文字の kind のデッキの theme を読まずに通した")
-        except SystemExit as e:
-            assert "upgrade" in str(e), str(e)  # new が「テーマを選んでから」と取り違えずに、直し方を出す
         assert up["body"][0] == {"type": "box", "h": 1, "shape": "can", "radius": 0.2, "dash": True} and up["body"][1]["items"][0]["row_h"] == 0.5
         assert up["body"][2] == {"type": "text", "text": "a", "raw": {"kind": "STAR"}, "align": "center", "fill": "NAVY"}  # 値を形の書き方に直す。形にない形は raw に残す
         assert up["body"][3] == {"type": "table", "rows": [["a"]], "raw": {"mono_cols": [0]}, "zebra": False}  # 数え始めの違う mono_cols は移さない
@@ -4125,12 +4102,6 @@ def selftest_spec():
             assert [lint_scope(f) for f in ("deck.json", "pages.py", "c.json", "p.json", "pages_a.py", "l.json")] == ["deck", "deck", "component", "page", "page", "page"]
             Path("bad.json").write_text("{壊れた")
             assert lint_scope("bad.json") == "page" and file_kind("bad.json") is None and file_kind("pages.py") is None  # 読めない JSON は、読むところが場所を付けて止める
-            Path("old.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Component", "type": "label", "text": "札"}))
-            try:
-                lint_scope("old.json")
-                raise AssertionError("大文字の kind を振り分けた")
-            except SystemExit as e:
-                assert "upgrade" in str(e), str(e)  # 前の版の kind は、ページとして見ずに直し方を出して止める
         finally:
             os.chdir(here)
     d, _ = run({"title": "t", "body": [{"type": "frame", "h": 2, "items": [  # 囲みの中に見出しとカードを入れるのはよい。横 1 列の流れは row を勧める

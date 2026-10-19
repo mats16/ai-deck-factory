@@ -26,7 +26,7 @@ python3 $K/slides.py dry [pages_<担当>.py | <ページ>.json] [<URL>]  # 組�
 python3 $K/slides.py resolve <ページ>.json [<URL>]   # JSON のページの解いた形（in の位置とすべての値）を出す（slides-034）
 python3 $K/slides.py schema [--brief]   # JSON のページの書く形の JSON Schema（--brief は型とキーの早見表。ページを書くときはこちらを読む）
 python3 $K/slides.py stats    # JSON のページの形の外の書き方（raw）を、キーごとに使った資料の数で出す（slides-035）
-python3 $K/slides.py upgrade <ファイル>…   # raw のうち形のキーで書けるものと、大文字の kind（前の版の Deck・Page・Component・Theme）を書き換える（slides-035）
+python3 $K/slides.py upgrade <ファイル>…   # raw のうち形のキーで書けるものを書き換える（slides-035）
 python3 $K/slides.py themes   # テーマの名前・説明・テンプレートがあるか・既定か（下の 3）
 python3 $K/slides.py theme <URL> [<名前>] [--force]   # テンプレートかデッキが持つテーマを themes/slides/<名前>.json に書く（下の 3）
 python3 $K/gslides.py check <URL> [--talk]          # 組んだら。lint・テキスト・変えたページの画像（/tmp/slides_<ID の頭 8 字>/）・画像で測る箱の下の余白・changed.json（e2e）
@@ -82,7 +82,7 @@ python3 $K/slides.py merge fix_a.py fix_b.py          # pages.py の資料で、
   ```
 
   - **見本:** 一通りの書き方（すべての型とキー）を入れたデッキが [samples/json/](samples/json/)（`deck.json` と 14 ページ、部品 1 つの `component.json`）にある。書き方に迷ったら、同じ型の見本のページを開く。selftest が、見本が形のすべての型とキーを使っているかと、警告なしに組めるかを確かめる（形にキーを足したら、見本にも足す）。
-  - **ファイルの頭:** どのファイルも頭に `"apiVersion": "slides/v1"` と `"kind"` を書く（k8s にならった。形の版は slides-035）。`kind` は小文字で、`deck`（`name` と `pages`）、`page`（1 ページ）、`component`（部品 1 つ。型のないページに置いて確かめる）。
+  - **ファイルの頭:** どのファイルも頭に `"apiVersion": "slides/v1"` と `"kind"` を書く（k8s にならった。形の版は slides-035）。`kind` は `deck`（`name` と `pages`）、`page`（1 ページ）、`component`（部品 1 つ。型のないページに置いて確かめる）。
   - **デッキのファイル:** `build/deck.json`（`kind: deck`）に資料名（`name`。社内向けは `｜Internal Only`、秘密扱いは `｜Confidential` を末尾に書く。資料名はフッターに出ず、秘密区分だけが著作権表示の末尾に残る）とページの順（`pages`）を書き、ページは 1 ページ 1 ファイルの `build/p<構成案の番号>.json`（`kind: page`）に書く（直しの子がページごとにファイルを直せるように。slides-031）。`pages` には、ページのファイルのパスと、ほかのデッキのファイル（子の `pages_<担当>.json`）のパスだけを並べる（ページは 1 ページ 1 ファイル）。デッキに `theme`（`slides.py themes` の名前）を書くと、`new` が `--theme` を省いたときに使い、`lint`・`dry` がそのテーマのファイルで見て、`build` はデッキのテーマと違えば止める（子の `pages_<担当>.json` には書かない）。`build/` の `deck.json` を `new`・`build`・`lint`・`dry` が読む（pages.py と両方あると止める）。pages.py から呼ぶときは、`make` の中で `d.spec("p05.json")`（ファイルの並びも dict も渡せる。Python から渡す dict は頭を省ける）。
   - **ページ:** `type` は `page`（省いたとき。`title`・`lead`・`kicker`・`body`・`band`・`source`・`note`）、`cover`（`title`・`kicker`・`sub`・`variant`・`note`）、`divider`（`num`・`title`・`sub`・`variant`・`note`）、`slide`（型のないページ。`bg`・`foot`・`body`・`source`・`note`）。`band` は結論バンドで、`"文"` か `{"text": …, "sub": …}`。`source` は出典の行（頭の「出典: 」は付く）。
   - **並べ方:** `body` は上から順に 0.3 in ずつ空けて並べる（本文の左端と幅、リードの有無で決まる上端から）。`stack` は縦に 0.24 in ずつ、`row` は横に並べて高さを中身のいちばん高いものにそろえる（カード・箱・札・コード・塗りのある文字が伸びる）。`row` の幅は、`num`・`icon`、`w` を書いた部品と `"w": "fit"` の札はその幅、残りを等分する。`"widths": [3, 2]` なら比で分ける。`"arrows": true` で、隣どうしの間に、上下の中央に横の矢印を引く（間は 0.6 in）。`grid` は `cols` の列で折り返す。`gap` で間を変える。
