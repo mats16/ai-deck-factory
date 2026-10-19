@@ -2100,11 +2100,18 @@ def carry(paths):
         raise
 
 
-STAMP = "slides_py_revision"  # 組んだときの版（presentations の revisionId）を、Drive のファイルの appProperties に残す
+STAMP = "slides_py_revision"  # 組んだときの版（revision）を、Drive のファイルの appProperties に残す
 
 
 def revision(pid):
-    return request("GET", f"{SLIDES}/{pid}?fields=revisionId")["revisionId"]
+    """Drive の版の一覧の最後の ID。中身を直すと進み、コメント・返信・解決と appProperties の書き込みでは進まない。presentations の revisionId は
+    コメントを付けても返信しても解決しても進み、comments.py reply --resolve のあとの build が画面で直されたと取り違えるので使わない（2026-10-19 に確かめた）。"""
+    last, page = None, None
+    while True:  # 古い順に並ぶ
+        r = request("GET", f"{DRIVE}/files/{pid}/revisions?pageSize=1000&fields=nextPageToken,revisions(id)" + (f"&pageToken={urllib.parse.quote(page)}" if page else ""))
+        last = (r.get("revisions") or [{"id": last}])[-1]["id"]
+        if not (page := r.get("nextPageToken")):
+            return last
 
 
 def need_brand():
@@ -4197,6 +4204,9 @@ def selftest_diff():
                 live.remove(v["slideObjectIds"][0])
                 live.insert(v["insertionIndex"], v["slideObjectIds"][0])
 
+    revs = {"": {"revisions": [{"id": "1"}, {"id": "4"}], "nextPageToken": "t+1"}, "t%2B1": {"revisions": [{"id": "8"}], "nextPageToken": "t2"}, "t2": {}}
+    globals()["request"] = lambda m, u, *a, **k: revs[u.partition("pageToken=")[2]]
+    assert revision("x") == "8"  # 版の一覧は古い順。最後のページの最後の ID（空のページが続いても前の ID）
     globals().update(request=lambda m, u, *a, **k: {**p, "slides": [{"objectId": o, "slideProperties": {"notesPage": {"notesProperties": {"speakerNotesObjectId": o + "_sp"}}}} for o in live]},
                      batch=fake_batch, revision=lambda pid: "rev")
     gapi.guard = gapi.stamp = lambda *a: None
