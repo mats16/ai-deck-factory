@@ -1,6 +1,6 @@
 ---
 name: doc-build
-description: 日本語のドキュメント（提案書・調査レポート・説明資料・PoC の計画書）を、markdown（build/doc.md）で書き、Docs API で Google Docs に組み、確かめて直すループを回す。docs.py（doc.md の書き方・テンプレートから書き始める init・同じ URL への組み直し・画面での直しの検知）と docs.py check（lint・ページの画像とレイアウト・doc.md と組んだ文書の照合・テンプレートとの照合・元のテンプレートとの骨組みの比較）、Docs API の落とし穴。Word で渡すときは Google Docs から書き出す。ドキュメントを書き始める前と、渡す前に必ず使う。
+description: 日本語のドキュメント（提案書・調査レポート・説明資料・PoC の計画書）を、markdown（build/doc.md）で書き、Docs API で Google Docs に組み、確かめて直すループを回す。docs.py（doc.md の書き方・mermaid の図・テーマのファイル・テンプレートから書き始める init・同じ URL への組み直し・画面での直しの検知）と docs.py check（lint・ページの画像とレイアウト・doc.md と組んだ文書の照合・テンプレートとの照合・元のテンプレートとの骨組みの比較）、Docs API の落とし穴。Word で渡すときは Google Docs から書き出す。ドキュメントを書き始める前と、渡す前に必ず使う。
 ---
 
 # 日本語のドキュメントを Google Docs に組んで仕上げる
@@ -35,19 +35,19 @@ python3 $K/docs.py export <URL> /tmp/<資料名>.docx                 # 相手�
 
 ### 1.2 doc.md の形
 
-頭（`---` で挟む）に資料の情報を、本文に markdown を書く。書式は書かない。書体・大きさ・色・空きは、docs.py の名前付きスタイル（`STYLES`）とテーマが決め、組むたびに入れ直す（`STYLES` を変えれば、組み直した資料すべてに効く）。
+頭（`---` で挟む）に資料の情報を、本文に markdown を書く。書式は書かない。書体・大きさ・色・空きは、docs.py の名前付きスタイル（`STYLES`）とテーマが決め、組むたびに入れ直す（`STYLES` を変えれば、組み直した資料すべてに効く）。文字の記法はスライドと同じ（`../deck-build/slides.md` の 2 の「文字の記法」。大きさの `{32:…}` はスライドだけ）。
 
 ```markdown
 ---
 name: Acme様_Lakebase導入の検討｜Internal Only   # 末尾の秘密区分（Internal Only・Confidential）だけがフッターに出る
-theme: acme                                      # factory.toml の [docs.themes.acme]。省くと既定（A4・10.5pt・濃紺の見出し）
+theme: acme                                      # ワークスペースの themes/docs/acme.json。省くと既定（A4・10.5pt・濃紺の見出し）
 template: proposal                               # テンプレートから書いたとき（check が照合する）
 title: Lakebase の導入の検討について              # 表紙を作らない資料の題と副題（subtitle:）
 ---
 
 # 1. 要旨
 
-結論は「**分析と同じ基盤で管理したい表から移す**」です。
+結論は「***分析と同じ基盤で管理したい表から移す***」です。
 費用は[公式の価格表](https://www.databricks.com/product/pricing/lakebase)で見積もりました。
 
 表: いまと移したあとの比較 {widths: 40 65 65}
@@ -58,6 +58,12 @@ title: Lakebase の導入の検討について              # 表紙を作らな
 出典: [Lakebase の docs](https://docs.databricks.com/aws/ja/oltp/)
 
 ![BigQuery](gcp/bigquery.png){width=120}
+
+図: 写しの流れ
+```mermaid
+flowchart LR
+  A[(基幹の DB)] -->|数秒| B[Lakebase] --> C[分析]
+```
 ```
 
 | 書き方 | 組まれるもの |
@@ -66,11 +72,12 @@ title: Lakebase の導入の検討について              # 表紙を作らな
 | 頭の `cover:`（`  - 行` の並び）と `cover_left` | 表紙のページ。題の行を中央に大きく置き、下に左の語（社名など）と自社のロゴ（`factory.toml` の `[brand] logo`。なければ置かない）を並べて改ページする。テンプレートに表紙があるときだけ |
 | 頭の `title`・`subtitle` | 1 ページ目の頭の題と副題（日付・宛先など）。表紙のページは作らない（visual_doc.md の 2） |
 | `#`・`##`・`###` | 見出し（H1〜H3）。番号は文字で書く（「1. 要旨」）。H1 から順に、段を飛ばさない |
-| 段落 | 空行で区切る。行は「。」の後で分けてよい（組むときにつなぐ。英数字どうしの間だけ空白を入れる）。`**太字**`・`[文字](URL)`・`` `コード` ``・`<br>`（段落の中の改行） |
+| 段落 | 空行で区切る。行は「。」の後で分けてよい（組むときにつなぐ。英数字どうしの間だけ空白を入れる）。`**太字**`・`***赤の太字***`（結論の語句だけ。visual_doc.md の 3）・`[文字](URL)`・`` `コード` ``・`<br>`（段落の中の改行）。太字・赤の中にリンクとコードを入れられる（`***[文字](URL)***`）。記号そのものは `\*` のように `\` を付ける |
 | `出典: …` で始まる段落 | 出典の行（表と図の下。9pt・補助の色）。リンクを付ける（content.md の 6） |
 | `- `・`1. ` | 箇条書き（番号付き）。2 字以上下げた項目は 2 段目。前置きの段落は、続く箇条書き・表と同じページに置く |
 | `表: 題 {widths: 30 80 40}` と、すぐ下の `\|` の表 | 表。1 行目が見出しの行（ページをまたぐと次のページの頭にも出る）。題は表の上に「表 N　…」。`widths` は列の幅の比で、表は本文の左端から右端まで広がる。セルの中の改行は `<br>`、縦線は `\\|` |
 | `![題](画像){width=150}` | 図。画像は `assets/` の中のパス（`"gcp/bigquery.png"`）、build/ からのパス、URL。幅は mm（本文の幅 150 mm で書く。テーマで本文が広がれば、その比で広げる）。題は図の下に「図 N　…」 |
+| `図: 題 {width: 120}` と、すぐ下の ```` ```mermaid ```` | mermaid の図（[書き方](https://mermaid.js.org/intro/)）。docs.py が手元の mermaid-cli で PNG に描いて図として置く（下の doc-build-009）。`図:` の行は省ける（題なし）。次の行が ```` ```mermaid ```` でない `図:` の行は、本文の段落のまま。幅は `![…]` と同じ mm で、省くと図の文字が本文と同じ大きさになる幅（本文の幅を超えれば本文の幅）。ふつうは省く |
 | `> …` | 引用（顧客の声、テンプレートの書き手への注記）。左に線を引き、補助の色にする |
 | ```` ``` ```` | コードとコマンド。英数字は等幅の書体（既定は Cascadia Mono）、和文は本文の書体（既定は Noto Sans JP） |
 | `\newpage` | 改ページ（付録の前など） |
@@ -78,21 +85,26 @@ title: Lakebase の導入の検討について              # 表紙を作らな
 
 - 図と表の番号は、docs.py が出てくる順に振る。本文から「表 1 のとおり」と指すときは、組んだあとのテキストで番号を確かめる。
 - 組むときの警告（表の列の幅の数が列に合わない、図が本文の幅を超える、`表:` の次が表でない）は、1 件ずつ見る。
-- **テーマ:** 既定は A4・本文 10.5pt・濃紺の見出し（visual_doc.md）。会社の文書のテンプレートに合わせるときは、ワークスペースの `factory.toml` にテーマを書き、doc.md の頭に `theme: <名前>` と書く。書いていない値は既定のまま。`theme:` を書かない doc.md は `[docs] default_theme`（なければ既定の `standard`）。ただし `[docs.themes]` があるのに `theme:` がないと、`docs.py new` は一覧を出して止まる（選ばせるため。既定のままなら `theme: standard` と書く）。どれを使うかは資料ごとに選ぶ（`docs.py themes` が名前と説明を出す。`../deck-practices/SKILL.md` の「作業の始め方」の 5）。A4 でない用紙のテーマ（Letter など）は、lint の「用紙が A4 でない」「1 行の字数が多い」を出さない（A4 のテーマは、ほかの A4 の文書と同じく「1 行の字数が多い」を出す）。
-  ```toml
-  [docs.themes.acme]
-  description = "米国の本社に出す文書。英語版のテンプレートに合わせた Letter の版面"  # どの資料・聞き手に使うか（docs.py themes が出す）
-  page = [215.9, 279.4]         # 用紙の幅・高さ（mm）。これは Letter
-  margins = [12.7, 12.7]        # 上下・左右の余白（mm）
-  body = 10                     # 本文（pt）
-  headings = [12, 11, 10.5]     # 見出し 1〜3（pt）
-  heading = "4A86E8"            # 見出しの色（6 桁）
-  table_head = ["F3F3F3", "303F47"]  # 表の見出しの行の地と文字の色
-  font = "Noto Sans JP"         # 本文の書体。書けるのは slides.py の JP_FONTS（和文を描けると確かめた書体）と DM Sans（和文は Google が選ぶゴシック。Docs では確かめていない）
-  mono = "Cascadia Mono"        # コードの等幅。リガチャのある書体（LIGATURE_MONO）は止める
+- [doc-build-010] **テーマ:** 既定は A4・本文 10.5pt・濃紺の見出し（visual_doc.md）。会社の文書のテンプレートに合わせるときは、ワークスペースの `themes/docs/<名前>.json`（テーマのファイル。ファイルの名前がテーマの名前で、英数字と - _）に書き、doc.md の頭に `theme: <名前>` と書く。形はスライドのテーマのファイル（`../deck-build/slides.md` の slides-036）にそろえ、頭の `apiVersion`（`docs/v1`）・`kind`、`description`・`font`・`mono`・`colors` は同じキー（`colors` の役割の名前も、同じ意味のものはスライドと同じ）。`page`・`margins`・`styles` はドキュメントだけのキー。書いていない値は既定のまま。知らないキー・役割と、6 桁でない色・正でない大きさなどの書けない値は、組む前に場所を付けて止まる（factory-doctor も同じ関数で見る）。色のコントラストは見ない（会社の文書のテンプレートの色に合わせるため）ので、色を書いたら画像で読めるかを見る。`theme:` を書かない doc.md は `[docs] default_theme`（なければ既定の `standard`）。ただしテーマのファイルがあるのに `theme:` がないと、`docs.py new` は一覧を出して止まる（選ばせるため。既定のままなら `theme: standard` と書く）。どれを使うかは資料ごとに選ぶ（`docs.py themes` が名前と説明を出す。`../deck-practices/SKILL.md` の「作業の始め方」の 5）。A4 でない用紙のテーマ（Letter など）は、lint の「用紙が A4 でない」「1 行の字数が多い」を出さない（A4 のテーマは、ほかの A4 の文書と同じく「1 行の字数が多い」を出す）。`factory.toml` の `[docs.themes]`（2026-10-19 までの書き方）は読まない（factory-doctor が要修正に出す）。
+  ```json
+  {"apiVersion": "docs/v1", "kind": "theme",
+   "description": "米国の本社に出す文書。英語版のテンプレートに合わせた Letter の版面",
+   "font": "Noto Sans JP", "mono": "Cascadia Mono",
+   "colors": {"HEAD": "4A86E8", "TABLE_HEAD": "F3F3F3", "TABLE_HEAD_TEXT": "303F47"},
+   "page": [215.9, 279.4], "margins": [12.7, 12.7],
+   "styles": {"BODY": {"size": 10}, "H1": {"size": 12, "above": 16, "below": 6},
+              "H2": {"size": 11}, "H3": {"size": 10.5, "color": "303F47", "spacing": 90}}}
   ```
+  | キー | 中身 |
+  |---|---|
+  | `description` | どの資料・聞き手に使うか、使わない場面（`docs.py themes` が出す。スライドと同じ） |
+  | `font`・`mono` | 本文とコードの等幅の書体。書けるのは `slides.py` の `JP_FONTS`（和文を描けると確かめた書体）と DM Sans（和文は Google が選ぶゴシック。Docs では確かめていない）。等幅はリガチャのある書体（`LIGATURE_MONO`）を止める |
+  | `colors` | 役割 → `#` を付けない 6 桁。`HEAD`（題と見出し。既定 `1B3139`）・`TEXT`（本文。`303F47`）・`SUB`（副題・図表の題・出典・引用・フッター。`5A6F77`）・`RULE`（罫線と引用の線。`DCE0E2`）・`PANEL`（コードの地。`EEEDE9`）・`RED_TEXT`（`***赤の太字***`。`CC2B17`）・`TABLE_HEAD`・`TABLE_HEAD_TEXT`（表の見出しの行の地と文字。`1B3139`・`FFFFFF`）。mermaid の図の色もここから取る |
+  | `page`・`margins` | 用紙の幅・高さ、上下・左右の余白（mm） |
+  | `styles` | 名前付きスタイルごと（`TITLE`・`SUBTITLE`・`H1`・`H2`・`H3`・`BODY`）の `size`（pt）・`color`（6 桁。書かなければ題と見出しは `HEAD`、副題は `SUB`、本文は `TEXT`）・`above`・`below`（上・下の空き。pt）・`spacing`（行間の %。行送りは「字の 1.88 倍 × %」。下の 7）。既定は `docs.py` の `STYLES` |
   `font`・`mono` を書かなければ Noto Sans JP と Cascadia Mono。行送りと字の幅の見込みは、この 2 つで測った値のまま（違う書体では 1 行の字数や改ページがずれる）。Google Fonts にない名前は、黙って別の書体で描かれる。書いたら、そのテーマの文書を組み、`docs.py check` の「PDF の書体」と画像で見る。lint の書体の検査は、`docs.py check` が、`docs.py build` が文書に残した書体（組んだときのテーマの書体）と比べる。残していない文書（前の版で組んだもの）と、`lint.py` に文書の JSON をじかに渡したときは、既定の書体と比べる。
 - 画像の選び方と出どころ（`assets/README.md`、Iconify、各社のアイコン）は、スライドと同じ（`../deck-build/slides.md` の 6）。図を Google Slides で描いて貼るときは、`gslides.py thumb` で画像にしてから `![…](…)` で置く。
+- [doc-build-009] **mermaid:** 流れ・順序・状態など、箱と矢印で足りる図は ```` ```mermaid ```` で doc.md に書く（中身が doc.md に残り、直すと組み直しで図も変わる。GitHub でもそのまま見える）。アイコンやロゴの要る構成図は、Google Slides で描いて貼る。docs.py は手元で mermaid-cli（`npx` で版を固定した `@mermaid-js/mermaid-cli`。`docs.py` の `MERMAID_CLI`。初めては数分かかる。Node.js が要る）で描く。版の分からない手元の `mmdc` は使わない（版で描き方が変わり、PNG の指紋と合わなくなる）。図の中身を外のサービス（mermaid.ink など）に渡さない（`../deck-build/assets/README.md`）。色はテーマの `colors`（箱の地は `PANEL`、枠は `HEAD`、線は `SUB`、文字は `TEXT`）、書体はテーマの本文の書体、文字は本文と同じ大きさで描く。書体は手元に入っているもので描かれる（入っていなければ別のゴシックになるので、画像で見る）。描いた PNG は `build/mermaid/<指紋>.png` に置き、中身・色・書体・mermaid-cli の版が同じなら描き直さない（組むたびに、使っていない PNG を消す）。手元の書体と、mermaid-cli が取ってくる Chrome は指紋に入らないので、入れ替えて描き直したいときは `build/mermaid/` を消して組み直す。本文の幅に縮めて図の文字が 9pt 未満になるときは、組むときの警告に出る（横に長い図は `flowchart TB` にするか、図を分ける）。書き方の誤りは、mermaid-cli の出力を付けて止まる。
 
 ### 1.3 テンプレート
 
@@ -131,7 +143,7 @@ title: Lakebase の導入の検討について              # 表紙を作らな
   - 表と図: 表の題・図の題の抜け、本文の幅を超える図、数字に出典のリンクがない節（H1・H2 ごと）
   - AI の文書に出やすい癖（Docs 1-15）: 太字が多い（本文 1,000 字に 3 か所を超える）、太字とコロンで始まる箇条書き、コロンで終わる文、1 項目だけの箇条書き、箇条書きの句点の混在、空の段落の連続
 - スライドだけの規則（です・ます、本文 8 行、結論バンド、ノート、扉）は見ない。
-- [doc-build-005] **テンプレートとテーマで決まるものは出さない**（毎回出て、読み飛ばされるようになるため）: テンプレートから書いた文書とテンプレートの見本（doc.md の頭に `template:` か `source:`）の「冒頭に要旨がない」（節の順はテンプレートが決める）、A4 でない用紙のテーマ（`[docs.themes]`）の「1 行の字数が多い」、すぐ後ろが改ページの図（表紙のロゴ）の「図の題がない」。
+- [doc-build-005] **テンプレートとテーマで決まるものは出さない**（毎回出て、読み飛ばされるようになるため）: テンプレートから書いた文書とテンプレートの見本（doc.md の頭に `template:` か `source:`）の「冒頭に要旨がない」（節の順はテンプレートが決める）、A4 でない用紙のテーマ（`themes/docs/<名前>.json` の `page`）の「1 行の字数が多い」、すぐ後ろが改ページの図（表紙のロゴ）の「図の題がない」。
 - **記録:** スライドと同じ `../deck-build/log/lint_runs.jsonl` に残し、`lint.py --stats` で数える（dreaming の 5）。名前に tmp・作業用・テンプレートが入る文書は残さない。
 
 ## 4. 画像で測るもの（doc_layout.py）

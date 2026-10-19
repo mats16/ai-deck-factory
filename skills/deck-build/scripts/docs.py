@@ -3,7 +3,7 @@
 資料ごとの build/doc.md（markdown）が中身の正本。頭の front matter に名前・テーマ・テンプレートを書き、本文は markdown で書く（書き方は from_md）。
 markdown で内容を詰め、テンプレートとともに API で組み、直しを繰り返す（doc.py の make(d) から移した）。
 usage（資料の build/ で。doc.md は今いるフォルダのもの）:
-  docs.py themes   テーマ（既定と factory.toml の [docs.themes]）の名前と説明。資料ごとに選ぶ（doc-build の SKILL.md の 1.2）
+  docs.py themes   テーマ（既定とワークスペースの themes/docs/<名前>.json）の名前と説明。資料ごとに選ぶ（doc-build の SKILL.md の 1.2）
   docs.py init <テンプレートの名前>   テンプレート（ワークスペースの rules/doc-build/templates/<名前>/doc.md）を写して doc.md を作る
   docs.py new <Drive のフォルダの URL か ID> <Drive 上の名前>   空の Google Doc を作って組む
   docs.py build <URL か ID> [--force]   組み直す（本文をすべて入れ替える。URL は変わらない）。前に組んだあとに画面で直されているか、
@@ -13,9 +13,10 @@ usage（資料の build/ で。doc.md は今いるフォルダのもの）:
   docs.py export <URL か ID> <出力.docx か .pdf>   Word か PDF で書き出す（相手が Word を求めたときだけ。納品は Google Docs の URL）
   docs.py --selftest
 見た目の決まりは ../../deck-practices/visual_doc.md。書体・色・著作権表示はスライドと同じもの（slides.py）を使う。"""
-import difflib, glob, hashlib, json, os, re, shutil, subprocess, sys
+import contextlib, difflib, glob, hashlib, io, json, os, re, shutil, subprocess, sys, tempfile
 from collections import Counter
 from itertools import zip_longest
+from pathlib import Path
 
 sys.dont_write_bytecode = True  # build/ と scripts/ に __pycache__ を残さない
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -29,6 +30,8 @@ from slides import COPYRIGHT, COPYRIGHT_PT, LOGO, need_brand, FONT, FONT as FONT
 PAGE_MM, MARGIN_TB_MM, MARGIN_LR_MM = (210, 297), 25, 30  # A4 縦
 TEXT_MM = PAGE_MM[0] - 2 * MARGIN_LR_MM
 NAVY, SUB, PANEL = "1B3139", "5A6F77", "EEEDE9"  # テーマ visual の DARK1・ACCENT5・LIGHT2 の値（visual.md の 1）。Docs にはテーマの色がない
+RED_TEXT = "CC2B17"  # ***赤の太字***。テーマ visual の ACCENT3（18pt 未満の赤の文字。白の地で 4.5:1 に届く。visual_doc.md の 1）
+HEAD = NAVY  # 題と見出しの色。この色と TEXT・SUB・RULE・PANEL・RED_TEXT・TABLE_HEAD は、テーマのファイルの colors で替わる（load_theme）
 BODY_PT, SMALL_PT, CODE_PT, COVER_PT = 10.5, 9, 9.5, 30  # 本文、図表の題・出典・表の中、コード、表紙の題
 # 名前付きスタイル: 大きさ、太字、色、上の空き、下の空き、行間（%）。組むたびに入れ直す（ここを変えれば、組み直した資料すべてに効く）
 # 行送りは「字の 1.88 倍 × 行間の %」（Noto Sans JP。2026-10-09 に PDF で測った）。行のアキは、本文は全角近く（100% = 1.88 em）、
@@ -41,8 +44,8 @@ STYLES = {
     "HEADING_3": (11, True, NAVY, 12, 4, 75),
     "NORMAL_TEXT": (BODY_PT, False, TEXT, 0, 6, 100),
 }
-# テーマ: doc.md の頭に theme: <名前> と書くと、factory.toml の [docs.themes.<名前>] の版面・大きさ・色に入れ替える（from_md。スライドのテーマと同じ考え方）。
-# 会社の文書のテンプレートに合わせるもの（doc-build の SKILL.md の 1.2）なので、プラグインには持たない
+# テーマ: doc.md の頭に theme: <名前> と書くと、ワークスペースの themes/docs/<名前>.json の版面・名前付きスタイル・色・書体に入れ替える（from_md・load_theme）。
+# 会社の文書のテンプレートに合わせるもの（doc-build の SKILL.md の doc-build-010）なので、プラグインには持たない
 TABLE_HEAD = (NAVY, WHITE)  # 表の見出しの行の地と文字の色
 SCALE = 1  # 図の幅は、本文の幅 150 mm で書く。テーマで本文の幅が変わったら、この比で広げる（表は Doc.table が本文の幅に合わせる）
 TIGHT, CODE_LS = 80, 85  # 表の中・図表の題・出典の行間と、コードの行間（%）
@@ -54,7 +57,7 @@ SRC = "docs_py_src"  # 組んだ doc.md のフォルダ（factory.toml のフォ
 P_FIELDS = ("namedStyleType,alignment,indentStart,indentFirstLine,indentEnd,shading,borderTop,borderBottom,borderLeft,borderRight,"
             "spaceAbove,spaceBelow,lineSpacing,keepWithNext")
 T_FIELDS = "bold,italic,underline,strikethrough,link,weightedFontFamily,fontSize,foregroundColor,backgroundColor"  # 書かない項目は、名前付きスタイルに戻す
-INLINE = re.compile(r"\*\*(.+?)\*\*|\[([^\]]+)\]\((https?://[^)\s]+)\)|`([^`]+)`")
+INLINE = re.compile(r"\\([\\*`\[\]])|\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?://[^)\s]+)\)")  # スライドの記法（slides.py の MD）のうち、ドキュメントで使うもの
 ASCII = re.compile(r"[ -~]+")
 
 
@@ -70,16 +73,36 @@ def mm(v):
     return pt(round(v * 72 / 25.4, 2))
 
 
-def runs(s):
-    """本文の中の書き方: **太字**、[文字](URL)、`コード`。戻り: (文字, 文字の書式) の並び。"""
-    out, i = [], 0
+def runs(s, st=None):
+    """本文の中の書き方（スライドの記法と同じ。slides.py の spec_md）: **太字**、***赤の太字***（RED_TEXT）、[文字](URL)、`コード`、記号そのものは \\* のように \\ を付ける。
+    太字・赤の中にはリンクとコードを、リンクの中にはコードを入れられる（***[文字](URL)***）。大きさの {32:…} はスライドだけ。戻り: (文字, 文字の書式) の並び。"""
+    st, out, i = st or {}, [], 0
+
+    def add(t, x):
+        if not t:
+            return
+        if out and out[-1][1] == x:  # 同じ書式は 1 つにつなぐ（組んだ文書の JSON と同じ形。canon_json と比べる）
+            out[-1] = (out[-1][0] + t, x)
+        else:
+            out.append((t, x))
     for m in INLINE.finditer(s):
-        if m.start() > i:
-            out.append((s[i:m.start()], {}))
-        bold, label, url, code = m.groups()
-        out.append((bold, {"bold": True}) if bold is not None else (label, {"link": {"url": url}}) if label is not None else (code, {"code": True}))
+        add(s[i:m.start()], st)
+        esc, red, bold, code, label, url = m.groups()
+        if esc:
+            inner = [(esc, st)]
+        elif code is not None:
+            inner = [(code, {**st, "code": True})]
+        elif red is not None:
+            inner = runs(red, {**st, "bold": True, "red": True})
+        elif bold is not None:
+            inner = runs(bold, {**st, "bold": True})
+        else:
+            inner = runs(label, {**st, "link": {"url": url}})
+        for t, x in inner:
+            add(t, x)
         i = m.end()
-    return out + ([(s[i:], {})] if i < len(s) else [])
+    add(s[i:], st)
+    return out
 
 
 def font(name, bold=False):
@@ -201,8 +224,68 @@ class Doc:
             caption = f"図 {self.fig}　{caption}"
         self.blocks.append(("image", src, caption, width))
 
+    def mermaid(self, code, caption=None, width=None):
+        """mermaid の図。手元の mermaid-cli で PNG に描いて（mermaid_png）、図として置く。width は image と同じ mm（本文の幅 150 mm で書く）。
+        省くと、図の文字が本文と同じ大きさになる幅（本文の幅を超えるなら本文の幅）。縮めて図の文字が 9pt 未満になるときは警告する。"""
+        path = mermaid_png(code)
+        natural = image_px(path) / MERMAID_SCALE * 25.4 / 96  # 文字を本文の大きさ（mermaid_png の fontSize）で描いたときの幅（mm）
+        w = min(width * SCALE if width else natural, TEXT_MM)
+        if (got := STYLES["NORMAL_TEXT"][0] * w / natural) < SMALL_PT:
+            self.warn(f"mermaid の図を {w:.0f} mm に縮めると、図の文字が {got:.1f}pt になる（9pt 未満）。向きを変える（flowchart LR → TB）か、図を分ける")
+        self.image(path, caption, w / SCALE)
+
     def pagebreak(self):
         self.blocks.append(("break",))
+
+
+# [docs_py-003] mermaid の図は、手元の mermaid-cli（npx で版を固定して取ってくる）で描く。URL から図を作るサービス（mermaid.ink など）には、図の中身が
+# 第三者に渡るので渡さない（../assets/README.md）。色はテーマの colors、書体はテーマの FONT、文字は本文と同じ大きさ。書体は手元に入っているもので描かれる
+MERMAID_CLI = "@mermaid-js/mermaid-cli@11.17.0"  # 版を固定する（版が変わると描き方が変わりうる。PNG の指紋に入れる）。手元の mmdc は版が分からないので使わない
+MERMAID_SCALE = 3  # 描く倍率（PNG の画素 / CSS の画素）。印刷してもにじまない
+MERMAID_DIR = "mermaid"  # 描いた PNG を置く build/ の中のフォルダ。中身・テーマ・倍率が同じなら描き直さない（名前が指紋）
+
+
+def mermaid_config():
+    """mermaid の設定（テーマの色と書体）。base のテーマの色だけを替える（https://mermaid.js.org/config/theming.html）。文字は本文の大きさ
+    （sequenceDiagram は fontSize を見ず、既定で 14・16px なので別に書く）。"""
+    px = STYLES["NORMAL_TEXT"][0] * 96 / 72
+    return {"theme": "base", "themeVariables": {
+        "fontFamily": f"{FONT}, sans-serif", "fontSize": f"{px:g}px",
+        "primaryColor": "#" + PANEL, "primaryTextColor": "#" + TEXT, "primaryBorderColor": "#" + HEAD, "lineColor": "#" + SUB, "textColor": "#" + TEXT,
+        "secondaryColor": "#" + WHITE, "tertiaryColor": "#" + WHITE},
+        "sequence": {"actorFontSize": px, "messageFontSize": px, "noteFontSize": px}}
+
+
+def mermaid_png(code):
+    """mermaid の図 code を PNG に描き、build/ からのパスを返す（MERMAID_DIR/<指紋>.png。あれば描かない）。"""
+    cfg = mermaid_config()
+    out = os.path.join(MERMAID_DIR, hashlib.sha1(json.dumps([code, cfg, MERMAID_SCALE, MERMAID_CLI], ensure_ascii=False).encode()).hexdigest()[:12] + ".png")
+    if os.path.isfile(out):
+        return out
+    if not shutil.which("npx"):
+        sys.exit("mermaid の図を描くには Node.js が要る（npx で mermaid-cli を取ってくる。初めては数分かかる）。Node.js を入れるか、図を画像にして ![題](画像) で置く")
+    print(f"mermaid の図を描く: {out}", file=sys.stderr)
+    with tempfile.TemporaryDirectory() as tmp:
+        src, conf, png_ = (os.path.join(tmp, x) for x in ("in.mmd", "config.json", "out.png"))
+        open(src, "w", encoding="utf-8").write(code)
+        json.dump(cfg, open(conf, "w"))
+        try:  # 初めては mermaid-cli と Chrome を取ってくるので長い（2026-10-19 に約 100 秒）。止まったままにしない
+            r = subprocess.run(["npx", "-y", MERMAID_CLI, "-i", src, "-o", png_, "-s", str(MERMAID_SCALE), "-b", "white", "-c", conf, "-q"],
+                               capture_output=True, text=True, timeout=900)
+        except subprocess.TimeoutExpired:
+            sys.exit(f"mermaid の図を 15 分で描けなかった（npx が mermaid-cli か Chrome を取ってこられない）。回線を確かめて組み直す:\n{code}")
+        if r.returncode or not os.path.isfile(png_):
+            sys.exit(f"mermaid の図を描けなかった（書き方の誤りか、mermaid-cli が動かない）:\n{code}\n{(r.stderr or r.stdout).strip()[-800:]}")
+        os.makedirs(MERMAID_DIR, exist_ok=True)
+        shutil.copyfile(png_, out + ".tmp")  # 同じフォルダで置き換える（途中で止まっても、壊れた PNG を描いたものとして残さない）
+        os.replace(out + ".tmp", out)
+    return out
+
+
+def image_px(path):
+    """PNG の幅（画素）。"""
+    b = open(path, "rb").read(24)
+    return int.from_bytes(b[16:20], "big")
 
 
 class Writer:
@@ -228,8 +311,9 @@ class Writer:
             k = u16(t)
             if st.get("code"):
                 self.mono(s, t, size or CODE_PT)
-            elif st:
-                self.reqs.append({"updateTextStyle": {"range": {"startIndex": s, "endIndex": s + k}, "textStyle": st, "fields": ",".join(st)}})
+            ts = {x: st[x] for x in ("bold", "link") if x in st} | ({"foregroundColor": color(RED_TEXT)} if st.get("red") else {})
+            if ts:
+                self.reqs.append({"updateTextStyle": {"range": {"startIndex": s, "endIndex": s + k}, "textStyle": ts, "fields": ",".join(ts)}})
             s += k
 
     def mono(self, s, t, size):
@@ -418,6 +502,10 @@ def build(did, doc, force=False):
     gapi.stamp(did, f"{FONT}\t{MONO}", FONTS)  # 版（STAMP）より先に書く。途中で止まっても、版の新しい文書に前の書体が残らない
     gapi.stamp(did, fingerprint(did), STAMP)
     gapi.stamp(did, os.path.relpath(os.getcwd(), gapi.factory_path().parent), SRC)
+    used = {os.path.realpath(x) for x in imgs}  # doc.md が ./mermaid/… や絶対パスで指す画像も消さない
+    for f in glob.glob(os.path.join(MERMAID_DIR, "*.png")):  # 書き直す前の mermaid の図（doc.md から消えた図）。指紋を残したあとに消す
+        if os.path.realpath(f) not in used:
+            os.remove(f)
     print(json.dumps({"documentId": did, "url": f"https://docs.google.com/document/d/{did}/edit", "blocks": len(doc.blocks),
                       "requests": n, "warnings": len(doc.warnings)}, ensure_ascii=False))
 
@@ -429,7 +517,16 @@ def new(folder, name):
 
 
 STANDARD = "standard"  # 組み込みのテーマ（docs.py の既定の値）。theme を書かず、[docs] default_theme もないとき。doc.md に theme: standard とも書ける
-DEFAULT_NOTE = "既定。A4・本文 10.5pt・濃紺の見出し・濃紺の地の表の見出しの行（visual_doc.md）"  # [docs.themes.standard] の description で書き換えられる
+DEFAULT_NOTE = "既定。A4・本文 10.5pt・濃紺の見出し・濃紺の地の表の見出しの行（visual_doc.md）"  # themes/docs/standard.json の description で書き換えられる
+# [docs_py-004] テーマのファイル。スライドのテーマのファイル（slides.py の read_theme）と同じ形で、頭の apiVersion・kind と description・font・mono・colors は
+# 同じキー。page・margins・styles はドキュメントだけのキー。版はキーの意味が変わるときだけ上げる（slides.md の slides-035 と同じ考え方）
+API_VERSION = "docs/v1"
+WS_THEMES = ("themes", "docs")  # ワークスペースの themes/docs/<名前>.json（ファイルの名前がテーマの名前）
+# colors に書ける役割（6 桁の色）。HEAD・TEXT・SUB・RULE・PANEL・RED_TEXT はスライドの役割と同じ意味。TABLE_HEAD・TABLE_HEAD_TEXT はドキュメントだけ
+COLOR_ROLES = {"HEAD": "題と見出し", "TEXT": "本文", "SUB": "補助（副題・図表の題・出典・引用・フッター）", "RULE": "罫線と引用の線", "PANEL": "コードの地",
+               "RED_TEXT": "***赤の太字***", "TABLE_HEAD": "表の見出しの行の地", "TABLE_HEAD_TEXT": "表の見出しの行の文字"}
+STYLE_KEYS = {"TITLE": "TITLE", "SUBTITLE": "SUBTITLE", "H1": "HEADING_1", "H2": "HEADING_2", "H3": "HEADING_3", "BODY": "NORMAL_TEXT"}  # styles の名前 → 名前付きスタイル
+STYLE_PROPS = ("size", "color", "above", "below", "spacing")  # 大きさ（pt）、色、上・下の空き（pt）、行間（%）。STYLES の太字のほかの値と同じ順
 
 
 def docs_cfg():
@@ -437,50 +534,113 @@ def docs_cfg():
     return gapi.factory().get("docs", {}) if gapi.find_factory() else {}
 
 
+def ws_themes():
+    """ワークスペースのテーマのフォルダ（themes/docs）。factory.toml がなければ None。"""
+    return ws.parent.joinpath(*WS_THEMES) if (ws := gapi.find_factory()) else None
+
+
+def theme_names():
+    return sorted(f.stem for f in d.glob("*.json")) if (d := ws_themes()) and d.is_dir() else []
+
+
+def read_theme(path):
+    """テーマのファイル path（kind theme）を確かめて dict にする（load_theme が読む形）。書けない値は、場所を付けてまとめて止める（組む前に。factory-doctor も呼ぶ）。
+    色のコントラストでは止めない（会社の文書のテンプレートの色に合わせるテーマなので。poc の見出しの 4A86E8 は白の地で 3.58:1）。"""
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", Path(path).stem):
+        sys.exit(f"{path}: テーマのファイルの名前は英数字と - _ だけにする（名前がテーマの名前）")
+    try:
+        o = json.loads(Path(path).read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        sys.exit(f"{path}: 読めない（{e}）")
+    if not isinstance(o, dict) or o.get("apiVersion") != API_VERSION or o.get("kind") != "theme":
+        sys.exit(f'{path}: ファイルの頭は {{"apiVersion": "{API_VERSION}", "kind": "theme", …}}')
+    num = lambda v, pos=False: isinstance(v, (int, float)) and not isinstance(v, bool) and (v > 0 if pos else v >= 0)
+    hex6 = lambda v: isinstance(v, str) and re.fullmatch(r"[0-9A-Fa-f]{6}", v)
+    bad = []
+    for k, v in o.items():
+        if k in ("apiVersion", "kind"):
+            continue
+        if k in ("description", "font", "mono"):
+            bad += [] if isinstance(v, str) else [f"{k}: 文字列でない"]
+        elif k in ("page", "margins"):
+            bad += [] if isinstance(v, list) and len(v) == 2 and all(num(x, k == "page") for x in v) else [f"{k}: [{'幅, 高さ' if k == 'page' else '上下, 左右'}]（mm）の 2 つの数でない"]
+        elif k == "colors" and isinstance(v, dict):
+            for c, x in v.items():
+                bad += [f"colors.{c}: 知らない役割（{'・'.join(COLOR_ROLES)}）"] if c not in COLOR_ROLES else [] if hex6(x) else [f"colors.{c}: 6 桁の 16 進の色でない（# は付けない）"]
+        elif k == "styles" and isinstance(v, dict):
+            for n, props in v.items():
+                if n not in STYLE_KEYS:
+                    bad.append(f"styles.{n}: 知らないスタイル（{'・'.join(STYLE_KEYS)}）")
+                elif not isinstance(props, dict):
+                    bad.append(f"styles.{n}: {{\"size\": …}} の形でない")
+                else:
+                    for q, x in props.items():
+                        if q not in STYLE_PROPS:
+                            bad.append(f"styles.{n}.{q}: 知らないキー（{'・'.join(STYLE_PROPS)}）")
+                        elif q == "color" and not hex6(x):
+                            bad.append(f"styles.{n}.color: 6 桁の色でない")
+                        elif q != "color" and not num(x, q in ("size", "spacing")):
+                            bad.append(f"styles.{n}.{q}: 0 以上の数でない（大きさと行間は 0 より大きく）")
+        else:
+            bad.append(f"{k}: {'形が違う' if k in ('colors', 'styles') else '知らないキー（description・font・mono・colors・page・margins・styles）'}")
+    if bad:
+        sys.exit(f"{path}: " + "。".join(bad))
+    theme_font(o), theme_mono(o)  # 書体の確かめはスライドと同じ（和文を描けない書体、リガチャのある等幅を止める）
+    return o
+
+
 def theme(name):
-    """factory.toml の [docs.themes.<名前>] を入れる。"""
-    t = docs_cfg().get("themes", {}).get(name)
-    if name == STANDARD and not t:  # 既定の値のまま
-        return
-    if not t:
-        sys.exit(f"テーマ {name} がない。factory.toml の [docs.themes.{name}] に書く（doc-build の SKILL.md の 1.2）")
-    load_theme(t)
+    """テーマのファイル（themes/docs/<名前>.json）を入れる。standard はファイルがなければ既定の値のまま。"""
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", name):  # themes/docs/ の外のファイルを指させない
+        sys.exit(f"テーマの名前 {name!r} は英数字と - _ だけにする（themes/docs/<名前>.json のファイルの名前）")
+    if (d := ws_themes()) and (f := d / f"{name}.json").is_file():
+        return load_theme(read_theme(f))
+    if name in docs_cfg().get("themes", {}):  # 2026-10-19 までの書き方（standard も、書いた値を黙って捨てない）
+        sys.exit(f"テーマ {name} がない（themes/docs/{name}.json）。factory.toml の [docs.themes.{name}] はもう読まない。テーマのファイルに移す（doc-build の SKILL.md の doc-build-010）")
+    if name != STANDARD:
+        sys.exit(f"テーマ {name} がない（themes/docs/{name}.json）。docs.py themes が一覧を出す（doc-build の SKILL.md の doc-build-010）")
 
 
 def cmd_themes():
-    """テーマの名前と説明を 1 行ずつ出す。エージェントが、資料の種類と聞き手に合うものを選ぶ。"""
-    cfg = docs_cfg()
-    mine, default = cfg.get("themes", {}), cfg.get("default_theme", STANDARD)
-    for name in dict.fromkeys([STANDARD, *mine]):
-        note = mine.get(name, {}).get("description") or (DEFAULT_NOTE if name == STANDARD else f"（説明がない。factory.toml の [docs.themes.{name}] の description に書く）")
+    """テーマの名前と説明を 1 行ずつ出す。エージェントが、資料の種類と聞き手に合うものを選ぶ。書けない値のあるファイルは、その行に誤りを出して続ける
+    （ほかのテーマを選べるように。組むときは read_theme が止める）。"""
+    default, names = docs_cfg().get("default_theme", STANDARD), theme_names()
+    for name in dict.fromkeys([STANDARD, *names]):
+        try:
+            t = read_theme(ws_themes() / f"{name}.json") if name in names else {}
+        except SystemExit as e:
+            t = {"description": f"（使えない: {e}）"}
+        note = t.get("description") or (DEFAULT_NOTE if name == STANDARD else f"（説明がない。themes/docs/{name}.json の description に書く）")
         print(f"{name}{'（既定）' if name == default else ''}\t{note}")
 
 
 def need_theme(doc):
     """new で、standard のほかにテーマがあるのに doc.md の頭に theme: がなければ、一覧を出して止める（slides.py の need_theme と同じく、選ぶものがあるときだけ。
-    [docs.themes.standard] に説明だけを書いたときは止めない。factory-kaizen の検証では止めない）。"""
-    if not doc.meta.get("theme") and set(docs_cfg().get("themes", {})) - {STANDARD} and not os.environ.get("FACTORY_VERIFY"):
+    themes/docs/standard.json に説明だけを書いたときは止めない。factory-kaizen の検証では止めない）。"""
+    if not doc.meta.get("theme") and set(theme_names()) - {STANDARD} and not os.environ.get("FACTORY_VERIFY"):
         cmd_themes()
         sys.exit(f"テーマを選んでから組む。上の description と、資料の種類・聞き手を突き合わせて、doc.md の頭に theme: <名前> を書く"
                  f"（既定のままなら theme: {docs_cfg().get('default_theme', STANDARD)}）。選んだテーマと理由は構成案の前提に書く")
 
 
 def load_theme(t):
-    """テーマの版面・大きさ・色を入れる（style_reqs・put_table・Doc が読む値）。書いていない値は既定のまま。
-    page・margins は mm（[幅, 高さ]・[上下, 左右]）、body・headings は pt、heading・table_head は 6 桁の色。description は使い分けの説明（cmd_themes）。
-    font・mono は本文と等幅の書体。font は和文を描けると確かめた書体（slides.py の JP_FONTS）と DM Sans（FONT_EM）だけ。行送りの見込みは Noto Sans JP のまま。"""
-    global PAGE_MM, MARGIN_TB_MM, MARGIN_LR_MM, TEXT_MM, TABLE_HEAD, SCALE, FONT, MONO
-    FONT, MONO = theme_font(t), theme_mono(t)  # 書体の確かめはスライドと同じ（和文を描けない書体、リガチャのある等幅を止める）
+    """テーマ（read_theme の dict）の版面・名前付きスタイル・色・書体を入れる（style_reqs・put_table・Doc が読む値）。書いていない値は既定のまま。
+    page・margins は mm（[幅, 高さ]・[上下, 左右]）。styles は TITLE・SUBTITLE・H1〜H3・BODY ごとの size（pt）・color・above・below（pt）・spacing（%）。
+    styles に color を書かなければ、題と見出しは colors の HEAD、副題は SUB、本文は TEXT。font・mono は本文と等幅の書体（slides.py の theme_font・theme_mono）。
+    font は和文を描けると確かめた書体（JP_FONTS）と DM Sans（FONT_EM）だけ。行送りの見込みは Noto Sans JP のまま。description は使い分けの説明（cmd_themes）。"""
+    global PAGE_MM, MARGIN_TB_MM, MARGIN_LR_MM, TEXT_MM, TABLE_HEAD, SCALE, FONT, MONO, HEAD, TEXT, SUB, RULE, PANEL, RED_TEXT
+    FONT, MONO = theme_font(t), theme_mono(t)
+    c = {k: v.upper() for k, v in t.get("colors", {}).items()}
+    HEAD, TEXT, SUB, RULE, PANEL, RED_TEXT = (c.get(k, v) for k, v in (("HEAD", HEAD), ("TEXT", TEXT), ("SUB", SUB), ("RULE", RULE), ("PANEL", PANEL), ("RED_TEXT", RED_TEXT)))
+    TABLE_HEAD = (c.get("TABLE_HEAD", TABLE_HEAD[0]), c.get("TABLE_HEAD_TEXT", TABLE_HEAD[1]))
     PAGE_MM = tuple(t.get("page", PAGE_MM))
     MARGIN_TB_MM, MARGIN_LR_MM = t.get("margins", (MARGIN_TB_MM, MARGIN_LR_MM))
-    TABLE_HEAD = tuple(t.get("table_head", TABLE_HEAD))
     TEXT_MM = round(PAGE_MM[0] - 2 * MARGIN_LR_MM, 1)
     SCALE = TEXT_MM / 150
-    STYLES["NORMAL_TEXT"] = (t.get("body", STYLES["NORMAL_TEXT"][0]),) + STYLES["NORMAL_TEXT"][1:]
-    heads = ("HEADING_1", "HEADING_2", "HEADING_3")
-    sizes = t.get("headings", [STYLES[x][0] for x in heads])
-    for h, size in zip(heads, sizes):
-        STYLES[h] = (size, STYLES[h][1], t.get("heading", STYLES[h][2])) + STYLES[h][3:]
+    for key, name in STYLE_KEYS.items():
+        size, bold, col, above, below, spacing = STYLES[name]
+        p = {**dict(zip(STYLE_PROPS, (size, {"SUBTITLE": SUB, "NORMAL_TEXT": TEXT}.get(name, HEAD), above, below, spacing))), **t.get("styles", {}).get(key, {})}
+        STYLES[name] = (p["size"], bold, p["color"].upper(), p["above"], p["below"], p["spacing"])
 
 
 # ---- doc.md（中身の正本） ----
@@ -488,8 +648,10 @@ def load_theme(t):
 # cover（表紙の題の行の並び）と cover_left、title と subtitle、source（テンプレートだけ。元にした文書の URL。骨組みを比べる）。
 # 本文: # ## ### は見出し、段落は空行で区切る（行は「。」の後で分けてよい。組むときにつなぐ）、「出典: 」で始まる段落は出典の行、> は引用（書き手への注記も）、
 # - と 1. は箇条書き（2 字以上下げると 2 段目）、表の直前の「表: 題 {widths: 30 80 40}」は表の題と列の幅の比、| の表（1 行目が見出しの行）、
-# ![題](画像){width=150} は図（幅は mm）、``` はコード、\newpage は改ページ、<br> は段落・セルの中の改行、<!-- --> は組まない覚え書き
+# ![題](画像){width=150} は図（幅は mm）、``` はコード、```mermaid は mermaid の図（直前の「図: 題 {width: 120}」は図の題と幅）、\newpage は改ページ、
+# <br> は段落・セルの中の改行、<!-- --> は組まない覚え書き
 MD_CAPTION = re.compile(r"表[:：]\s*(.*?)\s*(?:\{widths?[:=]?\s*([\d.,\s]+)\})?")
+MD_FIGURE = re.compile(r"図[:：]\s*(.*?)\s*(?:\{width[:=]?\s*([\d.]+)\})?")
 MD_IMAGE = re.compile(r"!\[([^\]]*)\]\(([^)\s]+)\)\s*(?:\{width[:=]?\s*([\d.]+)\})?")
 MD_ITEM = re.compile(r"( *)([-*]|\d+\.) +(.*)")
 MD_SEP = re.compile(r"\|?(\s*:?-+:?\s*\|)*\s*:?-+:?\s*\|?")
@@ -540,7 +702,7 @@ def from_md(path, apply_theme=True):
         d.cover(meta["cover"], meta.get("cover_left") or None)
     if meta.get("title"):
         d.title(meta["title"], meta.get("subtitle") or None)
-    L, i, para, cap = text[m.end() if m else 0:].split("\n"), 0, [], None
+    L, i, para, cap, fig = text[m.end() if m else 0:].split("\n"), 0, [], None, None
 
     def flush():
         if para:
@@ -559,7 +721,12 @@ def from_md(path, apply_theme=True):
         elif s.startswith("```"):
             flush()
             j = next((k for k in range(i + 1, len(L)) if L[k].strip().startswith("```")), len(L))
-            d.code("\n".join(L[i + 1:j]))
+            if s == "```mermaid":
+                if apply_theme:  # テンプレートを照合のために読むときは描かない（照合は節と表だけを見る）
+                    d.mermaid("\n".join(L[i + 1:j]), *(fig or (None, None)))
+                fig = None
+            else:
+                d.code("\n".join(L[i + 1:j]))
             i = j + 1
         elif h := re.fullmatch(r"(#{1,3}) +(.+)", s):
             flush()
@@ -579,6 +746,10 @@ def from_md(path, apply_theme=True):
         elif c := MD_CAPTION.fullmatch(s):
             flush()
             cap = (c[1] or None, [float(x) for x in re.split(r"[,\s]+", c[2].strip())] if c[2] else None)
+            i += 1
+        elif (c := MD_FIGURE.fullmatch(s)) and next((x.strip() for x in L[i + 1:] if x.strip()), "") == "```mermaid":  # 次が図でない「図: …」は本文の行
+            flush()
+            fig = (c[1] or None, float(c[2]) if c[2] else None)
             i += 1
         elif s.startswith("|"):
             flush()
@@ -680,13 +851,13 @@ HEAD_TAG = {"TITLE": "TITLE", "SUBTITLE": "SUBTITLE", "HEADING_1": "H1", "HEADIN
 
 
 def render(rs):
-    """(文字, 書式) の並びを、比べる形の 1 行にする（**太字**・[リンク](URL)・`コード`、段落の中の改行は ⏎）。"""
+    """(文字, 書式) の並びを、比べる形の 1 行にする（**太字**・***赤の太字***・[リンク](URL)・`コード`、段落の中の改行は ⏎）。"""
     out = []
     for t, st in rs:
         t = t.replace("\v", "⏎")
         t = ASCII.sub(lambda m: f"`{m.group()}`", t) if st.get("code") else t  # コードは英数字だけが MONO になる（Writer.mono）
         t = f"[{t}]({st['link']['url']})" if st.get("link") else t
-        out.append(f"**{t}**" if st.get("bold") else t)
+        out.append(f"***{t}***" if st.get("red") else f"**{t}**" if st.get("bold") else t)
     return "".join(out).strip()
 
 
@@ -743,7 +914,7 @@ def ptr(v):  # 幅は pt の整数で比べる（mm の 0.5 の丸めが両側�
 
 
 def runs_of(p, flat=False):
-    """組んだ文書の段落の文字を (文字, 書式) の並びにする。書式は太字・リンク・MONO だけ見る（render と同じ）。"""
+    """組んだ文書の段落の文字を (文字, 書式) の並びにする。書式は太字・赤（RED_TEXT の太字）・リンク・MONO だけ見る（render と同じ）。"""
     rs = []
     for x in p.get("elements", []):
         t = x.get("textRun")
@@ -754,6 +925,8 @@ def runs_of(p, flat=False):
         if not flat:
             if ts.get("bold") is True:
                 st["bold"] = True
+                if hexc(ts.get("foregroundColor")) == RED_TEXT:
+                    st["red"] = True
             if ts.get("link", {}).get("url"):
                 st["link"] = {"url": ts["link"]["url"]}
             if ts.get("weightedFontFamily", {}).get("fontFamily") == MONO:
@@ -987,6 +1160,12 @@ def selftest():
     assert runs("**太字**と[リンク](https://a.b/c)と`x=1`") == [("太字", {"bold": True}), ("と", {}), ("リンク", {"link": {"url": "https://a.b/c"}}), ("と", {}),
                                                                 ("x=1", {"code": True})]
     assert runs("ふつう") == [("ふつう", {})] and runs("") == []
+    # スライドと同じ記法: 赤の太字、中のリンクとコード、記号そのもの（slides.py の spec_md）
+    assert runs("a***b[c](https://x)***\\*d") == [("a", {}), ("b", {"bold": True, "red": True}), ("c", {"bold": True, "red": True, "link": {"url": "https://x"}}), ("*d", {})]
+    assert runs("**`x`**") == [("x", {"bold": True, "code": True})] and render(runs("***赤*** と **太**")) == "***赤*** と **太**"
+    w = Writer(1)
+    w.text(runs("***赤***"))
+    assert w.reqs[-1]["updateTextStyle"]["textStyle"] == {"bold": True, "foregroundColor": color(RED_TEXT)}
     link = {"elements": [{"textRun": {"content": "出典: "}}, {"textRun": {"content": "docs", "textStyle": {"link": {"url": "https://d"}}}}, {"textRun": {"content": "\n"}}]}
     assert md_text(link) == "出典: [docs](https://d)\n"
     assert footer_text("A｜Internal Only").endswith("｜Internal Only") and footer_text("A") == COPYRIGHT
@@ -1000,6 +1179,9 @@ def selftest():
     w = Writer(1)
     w.block(("list", False, [runs("a"), runs("\tb")]), {})  # 2 段目のタブは消えるので、次の位置は「a\nb\n」の後ろ
     assert w.cur == 1 + u16("a\nb\n")
+    w = Writer(1)
+    w.text(runs("**`x`**"))  # コードの中の太字も入れる
+    assert [r["updateTextStyle"]["textStyle"] for r in w.reqs[-2:]] == [{**font(MONO), "fontSize": pt(CODE_PT)}, {"bold": True}]
     w = Writer(5)
     w.block(("image", "u", "図 1　構成", 100), {"u": "https://x/y.png"})
     assert w.reqs[1]["insertInlineImage"]["location"]["index"] == 5 and w.cur == 5 + 2 + u16("図 1　構成\n")
@@ -1012,12 +1194,43 @@ def selftest():
     d.bullets(["a", "b"])  # 前置きの段落は、箇条書きと同じページに置く
     assert d.blocks[2][3] == {"keep": True}
     md_selftest()
+    mermaid_selftest()
     # テーマ: 書いた値だけを入れ替え、本文の幅に合わせて図の倍率も変える（最後に試す。あとの試しに効くので）
-    rest = STYLES["HEADING_1"][3:]  # 見出しの上下の空きと行間はテーマで変えない
-    load_theme({"page": [215.9, 279.4], "margins": [12.7, 12.7], "body": 10, "headings": [12, 11, 10.5], "heading": "4A86E8", "table_head": ["F3F3F3", TEXT]})
-    assert PAGE_MM == (215.9, 279.4) and TEXT_MM == 190.5 and STYLES["NORMAL_TEXT"][0] == 10 and STYLES["HEADING_2"][:3] == (11, True, "4A86E8")
-    assert TABLE_HEAD == ("F3F3F3", TEXT) and STYLES["HEADING_1"][3:] == rest
+    rest = STYLES["HEADING_1"][3:]  # 書かなければ、見出しの上下の空きと行間は既定のまま
+    load_theme({"page": [215.9, 279.4], "margins": [12.7, 12.7], "colors": {"HEAD": "4a86e8", "TABLE_HEAD": "F3F3F3", "TABLE_HEAD_TEXT": TEXT},
+                "styles": {"BODY": {"size": 10}, "H1": {"size": 12}, "H2": {"size": 11}, "H3": {"size": 10.5, "color": "303F47", "above": 6, "spacing": 90}}})
+    assert PAGE_MM == (215.9, 279.4) and TEXT_MM == 190.5 and STYLES["NORMAL_TEXT"][:3] == (10, False, TEXT) and STYLES["HEADING_2"][:3] == (11, True, "4A86E8")
+    assert TABLE_HEAD == ("F3F3F3", TEXT) and STYLES["HEADING_1"][3:] == rest and STYLES["TITLE"][2] == "4A86E8"  # 題も HEAD の色
+    assert STYLES["HEADING_3"] == (10.5, True, "303F47", 6, 4, 90) and mermaid_config()["themeVariables"]["primaryBorderColor"] == "#4A86E8"
     assert (FONT, MONO) == ("Noto Sans JP", "Cascadia Mono")  # 書かなければ既定の書体
+    tmp = tempfile.mkdtemp()  # テーマのファイルの確かめ
+    put = lambda o, name="t": (open(f := os.path.join(tmp, f"{name}.json"), "w").write(json.dumps({"apiVersion": API_VERSION, "kind": "theme", **o})), f)[1]
+    assert read_theme(put({"description": "d", "styles": {"H1": {"size": 14, "above": 0}}}))["styles"]["H1"]["above"] == 0
+    for o, want in (({"leading": 1.3}, "leading: 知らないキー"), ({"colors": {"NAVY": "000000"}}, "colors.NAVY: 知らない役割"), ({"colors": {"TEXT": "#303F47"}}, "6 桁"),
+                    ({"styles": {"H4": {}}}, "styles.H4"), ({"styles": {"H1": {"size": 0, "bold": True}}}, "styles.H1.size: 0 以上"), ({"page": [210]}, "page:"),
+                    ({"font": "Inter"}, "Inter")):
+        try:
+            read_theme(put(o))
+            raise AssertionError(f"{o} を通した")
+        except SystemExit as e:
+            assert want in str(e), (o, str(e))
+    globals()["ws_themes"], real_ws = (lambda: Path(tmp)), ws_themes  # 一覧は、書けない値のあるファイル（t.json は最後の試しの font: Inter）で止まらない
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        put({"description": "よい"}, "a")
+        cmd_themes()
+    assert "よい" in out.getvalue() and "使えない" in out.getvalue(), out.getvalue()
+    globals()["ws_themes"] = real_ws
+    real_cfg = docs_cfg
+    globals()["docs_cfg"] = lambda: {"themes": {STANDARD: {"page": [215.9, 279.4]}}}  # 前の書き方の [docs.themes.standard] を黙って捨てない
+    for bad in (lambda: read_theme(put({}, "a b")), lambda: theme("../x"), lambda: theme(STANDARD)):  # ファイルの名前、doc.md の theme: の名前、前の書き方
+        try:
+            bad()
+            raise AssertionError("書けない名前を通した")
+        except SystemExit:
+            pass
+    globals()["docs_cfg"] = real_cfg
+    shutil.rmtree(tmp)
     load_theme({"font": "BIZ UDPGothic", "mono": "IBM Plex Mono"})
     w = Writer(1)
     w.mono(1, "a あ", 9)
@@ -1047,7 +1260,7 @@ template: t
 # 1. 要旨
 
 一文目です。
-二文目は **太字** と [リンク](https://a.b/c) です。
+二文目は **太字** と [リンク](https://a.b/c) と ***赤*** です。
 
 Unity
 Catalog
@@ -1084,7 +1297,7 @@ a = 1
     assert d.blocks[6][2] == "表 1　比べる" and d.blocks[6][3] == [TEXT_MM / 4, TEXT_MM * 3 / 4] and d.blocks[6][1][0][1] == [("中身 | 縦線", {})]
     assert d.blocks[7][3] == {"small": True} and d.blocks[8][3] == 100 and d.meta["template"] == "t" and not d.warnings
     c = canon_doc(d)
-    assert "P 一文目です。二文目は **太字** と [リンク](https://a.b/c) です。" in c and "UL2 二段目の続き" in c and "ROW a⏎b | " in c, c
+    assert "P 一文目です。二文目は **太字** と [リンク](https://a.b/c) と ***赤*** です。" in c and "UL2 二段目の続き" in c and "ROW a⏎b | " in c, c
     # 組んだ文書の JSON（必要なところだけ）から同じ形が作れるか
     run = lambda t, **st: {"textRun": {"content": t, "textStyle": st}}
     para = lambda els, **ps: {"paragraph": {"elements": els, "paragraphStyle": {"namedStyleType": "NORMAL_TEXT", **ps}}}
@@ -1092,7 +1305,8 @@ a = 1
            "namedStyles": {"styles": []}, "lists": {"L": {"listProperties": {"nestingLevels": [{"glyphType": "DECIMAL"}]}}},
            "inlineObjects": {"i": {"inlineObjectProperties": {"embeddedObject": {"size": {"width": {"magnitude": 283.46}}}}}},
            "body": {"content": [para([run("1. 要旨\n")], namedStyleType="HEADING_1"),
-                                para([run("二文目は "), run("太字", bold=True), run(" と "), run("リンク", link={"url": "https://a.b/c"}), run(" です。\n")]),
+                                para([run("二文目は "), run("太字", bold=True), run(" と "), run("リンク", link={"url": "https://a.b/c"}), run(" と "),
+                                      run("赤", bold=True, foregroundColor=color(RED_TEXT)), run(" です。\n")]),
                                 {"paragraph": {"elements": [run("番号\n")], "paragraphStyle": {"namedStyleType": "NORMAL_TEXT"}, "bullet": {"listId": "L"}}},
                                 para([run("引用\v二行目\n")], borderLeft={"width": {"magnitude": 3}}),
                                 para([run("表 1　比べる\n", fontSize={"magnitude": SMALL_PT})], alignment="CENTER"),
@@ -1102,7 +1316,7 @@ a = 1
                                 para([{"inlineObjectElement": {"inlineObjectId": "i"}}, run("\n")], alignment="CENTER"),
                                 para([run("a = 1\n", weightedFontFamily={"fontFamily": MONO})], shading={"backgroundColor": {"color": {"rgbColor": {"red": 0.9}}}}),
                                 para([{"pageBreak": {}}, run("\n")])]}}
-    assert canon_json(doc)[len(STYLES) + 1:] == ["H1 1. 要旨", "P 二文目は **太字** と [リンク](https://a.b/c) です。", "OL1 番号", "QUOTE 引用⏎二行目",
+    assert canon_json(doc)[len(STYLES) + 1:] == ["H1 1. 要旨", "P 二文目は **太字** と [リンク](https://a.b/c) と ***赤*** です。", "OL1 番号", "QUOTE 引用⏎二行目",
                                                  "CAPTION 表 1　比べる", "TABLE 1x2 106/106", "ROW 項目 | ", "SRC 出典: [docs](https://d)", "IMG 283pt", "CODE a = 1",
                                                  "BREAK"], canon_json(doc)
     assert canon_json(doc)[0] == "PAGE 210x297 余白 25/30" == canon_doc(d)[0]
@@ -1127,6 +1341,39 @@ a = 1
     d2.blocks = d2.blocks[:2]
     assert conform(d2, t) == ([], ["テンプレートの節「2. 範囲」がない（omit: に書いてある）"])
     shutil.rmtree(tmp)
+
+
+def mermaid_selftest():
+    """```mermaid の読み取りと幅。描くところ（mermaid_png）は仮の PNG にする（selftest は Node.js なしで回る）。"""
+    global mermaid_png
+    tmp, real = tempfile.mkdtemp(), mermaid_png
+    fake = lambda mm: (lambda code: (open(f := os.path.join(tmp, f"{mm}.png"), "wb").write(b"\x89PNG\r\n\x1a\n" + bytes(8) + round(mm / 25.4 * 96 * MERMAID_SCALE).to_bytes(4, "big")), f)[1])
+    md = os.path.join(tmp, "doc.md")
+    open(md, "w", encoding="utf-8").write("---\nname: 図\n---\n図: 流れ {width: 100}\n\n```mermaid\nflowchart LR\n  A --> B\n```\n\n```mermaid\nflowchart TB\n  A\n```\n\n図: 浮いた題\n\n本文\n")
+    try:
+        mermaid_png = fake(80)  # 文字を本文の大きさで描くと 80 mm の図
+        d = from_md(md)
+        assert [b[0] for b in d.blocks] == ["image", "image", "p", "p"] and d.blocks[0][2:] == ("図 1　流れ", 100) and d.blocks[1][2:] == (None, 80), d.blocks
+        assert render(d.blocks[2][2]) == "図: 浮いた題" and not d.warnings  # 次が ```mermaid でない「図: 」は本文の行のまま（落とさない）
+        assert [b[0] for b in from_md(md, apply_theme=False).blocks] == ["p", "p"]  # テンプレートとして照合に読むときは描かない
+        mermaid_png = fake(200)  # 本文の幅より広い図は本文の幅に縮め、文字が 9pt 未満になるなら警告する
+        d = Doc("w")
+        d.mermaid("x")
+        assert d.blocks[0][3] == TEXT_MM and "9pt 未満" in d.warnings[0]
+    finally:
+        mermaid_png = real
+        shutil.rmtree(tmp)
+    cwd = os.getcwd()
+    os.chdir(tempfile.mkdtemp())
+    try:  # 描いたものがあれば、mermaid-cli を呼ばない
+        cfg = mermaid_config()
+        out = os.path.join(MERMAID_DIR, hashlib.sha1(json.dumps(["A", cfg, MERMAID_SCALE, MERMAID_CLI], ensure_ascii=False).encode()).hexdigest()[:12] + ".png")
+        os.makedirs(MERMAID_DIR)
+        open(out, "wb").close()
+        assert mermaid_png("A") == out
+    finally:
+        shutil.rmtree(os.getcwd())
+        os.chdir(cwd)
 
 
 def main():
