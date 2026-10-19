@@ -1,4 +1,4 @@
-{"apiVersion": "slides/v1", "kind": "Page", "type": "cover",
+{"apiVersion": "slides/v1", "kind": "page", "type": "cover",
  "title": "JSON のページの\n見本",
  "kicker": "AI Deck Factory｜slides/v1",
  "sub": "一通りの書き方を 1 本に",

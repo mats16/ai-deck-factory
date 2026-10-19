@@ -62,7 +62,7 @@ AI Deck Factory のテンプレートは、`slides.py new` が複製する Googl
    copyright = "© 2026 Acme, Inc. All rights reserved."  # lint が 9pt を通すのは「© <年> <社名> All rights reserved.」の形だけ（factory-doctor が確かめる）
    ```
    ```json
-   {"apiVersion": "slides/v1", "kind": "Theme",
+   {"apiVersion": "slides/v1", "kind": "theme",
     "description": "アクメの会社の色のテーマ。顧客に出す提案・説明と社外の登壇に使う。社内の勉強会には使わない（visual）",
     "font": "Noto Sans JP",
     "colors": {"NAVY": "002B5C", "BG": "FFFFFF", "RED": "E4002B", "…": "…"},

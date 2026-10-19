@@ -1,4 +1,4 @@
-{"apiVersion": "slides/v1", "kind": "Page",
+{"apiVersion": "slides/v1", "kind": "page",
  "title": "文字と札の書き方", "lead": "記法で書式を書き、塗りや枠線は部品の既定にまかせる", "kicker": "text・label",
  "body": [
   {"type": "text", "spacing": 125, "para_gap": 4,

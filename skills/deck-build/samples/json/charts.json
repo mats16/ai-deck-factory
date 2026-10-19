@@ -1,4 +1,4 @@
-{"apiVersion": "slides/v1", "kind": "Page",
+{"apiVersion": "slides/v1", "kind": "page",
  "title": "補足の列のない予定表は、月の列が幅を分ける", "lead": "棒の強調も補足もない形と、補足の列のないガントを並べる", "kicker": "bars・gantt",
  "body": [
   {"type": "row", "widths": [2, 1], "items": [

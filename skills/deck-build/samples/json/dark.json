@@ -1,4 +1,4 @@
-{"apiVersion": "slides/v1", "kind": "Page", "type": "slide", "bg": "NAVY", "foot": false,
+{"apiVersion": "slides/v1", "kind": "page", "type": "slide", "bg": "NAVY", "foot": false,
  "body": [
   {"type": "text", "text": "{28:**濃い地の型のないページ**}"},
   {"type": "text", "text": "塗りのない文字は、地が濃ければ白になる。カードの番号の円は、地によらず赤"},

@@ -1,4 +1,4 @@
-{"apiVersion": "slides/v1", "kind": "Page",
+{"apiVersion": "slides/v1", "kind": "page",
  "title": "印のあるカードを並べる", "lead": "アイコン・番号・ロゴを左か上に置き、row の矢印でつなぐ", "kicker": "card",
  "body": [
   {"type": "row", "arrows": true, "items": [

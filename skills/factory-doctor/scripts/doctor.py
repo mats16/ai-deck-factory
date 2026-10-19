@@ -85,7 +85,7 @@ def check(ws, local=False):
     files = {**{f.stem: t for f in slides.BUILTIN_THEMES.glob("*.json") for t in [slides.read_theme(f)]}, **mine}  # ワークスペースのものが勝つ
     theme, temps = sl.get("default_theme", "visual"), {k: v for k, v in sl.get("templates", {}).items() if v}
     if old := sl.get("themes"):  # 2026-10-16 までの書き方
-        ng("slides.themes", f"{', '.join(old)} はプラグインが読まない。テーマはワークスペースの themes/slides/<名前>.json（kind Theme。色は colors の下に同じ名前で書く）に、"
+        ng("slides.themes", f"{', '.join(old)} はプラグインが読まない。テーマはワークスペースの themes/slides/<名前>.json（kind theme。色は colors の下に同じ名前で書く）に、"
                             "テンプレートの url は [slides.templates] の「<名前> = \"<url>\"」に移して消す（テンプレートのある名前は slides.py theme <url> でも写せる。../../deck-build/slides.md の 3）")
     if "base_template" in sl:  # 2026-10-14 までの書き方
         ng("slides の base", "slides.base_template を消す。元のテンプレートは factory.toml に持たず、template.py <テーマ> --from-base <元の URL> で渡す（渡さなければ白紙の pptx から作る）")
@@ -199,7 +199,7 @@ def selftest():
         assert "brand.copyright" not in kinds()
         themes = Path(tmp, "themes", "slides")
         themes.mkdir(parents=True)
-        put = lambda n, o: (themes / f"{n}.json").write_text(json.dumps({"apiVersion": "slides/v1", "kind": "Theme", **o}))
+        put = lambda n, o: (themes / f"{n}.json").write_text(json.dumps({"apiVersion": "slides/v1", "kind": "theme", **o}))
         put("mine", {"copyright": "© Me 2026"})
         assert kinds()["themes/slides/mine.json の copyright"] == "要修正"  # テーマの copyright にも同じ確かめ
         put("mine", {"copyright": "© 2026 Me. All rights reserved.", "colors": {"TEXT": "red"}})
