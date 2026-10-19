@@ -148,28 +148,48 @@ DM_SANS_EM = dict(zip(ASCII_EM, (
     .55, .52, 1.00, .66, .60, .72, .69, .56, .54, .76, .68, .23, .50, .58, .53, .84, .69, .77, .58, .77, .59, .58, .56, .66, .67, .97, .60, .58, .54, .31,
     .39, .31, .62, .66, .21, .54, .63, .57, .63, .57, .34, .56, .57, .24, .24, .50, .22, .89, .57, .59, .63, .63, .37, .50, .39, .57, .53, .76, .50, .56,
     .46, .43, .23, .43, .55)))
-FONT_EM = {FONT: ASCII_EM, "DM Sans": DM_SANS_EM}  # 英数字の幅を測った書体。テーマの font には、JP_FONTS とこれが書ける。ほかの JP_FONTS は Noto Sans JP の幅で見込む
-TEXT_EM = ASCII_EM  # 組む・見るデッキの書体の英数字の幅（use_font。ponytail: 1 つずつ組む前提の大域の値）
+# 太字の英数字と記号の幅（em）。Noto Sans CJK JP Bold と、DM Sans の opsz 14・wght 700 の hmtx（2026-10-19）。Regular より 6〜7% 広く、Regular の幅で見込むと、
+# 2.3 in のカードの見出し「kuromoji（Java）」（太字 12pt）を 1.40 in で 1 行と見たが、実際は 1.47 in で 1.44 in の枠から折り返し、本文に重なった
+ASCII_BOLD_EM = dict(zip(ASCII_EM, (
+    .23, .37, .57, .59, .59, .96, .74, .33, .38, .38, .51, .59, .33, .37, .33, .39, .59, .59, .59, .59, .59, .59, .59, .59, .59, .59, .33, .33, .59, .59,
+    .59, .51, 1.01, .64, .68, .66, .71, .61, .58, .72, .76, .33, .57, .69, .58, .85, .75, .77, .67, .77, .68, .62, .62, .75, .62, .92, .63, .58, .61, .38,
+    .39, .38, .59, .57, .63, .59, .64, .53, .64, .58, .37, .60, .64, .30, .31, .60, .32, .96, .64, .63, .64, .64, .44, .49, .42, .64, .58, .86, .56, .57,
+    .51, .38, .30, .38, .59)))
+DM_SANS_BOLD_EM = dict(zip(ASCII_EM, (
+    .23, .31, .37, .86, .60, .90, .78, .20, .41, .41, .51, .58, .25, .58, .25, .43, .70, .36, .58, .60, .65, .62, .63, .54, .63, .64, .25, .28, .58, .58,
+    .58, .54, 1.05, .71, .64, .74, .71, .58, .56, .78, .71, .27, .54, .65, .56, .89, .73, .78, .61, .78, .63, .60, .60, .69, .71, 1.02, .67, .64, .58, .38,
+    .43, .38, .68, .72, .23, .59, .66, .61, .66, .60, .37, .60, .62, .27, .27, .58, .27, .94, .62, .61, .66, .66, .41, .53, .43, .62, .56, .82, .57, .60,
+    .49, .47, .27, .47, .58)))
+FONT_EM = {FONT: (ASCII_EM, ASCII_BOLD_EM), "DM Sans": (DM_SANS_EM, DM_SANS_BOLD_EM)}  # 英数字の幅を測った書体（Regular, Bold）。テーマの font には、JP_FONTS とこれが書ける。ほかの JP_FONTS は Noto Sans JP の幅で見込む
+TEXT_EM, TEXT_BOLD_EM = FONT_EM[FONT]  # 組む・見るデッキの書体の英数字の幅（use_font。ponytail: 1 つずつ組む前提の大域の値）
 
 
 def use_font(f):
     """字幅の見積もり（em_width）を、本文の書体 f の幅にする。組む側（theme_of、テンプレートの見本は template.py）と見る側（lint_slides）が呼ぶ。"""
-    global TEXT_EM
-    TEXT_EM = FONT_EM.get(f, ASCII_EM)
+    global TEXT_EM, TEXT_BOLD_EM
+    TEXT_EM, TEXT_BOLD_EM = FONT_EM.get(f, FONT_EM[FONT])
 
 
-def em_width(s, mono=False):
-    """文字の幅の見積もり（em）。全角と、矢印・丸数字・× などの記号（U+2100 から上と ×÷±…※†‡）は 1、英数字と記号は TEXT_EM（mono なら MONO_EM）、ほかは 0.57。"""
-    return sum(1.0 if ord(c) >= 0x2100 or c in "×÷±…※†‡" else MONO_EM if mono and c in TEXT_EM else TEXT_EM.get(c, 0.57) for c in s)
+def em_width(s, mono=False, bold=False):
+    """文字の幅の見積もり（em）。全角と、矢印・丸数字・× などの記号（U+2100 から上と ×÷±…※†‡）は 1、英数字と記号は TEXT_EM（bold なら TEXT_BOLD_EM、mono なら MONO_EM）、ほかは 0.57。"""
+    em = TEXT_BOLD_EM if bold else TEXT_EM
+    return sum(1.0 if ord(c) >= 0x2100 or c in "×÷±…※†‡" else MONO_EM if mono and c in em else em.get(c, 0.57) for c in s)
 
 
-def wrap_lines(s, avail, size, mono=False):
+def all_bold(parts, bold=False):
+    """parts（文字列か (文字列, 書式) の並び）の見える文字がすべて太字か。bold は書式に太さのない文字の太さ（Deck.text の bold）。
+    1 つの文字列で行数を見るところ（行間の 125・100、最終行の字数）が使う。ponytail: 太さの交ざる文字は Regular の幅で見る（段落ごとに見る spec_text_h の行数とは別）"""
+    vis = [bold if isinstance(p, str) else p[1].get("bold", bold) for p in ([parts] if isinstance(parts, str) else parts) if (p if isinstance(p, str) else p[0]).strip()]
+    return all(vis) if vis else bold
+
+
+def wrap_lines(s, avail, size, mono=False, bold=False):
     """1 段落を幅 avail（in）で折り返したときの (行数, 最終行の幅 em) の見込み。和文は 1 字ずつ、英数字の語はまとめて次の行へ送る。
     ponytail: 行頭の句読点を前の行に戻す禁則は見ない"""
     n, cur, cap = 1, 0.0, max(avail, 0.05) * 72 / size
     for word in re.findall(r"[!-~]+| +|.", s):
-        for t in (word if em_width(word, mono) > cap else [word]):  # 1 行より長い語（長い識別子・URL）は、字で折る
-            tw = em_width(t, mono)
+        for t in (word if em_width(word, mono, bold) > cap else [word]):  # 1 行より長い語（長い識別子・URL）は、字で折る
+            tw = em_width(t, mono, bold)
             if cur + tw > cap + 1e-9 and cur > 0:
                 n, cur = n + 1, (0.0 if t.isspace() else tw)
             else:
@@ -177,10 +197,10 @@ def wrap_lines(s, avail, size, mono=False):
     return n, cur
 
 
-def est_lines(s, avail, size, mono=False):
+def est_lines(s, avail, size, mono=False, bold=False):
     """幅 avail（in。文字の枠の内側）に size pt で置いたときの行数の見込み。\n と \v で改行する。英数字の語は行をまたがない
     （1 字ずつ詰めて数えると、英語の多いカードで 1 行少なく見込み、h を省いたカードから文字がはみ出した。2026-10-13）。"""
-    return sum(wrap_lines(p, avail, size, mono)[0] for p in re.split(r"[\n\v]", s))
+    return sum(wrap_lines(p, avail, size, mono, bold)[0] for p in re.split(r"[\n\v]", s))
 
 
 def mono_reqs(oid, s, cell=None):
@@ -190,38 +210,46 @@ def mono_reqs(oid, s, cell=None):
                                  "style": {"fontFamily": MONO}, "fields": "fontFamily"}} for m in re.finditer(r"[ -~]+", s)]
 
 
-def est_h(s, avail, size, spacing=100):
-    """高さの見込み（in）。行送りは文字の大きさの 1.2 倍 × 行間。"""
-    return est_lines(s, avail, size) * size * 1.2 * spacing / 100 / 72
+def card_top(w, head):
+    """d.card の本文の枠の上端（箱の上端から、in）。見出し（太字 12pt）が折り返す見込みなら、1 行（0.2 in）ごとに下げる（決め打ちの 0.5 in では、2 行の見出しが本文に重なった）。"""
+    return 0.5 + (est_lines(head, w - 2 * PAD - 2 * INSET, 12, bold=True) - 1) * 0.2 if head else 0.1
+
+
+def card_items(items):
+    """d.card の items（(見出し, 説明) の並び）を 1 つの文字の枠に流す parts。見出しは太字、項目の間に空行。"""
+    parts = []
+    for i, (h2, b) in enumerate(items):
+        parts += [(h2 + "\n", {"bold": True}), b + ("\n\n" if i < len(items) - 1 else "")]
+    return parts
 
 
 def card_h(w, head=None, body=None, items=None, step=None, bullets=False, size=11, least=False):
     """[slides_py-012] d.card の高さの見込み（in）。d.card の h を省くと、これで中身から決める。隣の列やページの下端に合わせて伸ばすと、
     中身より大きい箱になる（代表の 3 枚の記録で、ほぼすべてのデッキに出た）。列の高さをそろえるなら、並ぶカードの card_h の最大を渡す。
     least なら、文字が枠に収まる最小（JSON のページの h の警告。#52）。最終行と下端の間は、本文の枠の下の 0.1 in だけを残し、step は最後の項目の後ろの空きを除く。
-    ponytail: 本文は size の 1 つの大きさで見積もる。大きさの違う run（大きな数字など）が混ざるなら h を渡す"""
-    top = 0.5 if head else 0.1
+    文字は d.card が置く parts のまま spec_text_h で数える（項目の見出しの太字、run ごとの大きさ）。"""
+    top = card_top(w, head)
     avail = w - 2 * PAD - 2 * INSET - (size * 1.3 / 72 if bullets else 0)
     if step is not None:  # 最後の項目の文字が step の間隔より高ければ、その分を足す（下端との間を下の 0.15 と同じだけ空ける）
         n = len(items or [])
-        last = est_h(items[-1][0] + "\n" + items[-1][1], avail, size, 125) + 2 * INSET + (0 if least else 0.15) if n else 0.1
+        last = spec_text_h(card_items(items[-1:]), avail, size, 125) + 2 * INSET + (0 if least else 0.15) if n else 0.1
         return top + ((n - 1) * step + last if least and n else max(n * step + 0.1, (n - 1) * step + last))
-    parts = [body] if isinstance(body, str) else body or []
-    s = "\n\n".join(h2 + "\n" + b for h2, b in items) if items else "".join(p if isinstance(p, str) else p[0] for p in parts)
-    return top + (est_h(s, avail, size, 125) + 2 * INSET if s else 0) + (0.1 if least else 0.15)  # 本文の枠は下端の 0.1 in 上まで（d.card）。最終行と下端の間を、白いカードの決まり（box_pad の 0.28 in）より広く
+    parts = card_items(items) if items else [body] if isinstance(body, str) else body or []
+    return top + (spec_text_h(parts, avail, size, 125) + 2 * INSET if any(p if isinstance(p, str) else p[0] for p in parts) else 0) + (0.1 if least else 0.15)  # 本文の枠は下端の 0.1 in 上まで（d.card）。最終行と下端の間を、白いカードの決まり（box_pad の 0.28 in）より広く
 
 
-def table_h(widths, rows, size=11, row_h=0.36, header=True, mono_cols=()):
-    """d.table の高さの見込み（in）。行は文字に合わせて伸びる（row_h は最小。行ごとの並びでもよい）。"""
+def table_h(widths, rows, size=11, row_h=0.36, header=True, mono_cols=(), first_col=True):
+    """d.table の高さの見込み（in）。行は文字に合わせて伸びる（row_h は最小。行ごとの並びでもよい）。見出しの行と 1 列目（first_col）は太字で見込む。"""
     hs = list(row_h) if isinstance(row_h, (list, tuple)) else [row_h] * len(rows)
-    return sum(max(hs[r], 0.16 + max([1] + [est_lines(s, widths[c] - 2 * INSET, size, c in mono_cols and not (header and r == 0)) for c, s in enumerate(row)])
+    return sum(max(hs[r], 0.16 + max([1] + [est_lines(s, widths[c] - 2 * INSET, size, c in mono_cols and not (header and r == 0), header and r == 0 or first_col and c == 0)
+                                            for c, s in enumerate(row)])
                    * size * 1.2 * 1.2 / 72) for r, row in enumerate(rows))
 
 
 def band_h(head, sub=None):
     """結論バンドの高さの見込み（in。Deck.band が h を省いたとき。JSON のページは本文の下端の限りにも使う）。"""
     avail = W - 2 * BAND_PAD_X
-    return 2 * BAND_PAD_Y + est_lines(head, avail, 13) * 0.25 + (est_lines(sub, avail, 11) * 0.21 if sub else 0)
+    return 2 * BAND_PAD_Y + est_lines(head, avail, 13, bold=True) * 0.25 + (est_lines(sub, avail, 11) * 0.21 if sub else 0)
 
 
 def cols(n, gap=0.24, x0=X, w=W):
@@ -576,18 +604,18 @@ class Deck:
         if fit:
             over = set()
             for p in parts:
-                t, sz = (p, size) if isinstance(p, str) else (p[0], p[1].get("size", size))
+                t, sz, b = (p, size, bold) if isinstance(p, str) else (p[0], p[1].get("size", size), p[1].get("bold", bold))
                 for ln in (re.split(r"[\n\v]", t) if re.search(r"[\n\v]", t) else []):
-                    if ln and est_lines(ln, avail, sz, mono) > 1:
+                    if ln and est_lines(ln, avail, sz, mono, b) > 1:
                         over.add(ln)
-                        self.warn(f"手で改行した行が枠に収まらない見込み「{ln}」（{em_width(ln, mono) * sz / 72:.2f} in > {avail:.2f} in）")
+                        self.warn(f"手で改行した行が枠に収まらない見込み「{ln}」（{em_width(ln, mono, b) * sz / 72:.2f} in > {avail:.2f} in）")
             # [slides_py-013] 自動で折り返す行の、最終行の 1〜2 字（代表の 3 枚の記録で、ほぼすべてのデッキに出た）。ponytail: size の 1 つの大きさで見る
             for ln in re.split(r"[\n\v]", full):
-                n, last = wrap_lines(ln, avail, size, mono)
+                n, last = wrap_lines(ln, avail, size, mono, all_bold(parts, bold))
                 if n > 1 and last <= 2 and ln not in over:
                     self.warn(f"折り返した最終行が 2 字以下の見込み「{ln}」（{n} 行。言い換えか \\v で行を決める）")
         if spacing is None:
-            spacing = 125 if est_lines(full.strip("\n"), avail, size, mono) > 1 else 100
+            spacing = 125 if est_lines(full.strip("\n"), avail, size, mono, all_bold(parts, bold)) > 1 else 100
         if ring:
             bg = self._shape(sid, *ring, fill, line, kind, dash=dash, weight=weight)  # 円を先に置く（文字の枠より下）
             e = self._shape(sid, x, y, w, h)
@@ -670,18 +698,16 @@ class Deck:
                 raise ValueError("中身を自分で組むカードは h を渡す")
             h = card_h(w, head, body, items, step, bullets)
         self.anchor = self.box(sid, x, y, w, h, fill, line)
+        top = y + card_top(w, head)
         if head:
-            self.text(sid, x + PAD, y + 0.1, w - 2 * PAD, 0.34, head, size=12, color=HEAD, bold=True)
-        top = y + (0.5 if head else 0.1)
+            self.text(sid, x + PAD, y + 0.1, w - 2 * PAD, top - y - 0.16, head, size=12, color=HEAD, bold=True, spacing=100)  # card_top は 1 行 0.2 in で下げる
+        bh = max(h - (top - y) - 0.1, 0.2)  # 本文の枠。見出しが折り返して h より高くなっても、高さ 0 以下の枠は送らない（h の警告は SpecPage が出す）
         if items and step is None:
-            parts = []
-            for i, (h2, b) in enumerate(items):
-                parts += [(h2 + "\n", {"bold": True}), b + ("\n\n" if i < len(items) - 1 else "")]
-            self.text(sid, x + PAD, top, w - 2 * PAD, h - (top - y) - 0.1, parts, spacing=125)
-        for i, (h2, b) in enumerate(items if step is not None else []):
-            self.text(sid, x + PAD, top + i * step, w - 2 * PAD, step - 0.08, [(h2 + "\n", {"bold": True}), b], spacing=125)
+            self.text(sid, x + PAD, top, w - 2 * PAD, bh, card_items(items), spacing=125)
+        for i, item in enumerate(items if step is not None else []):
+            self.text(sid, x + PAD, top + i * step, w - 2 * PAD, step - 0.08, card_items([item]), spacing=125)
         if body:
-            self.text(sid, x + PAD, top, w - 2 * PAD, h - (top - y) - 0.1, body, spacing=125, bullets=bullets)
+            self.text(sid, x + PAD, top, w - 2 * PAD, bh, body, spacing=125, bullets=bullets)
         return y + h
 
     def table(self, sid, x, y, widths, rows, size=11, row_h=0.36, header=True, first_col=True, zebra=True, align=None, mono_cols=(), fills=(), vlines=None):
@@ -729,25 +755,25 @@ class Deck:
             head = header and r == 0
             for c, s in enumerate(row):
                 avail, mono = widths[c] - 2 * INSET, c in mono_cols and not head
+                first = first_col and c == 0 and not head
                 for ln in s.split("\n"):
-                    if ln and est_lines(ln, avail, size, mono) > 1:
+                    if ln and est_lines(ln, avail, size, mono, head or first) > 1:
                         self.warn(f"表のセルが折り返す見込み「{ln}」（列の幅 {widths[c]:.2f} in）")
                 if not s:
                     continue
                 loc = {"rowIndex": r, "columnIndex": c}
-                first = first_col and c == 0 and not head
                 self.reqs += [{"insertText": {"objectId": t, "cellLocation": loc, "insertionIndex": 0, "text": s}},
                               {"updateTextStyle": {"objectId": t, "cellLocation": loc, "textRange": {"type": "ALL"},
                                                    "style": {"fontFamily": FONT, "fontSize": pt(size), "bold": head or first,
                                                              "foregroundColor": {"opaqueColor": paint(WHITE if head else HEAD if first else TEXT)}},
                                                    "fields": "fontFamily,fontSize,bold,foregroundColor"}},
                               {"updateParagraphStyle": {"objectId": t, "cellLocation": loc, "textRange": {"type": "ALL"},
-                                                        "style": {"lineSpacing": 120 if est_lines(s, avail, size) > 1 else 100, "spaceAbove": pt(0), "spaceBelow": pt(0),
+                                                        "style": {"lineSpacing": 120 if est_lines(s, avail, size, bold=head or first) > 1 else 100, "spaceAbove": pt(0), "spaceBelow": pt(0),
                                                                   "alignment": ALIGN[(align or ["left"] * nc)[c]]},
                                                         "fields": "lineSpacing,spaceAbove,spaceBelow,alignment"}}]
                 if mono:
                     self.reqs += mono_reqs(t, s, loc)
-        return y + table_h(widths, rows, size, hs, header, mono_cols)
+        return y + table_h(widths, rows, size, hs, header, mono_cols, first_col)
 
     def arrow(self, sid, x1, y1, x2, y2, color=SUB, head=True, dash=False, weight=1.25, link=None, bent=False):
         """細い線。横の矢印は、両側の箱の上下の中央に引く（visual.md の 4。lint が見る）。dash で点線（「できるが手間」などの意味）、weight は太さ（pt）。
@@ -799,7 +825,7 @@ class Deck:
         if kicker:
             self.text(sid, X - INSET, Y_KICK, W + 2 * INSET, 0.26, kicker, size=11, color=RED_TEXT, bold=True)
         sz = 24  # 1 行に収まらなければ 18pt まで縮め、警告する（言い切りを短くするのが先）
-        while em_width(title) * sz / 72 > W and sz > 18:
+        while em_width(title, bold=True) * sz / 72 > W and sz > 18:
             sz -= 0.5
         if sz < 24:
             self.warn(f"見出しを {sz:g}pt に縮めた「{title}」")
@@ -1098,8 +1124,15 @@ def spec_md(s, emph=RED_TEXT, loc=""):
 
 
 def widest_em(s, loc=""):
-    """記法つきの文字の、いちばん広い行の幅（em）。段落と <br> で行を分ける。"""
-    return max(em_width(ln) for ln in re.split(r"[\n\v]", spec_plain(spec_md(s, loc=loc))))
+    """記法つきの文字の、いちばん広い行の幅（em）。段落と <br> で行を分ける。太字（**…**）の run は太字の幅で測る。"""
+    md, ws = spec_md(s, loc=loc), [0.0]
+    for p in [md] if isinstance(md, str) else md:
+        t, b = (p, False) if isinstance(p, str) else (p[0], p[1].get("bold", False))
+        for k, piece in enumerate(re.split(r"[\n\v]", t)):
+            if k:
+                ws.append(0.0)
+            ws[-1] += em_width(piece, bold=b)
+    return max(ws)
 
 
 def point_in(p, r, t=0.02):
@@ -1172,26 +1205,27 @@ def image_ratio(path):
     return w / h if h else None
 
 
-def spec_text_h(parts, avail, size, spacing=None, gap=0, mono=False):
+def spec_text_h(parts, avail, size, spacing=None, gap=0, mono=False, bold=False):
     """parts の文字の高さの見込み（in）。段落ごとに、行の高さはその段落でいちばん大きい文字で見る（Deck.text と同じく、行間を省けば 2 行以上で 125、
-    基準の 2 倍以上の大きさの段落は 100）。gap は段落の間（pt）。mono は英数字を等幅の幅で見る（Deck.text の mono と同じ）。
+    基準の 2 倍以上の大きさの段落は 100）。gap は段落の間（pt）。mono は英数字を等幅の幅で見る（Deck.text の mono と同じ）。bold は太さを書いていない文字の太さ（Deck.text の bold と同じ）。
     ponytail: 大きさの違う文字が交ざる段落は、幅を足して割るだけで、語の送りは見ない"""
     paras = [[]]
     for p in [parts] if isinstance(parts, str) else parts:
-        t, sz = (p, size) if isinstance(p, str) else (p[0], p[1].get("size", size))
+        t, sz, b = (p, size, bold) if isinstance(p, str) else (p[0], p[1].get("size", size), p[1].get("bold", bold))
         for k, piece in enumerate(t.split("\n")):
             if k:
                 paras.append([])
-            paras[-1].append((piece.replace("\v", "\n"), sz))
-    full = "\n".join("".join(t for t, _ in q) for q in paras)
-    sp = spacing or (125 if est_lines(full.strip("\n"), avail, size, mono) > 1 else 100)
+            paras[-1].append((piece.replace("\v", "\n"), sz, b))
+    full = "\n".join("".join(t for t, *_ in q) for q in paras)
+    sp = spacing or (125 if est_lines(full.strip("\n"), avail, size, mono, all_bold(parts, bold)) > 1 else 100)  # Deck.text と同じ見方
     h = 0
     for q in paras:
-        big = max([sz for t, sz in q if t] or [size])
-        if len({sz for t, sz in q if t}) > 1:  # 大きさの違う文字が交ざる段落は、文字ごとの幅を足して行数を見る（行の高さはいちばん大きい文字）
-            n = max(1 + sum(t.count("\n") for t, _ in q), math.ceil(sum(em_width(t, mono) * sz / 72 for t, sz in q) / avail))
+        big = max([sz for t, sz, _ in q if t] or [size])
+        pb = next((b for t, _, b in q if t), bold)  # 太さが交ざらない段落の太さ
+        if len({sz for t, sz, _ in q if t}) > 1 or len({b for t, _, b in q if t}) > 1:  # 大きさか太さの違う文字が交ざる段落は、文字ごとの幅を足して行数を見る（行の高さはいちばん大きい文字）
+            n = max(1 + sum(t.count("\n") for t, *_ in q), math.ceil(sum(em_width(t, mono, b) * sz / 72 for t, sz, b in q) / avail))
         else:
-            n = est_lines("".join(t for t, _ in q) or " ", avail, big, mono)
+            n = est_lines("".join(t for t, *_ in q) or " ", avail, big, mono, pb)
         h += n * big * 1.2 * (100 if big >= 2 * size else sp) / 100 / 72
     return h + gap / 72 * (len(paras) - 1)
 
@@ -1358,7 +1392,7 @@ class SpecPage:
                 parts = spec_md(b.get("text", ""), spec_color(emph), l)
                 self.index.append((l, spec_plain(parts)))
                 bw = (b["to"] - b["from"] + 1) * cw - 2 * G_INSET
-                if sum(est_lines(ln, bw - 2 * INSET, 9) for ln in spec_plain(parts).split("\n")) > 2:  # バーの高さは 9pt の 2 行
+                if sum(est_lines(ln, bw - 2 * INSET, 9, bold=True) for ln in spec_plain(parts).split("\n")) > 2:  # バーの高さは 9pt の 2 行
                     self.warns.append(f"{l}.text: バーの文字が 3 行以上に折り返す見込み「{spec_plain(parts)}」。短くするか、\\n で 2 行に分ける（1 行 5 字ほど）")
                 self.emit("text", l, x=x0 + (b["from"] - 1) * cw + G_INSET, y=ly, w=bw, h=G_BAR,
                           parts=parts, size=9, color=spec_color(on), bold=True, align="CENTER", valign="MIDDLE", spacing=100, fill=spec_color(fill),
@@ -1388,7 +1422,7 @@ class SpecPage:
         thl = lambda **k: self.emit("text", f"{loc}.threshold.label", **k, parts=[(tl, {"color": spec_color("RED_TEXT")})], **common)
         if e.get("horizontal"):
             lw = min(max(em_width(n) for n, _ in items) * 11 / 72 + 0.1, w * 0.35)
-            vw = max(em_width(fmt(v)) for _, v in items) * 11 / 72 + 0.05
+            vw = max(em_width(fmt(v), bold=True) for _, v in items) * 11 / 72 + 0.05
             y0 = y + (B_LABEL if th else 0)  # 直線の札の行
             x0, pw, rh = x + lw + 0.1, w - lw - vw - 0.2, (y + h - y0) / len(items)
             if rh < B_ROW - 1e-6:  # 棒の太さと 11pt の名前が 1 本の行に収まる高さ（札の行を引いた割り算の誤差は見ない）
@@ -1405,7 +1439,7 @@ class SpecPage:
                 self.emit("text", f"{l}.name", x=x, y=cy, w=lw, h=rh, parts=n, align="END", valign="MIDDLE", **common)
                 if bl > 0:
                     self.emit("box", l, x=x0, y=cy + (rh - B_BAR) / 2, w=bl, h=B_BAR, fill=bar(i), kind="RECTANGLE", title=BAR_MARK, alt=f"{n} {fmt(v)}")
-                nw = em_width(fmt(v)) * 11 / 72
+                nw = em_width(fmt(v), bold=True) * 11 / 72
                 if th and x0 + bl <= tx <= x0 + bl + 0.08 + nw:  # 直線が数字を通る
                     if bl < nw + 2 * pad:
                         self.warns.append(f"{l}: 直線（threshold）が数字「{fmt(v)}」に重なる見込み（棒が短くて数字を中に入れられない）")
@@ -1429,13 +1463,13 @@ class SpecPage:
         ty = th and base - th["value"] / top * ph
         for i, (n, v) in enumerate(items, 1):
             sx, bh, l = x + (i - 1) * slot, v / top * ph, f"{loc}.items[{i - 1}]"
-            if bad := [t for t in (n, fmt(v)) if est_lines(t, slot, 11) > 1]:
+            if bad := [t for t, b in ((n, False), (fmt(v), True)) if est_lines(t, slot, 11, bold=b) > 1]:
                 self.warns.append(f"{l}: 棒の名前か数字「{bad[0]}」が折り返す見込み（1 本の幅 {slot:.2f} in）。短くするか、横の棒（horizontal）にする")
             if bh > 0:
                 self.emit("box", l, x=sx + (slot - bw) / 2, y=base - bh, w=bw, h=bh, fill=bar(i), kind="RECTANGLE", title=BAR_MARK, alt=f"{n} {fmt(v)}")
             vy, inside = base - bh - B_LABEL, False
             if th and vy <= ty <= base - bh:  # 直線が数字を通る
-                if bh < B_LABEL + pad or em_width(fmt(v)) * 11 / 72 + 2 * INSET > bw:  # 白い数字は棒の塗りの中に収める（はみ出すと地の上で読めない。中央寄せなので左右は枠の余白だけ）
+                if bh < B_LABEL + pad or em_width(fmt(v), bold=True) * 11 / 72 + 2 * INSET > bw:  # 白い数字は棒の塗りの中に収める（はみ出すと地の上で読めない。中央寄せなので左右は枠の余白だけ）
                     self.warns.append(f"{l}: 直線（threshold）が数字「{fmt(v)}」に重なる見込み（棒が低いか細くて数字を中に入れられない）")
                 else:
                     vy, inside = base - bh + pad, True
@@ -1456,7 +1490,7 @@ class SpecPage:
                 self.emit("arrow", f"{loc}.line.seg[{i}]", x1=px, y1=py, x2=qx, y2=qy, color=SUB, head=False, weight=2)
             for i, ((px, py), v) in enumerate(zip(pts, vals)):
                 l = f"{loc}.line.values[{i}]"
-                if est_lines(fmt(v, lu), slot, 11) > 1:
+                if est_lines(fmt(v, lu), slot, 11, bold=True) > 1:
                     self.warns.append(f"{l}: 折れ線の数字「{fmt(v, lu)}」が折り返す見込み（1 本の幅 {slot:.2f} in）。単位を短くするか、幅を広げる")
                 self.emit("box", l, x=px - B_DOT / 2, y=py - B_DOT / 2, w=B_DOT, h=B_DOT, fill=SUB, kind="ELLIPSE")
                 self.emit("text", f"{l}.value", x=px - slot / 2, y=py - B_DOT / 2 - B_LABEL, w=slot, h=B_LABEL - 0.04, parts=[(fmt(v, lu), {"bold": True, "color": SUB})],
@@ -1466,8 +1500,8 @@ class SpecPage:
     def fixed_w(self, e):
         if e.get("w") == "fit":  # 札の幅を中身の文字に合わせる（左右に 1 字分）
             size = e.get("size", 11)
-            mono = e.get("mono", False)
-            return max(em_width(ln, mono) for ln in spec_plain(spec_md(e["text"])).replace("\v", "\n").split("\n")) * size / 72 + 2 * size / 72 + 0.06
+            mono, bold = e.get("mono", False), e.get("bold", e["type"] == "label")  # 札（Deck.label）は既定で太字
+            return max(em_width(ln, mono, bold) for ln in spec_plain(spec_md(e["text"])).replace("\v", "\n").split("\n")) * size / 72 + 2 * size / 72 + 0.06
         return e.get("w") or (NUM[e.get("size", "medium")][0] if e["type"] == "num" else e.get("size", 0.5) if e["type"] == "icon" else None)
 
     def slot_w(self, e, w):
@@ -1506,7 +1540,7 @@ class SpecPage:
             center = e.get("align", "center" if kind == "label" else "left") == "center"
             inner = max((size / 72 if e.get("pad") is None else e["pad"]) - INSET, 0) if boxed and not center and e.get("shape") != "ellipse" else 0  # Deck.text と同じ
             avail = (w - 2 * INSET - 2 * inner if boxed else w) - (size * 1.3 / 72 if bul else 0)
-            body = spec_text_h(spec_md(s, loc=loc), avail, size, e.get("spacing"), e.get("para_gap", 0), e.get("mono", False))
+            body = spec_text_h(spec_md(s, loc=loc), avail, size, e.get("spacing"), e.get("para_gap", 0), e.get("mono", False), e.get("bold", kind == "label"))
             if least:  # 文字の枠の余白（INSET）だけを残す
                 return body + 2 * INSET
             if kind == "label":
@@ -1523,12 +1557,12 @@ class SpecPage:
                 return card_h(w, e.get("head"), items=[tuple(x) for x in e.get("items", [])], step=e["step"], least=least)
             body, bul = self.card_body(e, loc)  # card_h は本文をすべて 11pt で数えるので、文字ごとの大きさを見る spec_text_h で、d.card の本文の枠と同じ幅に見込む
             avail = w - 2 * PAD - 2 * INSET - (11 * 1.3 / 72 if bul else 0)
-            return (0.5 if e.get("head") else 0.1) + (spec_text_h(body, avail, 11, 125) + 2 * INSET if body else 0) + (0.1 if least else 0.15)  # 本文の枠は下端の 0.1 in 上まで（d.card）
+            return card_top(w, e.get("head")) + (spec_text_h(body, avail, 11, 125) + 2 * INSET if body else 0) + (0.1 if least else 0.15)  # 本文の枠は下端の 0.1 in 上まで（d.card）
         if kind == "code":
             return sum(est_lines(ln, w - 0.4, size, True) for ln in e["text"].split("\n")) * size * 1.2 * 1.1 / 72 + 0.28
         if kind == "table":
             ws = [w * r / sum(e["widths"]) for r in e["widths"]] if e.get("widths") else [w / len(e["rows"][0])] * len(e["rows"][0])
-            return table_h(ws, e["rows"], size, e.get("row_h", 0.36), e.get("header", True), [c - 1 for c in e.get("mono_cols", [])])
+            return table_h(ws, e["rows"], size, e.get("row_h", 0.36), e.get("header", True), [c - 1 for c in e.get("mono_cols", [])], e.get("first_col", True))
         if kind == "gantt":
             _, _, _, hd, hs, _ = self.gantt_layout(e, w, loc)
             return hd + sum(hs)
@@ -3979,7 +4013,7 @@ def selftest_spec():
         {"type": "card", "head": "h", "items": [["a", "b"]], "step": 0.6},
         {"type": "box", "h": 0.5, "fill": "PANEL", "shape": "ellipse", "raw": {"radius": 0.2}}]})
     lab, txt, tab, card, box = [e for e in els if e["call"] != "arrow"]
-    assert near(lab["w"], em_width("GA") * 11 / 72 + 2 * 11 / 72 + 0.06) and txt["kind"] == "CHEVRON" and txt["bold"] and txt["spacing"] == 110 and txt["gap"] == 4
+    assert near(lab["w"], em_width("GA", bold=True) * 11 / 72 + 2 * 11 / 72 + 0.06) and txt["kind"] == "CHEVRON" and txt["bold"] and txt["spacing"] == 110 and txt["gap"] == 4
     assert tab["row_h"] == [0.5, 0.4, 0.4] and tab["fills"] == [(1, None, RED_SOFT), (2, 1, PANEL)] and tab["zebra"] is False and card["step"] == 0.6 and box["kind"] == "ELLIPSE"
     assert [r["updateTableRowProperties"]["rowIndices"] for r in d.reqs if "updateTableRowProperties" in r] == [[0], [1, 2]]  # 行ごとの高さ
     hits = spec_out_hits(d)
@@ -4132,6 +4166,18 @@ def selftest_spec():
     w = "\n".join(d.warnings)
     assert w.count("収まらない見込み") == 6 and "items[9]（card）" in w and "items[2]（card）: h 0.6 in では" in w and "items[3].items[0]（card）" in w and "items[5]（text）" in w and "items[6]（stat）" in w, w  # 塗りのない文字は見ない
     assert "items[8]（card）" in w and "items[7]" not in w, w
+    _, els = run({"title": "t", "body": [{"type": "card", "icon": "tabler:database", "valign": "middle", "head": "kuromoji（Java）", "text": "Lucene の日本語", "w": 2.3, "h": 0.8}]})
+    hd, tx = (next(e for e in els if e["loc"] == f"spec.body[0].{k}") for k in ("head", "text"))
+    assert near(hd["h"], 0.4) and near(tx["y"], hd["y"] + hd["h"] + HEAD_GAP)  # 太字の見出しは Bold の字幅（1.47 in）で 1.44 in の枠から折れる。本文はその下（2026-10-19。Regular の字幅で 1 行と見て、本文に重なった）
+    assert card_top(5, "見出し") == 0.5 and near(card_top(2.5, "長い見出しが二行に折れるカード"), 0.7)  # d.card も、折り返す見出しの分だけ本文を下げる
+    kj = "kuromoji（Java）"  # Regular で 1 行、Bold で 2 行になる幅（12pt で 1.44 in）。太字で描く部品は、どれも太字の幅で見込む
+    assert est_lines(kj, 1.44, 12) == 1 and est_lines(kj, 1.44, 12, bold=True) == 2
+    assert sp.measure({"type": "text", "text": kj, "size": 12, "bold": True}, 1.44, "t") > sp.measure({"type": "text", "text": kj, "size": 12}, 1.44, "t")
+    assert sp.fixed_w({"type": "label", "text": kj, "w": "fit"}) > sp.fixed_w({"type": "label", "text": kj, "w": "fit", "bold": False})  # 札は既定で太字
+    assert table_h([1.64], [[kj]], 12, 0) > table_h([1.64], [[kj]], 12, 0, header=False, first_col=False)  # 表の見出しの行と 1 列目
+    narrow = 1.44 + 2 * PAD + 2 * INSET  # 本文の枠の内側が 1.44 in のカード
+    assert near(card_h(narrow, items=[(kj, "説明")], size=12) - card_h(narrow, items=[("短い", "説明")], size=12), 12 * 1.2 * 1.25 / 72)  # 項目の見出しは太字
+    assert all_bold([(kj, {"bold": True})]) and not all_bold([(kj, {"bold": True}), "地の文"]) and all_bold(kj, True) and widest_em(f"**{kj}**") == em_width(kj, bold=True)
     d, els = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [  # 位置の確かめ（tangles）。囲みの中の線と、線の両端の部品は数えない
         {"type": "box", "x": 0, "y": 0, "w": 9, "h": 3, "fill": "PANEL"},
         {"type": "label", "id": "a", "text": "A", "x": 0.2, "y": 1, "w": 2, "h": 0.6}, {"type": "label", "id": "m", "text": "途中", "x": 3.5, "y": 1, "w": 1.2, "h": 0.6},
