@@ -197,6 +197,26 @@ def wrap_lines(s, avail, size, mono=False, bold=False):
     return n, cur
 
 
+def run_lines(runs, avail, mono=False):
+    """runs（(文字, pt, 太字) の並び）の 1 段落を幅 avail（in）で折り返した行数の見込み。wrap_lines と同じ送り方（英数字の語はまとめて次の行へ、
+    1 行より長い語は字で折る）を、文字ごとの大きさと太さで見る（lint の wrap_breaks と同じ）。\n で改行する。"""
+    t = "".join(c for c, *_ in runs)
+    ws = [em_width(ch, mono, b) * sz / 72 for c, sz, b in runs for ch in c]
+    n, cur = 1, 0.0
+    for m in re.finditer(r"[!-~]+| +|\n|.", t):
+        if m.group() == "\n":
+            n, cur = n + 1, 0.0
+            continue
+        a, z = m.span()
+        for k, e in ([(k, k + 1) for k in range(a, z)] if sum(ws[a:z]) > avail + 1e-9 else [(a, z)]):
+            w = sum(ws[k:e])
+            if cur + w > avail + 1e-9 and cur > 0:
+                n, cur = n + 1, (0.0 if t[k].isspace() else w)
+            else:
+                cur += w
+    return n
+
+
 def est_lines(s, avail, size, mono=False, bold=False):
     """幅 avail（in。文字の枠の内側）に size pt で置いたときの行数の見込み。\n と \v で改行する。英数字の語は行をまたがない
     （1 字ずつ詰めて数えると、英語の多いカードで 1 行少なく見込み、h を省いたカードから文字がはみ出した。2026-10-13）。"""
@@ -1208,7 +1228,7 @@ def image_ratio(path):
 def spec_text_h(parts, avail, size, spacing=None, gap=0, mono=False, bold=False):
     """parts の文字の高さの見込み（in）。段落ごとに、行の高さはその段落でいちばん大きい文字で見る（Deck.text と同じく、行間を省けば 2 行以上で 125、
     基準の 2 倍以上の大きさの段落は 100）。gap は段落の間（pt）。mono は英数字を等幅の幅で見る（Deck.text の mono と同じ）。bold は太さを書いていない文字の太さ（Deck.text の bold と同じ）。
-    ponytail: 大きさの違う文字が交ざる段落は、幅を足して割るだけで、語の送りは見ない"""
+    大きさか太さの違う文字が交ざる段落は、run_lines で文字ごとの幅を見て、語ごとに折り返す。"""
     paras = [[]]
     for p in [parts] if isinstance(parts, str) else parts:
         t, sz, b = (p, size, bold) if isinstance(p, str) else (p[0], p[1].get("size", size), p[1].get("bold", bold))
@@ -1222,8 +1242,8 @@ def spec_text_h(parts, avail, size, spacing=None, gap=0, mono=False, bold=False)
     for q in paras:
         big = max([sz for t, sz, _ in q if t] or [size])
         pb = next((b for t, _, b in q if t), bold)  # 太さが交ざらない段落の太さ
-        if len({sz for t, sz, _ in q if t}) > 1 or len({b for t, _, b in q if t}) > 1:  # 大きさか太さの違う文字が交ざる段落は、文字ごとの幅を足して行数を見る（行の高さはいちばん大きい文字）
-            n = max(1 + sum(t.count("\n") for t, *_ in q), math.ceil(sum(em_width(t, mono, b) * sz / 72 for t, sz, b in q) / avail))
+        if len({sz for t, sz, _ in q if t}) > 1 or len({b for t, _, b in q if t}) > 1:  # 大きさか太さの違う文字が交ざる段落（行の高さはいちばん大きい文字）
+            n = run_lines(q, avail, mono)
         else:
             n = est_lines("".join(t for t, *_ in q) or " ", avail, big, mono, pb)
         h += n * big * 1.2 * (100 if big >= 2 * size else sp) / 100 / 72
@@ -4177,6 +4197,8 @@ def selftest_spec():
     assert table_h([1.64], [[kj]], 12, 0) > table_h([1.64], [[kj]], 12, 0, header=False, first_col=False)  # 表の見出しの行と 1 列目
     narrow = 1.44 + 2 * PAD + 2 * INSET  # 本文の枠の内側が 1.44 in のカード
     assert near(card_h(narrow, items=[(kj, "説明")], size=12) - card_h(narrow, items=[("短い", "説明")], size=12), 12 * 1.2 * 1.25 / 72)  # 項目の見出しは太字
+    assert near(sp.measure({"type": "card", "text": "**MMMM** MMMMM **MMMM**"}, 1.36, "c"), 0.1 + 3 * 11 * 1.2 * 1.25 / 72 + 2 * INSET + 0.15)  # 太さの交ざる段落も語ごとに折り返す（3 語が 3 行。PR #69 のレビュー）
+    assert run_lines([("あ" * 9, 11, False), (" Codex", 11, True)], 10 * 11 / 72) == 2 and run_lines([("a\nb", 11, False)], 1) == 2
     assert all_bold([(kj, {"bold": True})]) and not all_bold([(kj, {"bold": True}), "地の文"]) and all_bold(kj, True) and widest_em(f"**{kj}**") == em_width(kj, bold=True)
     d, els = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [  # 位置の確かめ（tangles）。囲みの中の線と、線の両端の部品は数えない
         {"type": "box", "x": 0, "y": 0, "w": 9, "h": 3, "fill": "PANEL"},
