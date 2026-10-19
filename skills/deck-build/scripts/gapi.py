@@ -210,7 +210,7 @@ def guard(fid, rev, key, src, stop=True):
         return why
     if why:
         sys.exit("組み直すと、画面での直しが消え、コメントは付け先を失う: " + "、".join(why)
-                 + f"。直しとコメントへの対応を {src} に入れてから、--force を付けて組み直す")
+                 + f"。直しとコメントへの対応を {src} に入れてから、--force を付けて組み直す（コメントを全部見るのは deck-comments の comments.py）")
 
 
 def stamp(fid, rev, key):  # 組んだときの版を、Drive のファイルの appProperties に残す（guard が比べる）

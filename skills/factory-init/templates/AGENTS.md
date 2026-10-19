@@ -82,7 +82,7 @@ rules/<スキル>/<ファイル>                         … このワークス�
 rules/deck-build/checks.py                        … このワークスペースの点検（lint が読み込む）
 themes/slides/<名前>.json                         … スライドのテーマ（色・書体・表紙と扉のレイアウト。テンプレートの URL は factory.toml の [slides.templates]）
 assets/                                           … 自分だけの画像（ページの JSON の "src": "asset:<名前>" が先に探す）
-.factory/                                         … スクリプトが書く記録（lint・dreaming）と、顧客の profile の前の版。手で直さない
+.factory/                                         … スクリプトが書く記録（lint・dreaming・コメントの見張り）と、顧客の profile の前の版。手で直さない
 factory.toml                                      … 人ごとに変わる設定値（スクリプトが読む）
 references_index.md                               … 過去に使った資料の索引
 ```
