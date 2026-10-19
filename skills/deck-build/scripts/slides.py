@@ -743,8 +743,10 @@ class Deck:
     def arrow(self, sid, x1, y1, x2, y2, color=SUB, head=True, dash=False, weight=1.25, link=None, bent=False):
         """細い線。横の矢印は、両側の箱の上下の中央に引く（visual.md の 4。lint が見る）。dash で点線（「できるが手間」などの意味）、weight は太さ（pt）。
         link は (始めの図形の ID, 辺, 終わりの図形の ID, 辺) で、線を四角の図形の辺の中央（接続点）につなぐ（画面で箱を動かしても付いてくる）。辺は top・left・bottom・right。
-        (x1, y1)・(x2, y2) はその接続点に置く（Google がつないだ点に引き直す）。bent は折れ線（両端をつないだときだけ。横・縦・横か縦・横・縦の形に Google が引く）。
-        [slides_py-024] 2026-10-16 の sandbox で、つないだ線の形、グループの中の図形につなげること、つないでいない折れ線は形が崩れることを確かめた。"""
+        (x1, y1)・(x2, y2) はその接続点に置く（Google がつないだ点に引き直す）。bent は折れ線（両端をつないだときだけ。つないだ辺に合わせて、横・縦・横、縦・横・縦、1 回だけ折れる形に Google が引く）。
+        [slides_py-024] 2026-10-16 の sandbox で、つないだ線の形、グループの中の図形につなげること、つないでいない折れ線は形が崩れることを確かめた。
+        2026-10-19 の sandbox で、横の辺から上下の辺（縦の辺から左右の辺）につないだ折れ線が、1 回だけ折れる形（BENT_CONNECTOR_2）になることと、
+        中央がそろって幅か高さが 0 の折れ線は作れないことを確かめた（SpecPage.link の hv・vh と、そろった bent をまっすぐ引くこと）。"""
         if bent and not link:
             raise ValueError("折れ線（bent）は、両端を図形につないだときだけ引ける")
         e = self.oid()
@@ -919,7 +921,7 @@ SPEC_EL = {  # type → (要るキー, 書けるキー)
     "icon": ({"name": "s"}, {"size": "p", "color": "c"}),
     "num": ({"n": "ns"}, {"size": tuple(NUM), "fill": "c"}),
     "box": ({}, _BOX),
-    "arrow": ({"from": "pt", "to": "pt"}, {"color": "c", "head": "b", "dash": "b", "weight": "p", "route": ("straight", "bent"), "label": "md",
+    "arrow": ({"from": "pt", "to": "pt"}, {"color": "c", "head": "b", "dash": "b", "weight": "p", "route": ("straight", "bent", "hv", "vh"), "label": "md",
                          "label_side": ("top", "bottom", "left", "right"), "offset": "f"}),  # label は線の札、label_side はその置き場所、offset は線を横（縦）にずらす in
     "gantt": ({"cols": "cols", "rows": "grows"}, {"today": "p"}),  # 予定表（slides-010）
     "bars": ({"items": "bitems"}, {"unit": "s", "horizontal": "b", "hot": "ints"}),  # 1 系列の棒グラフ（visual.md の 5）
@@ -1676,18 +1678,32 @@ class SpecPage:
             return self.ids[v]
         (ax, ay, aw, ah), (bx, by, bw, bh) = end(e["from"], "from"), end(e["to"], "to")
         a, b = (self.anchors.get(v) if isinstance(v, str) else None for v in (e["from"], e["to"]))
-        bent, off = e.get("route") == "bent", e.get("offset", 0)
-        if off and (bent or not all(isinstance(v, str) for v in (e["from"], e["to"]))):
+        route, off = e.get("route", "straight"), e.get("offset", 0)
+        bent, elbow = route == "bent", route in ("hv", "vh")
+        if off and (route != "straight" or not all(isinstance(v, str) for v in (e["from"], e["to"]))):
             sys.exit(f"{loc}（arrow）.offset: 線をずらすのは、両端を id で指したまっすぐの矢印だけ（折れ線と [x, y] の端には書けない）")
         boxed = bool(a and b)
         if off:  # ずらした線は辺の中央の接続点に付かないので、図形につながず、箱の辺から辺へ引く（画面で箱を動かすと付いてこない）
             a = b = None
-        if bent and not (a and b):
-            sys.exit(f"{loc}（arrow）.route: 折れ線（bent）は、両端を id でつなげる部品（card・code・box と、中央寄せの label・stat・塗りか枠線のある text。shape は四角か角丸）に引く")
+        if route != "straight" and not (a and b):
+            sys.exit(f"{loc}（arrow）.route: 折れ線（{route}）は、両端を id でつなげる部品（card・code・box と、中央寄せの label・stat・塗りか枠線のある text。shape は四角か角丸）に引く")
         # 両端がつなげる部品なら、図形につなぐ（画面で動かしても付いてくる）。つないだ線は接続点（辺の中央）から引くので、間を空けない
         pa, pb = (ARROW_PAD if (aw or ah) and not boxed else 0), (ARROW_PAD if (bw or bh) and not boxed else 0)  # [x, y] の端はその点まで
         sites = None
-        if not (aw or ah or bw or bh):
+        if elbow:  # 1 回だけ折れる線。hv は横に出て相手の上か下の辺に入り、vh は縦に出て相手の左か右の辺に入る
+            acx, acy, bcx, bcy = ax + aw / 2, ay + ah / 2, bx + bw / 2, by + bh / 2
+            if route == "hv":
+                if ax <= bcx <= ax + aw or by <= acy <= by + bh:
+                    sys.exit(f"{loc}（arrow）.route: hv は、相手の箱の中央が始めの箱の左右の外にあり、始めの箱の中央が相手の箱の上下の外にあるときだけ引ける（ほかは bent か、まっすぐの矢印にする）")
+                (x1, s1), (y2, s2) = (ax + aw, "right") if bcx > acx else (ax, "left"), (by + bh, "bottom") if acy > bcy else (by, "top")
+                y1, x2 = acy, bcx
+            else:
+                if ay <= bcy <= ay + ah or bx <= acx <= bx + bw:
+                    sys.exit(f"{loc}（arrow）.route: vh は、相手の箱の中央が始めの箱の上下の外にあり、始めの箱の中央が相手の箱の左右の外にあるときだけ引ける（ほかは bent か、まっすぐの矢印にする）")
+                (y1, s1), (x2, s2) = (ay + ah, "bottom") if bcy > acy else (ay, "top"), (bx, "left") if bcx > acx else (bx + bw, "right")
+                x1, y2 = acx, bcy
+            sites = (s1, s2)
+        elif not (aw or ah or bw or bh):
             x1, y1, x2, y2 = ax, ay, bx, by
         elif bx >= ax + aw or ax >= bx + bw:  # 左右に離れている。向き合う辺の中央どうしを結ぶ（中央が同じ高さなら横の矢印。違えば斜め。
             # 重なる範囲の中央に横に引くと、どちらの箱の中央にも付かない。2026-10-16 の見本で 0.25 in ずれた）
@@ -1704,16 +1720,22 @@ class SpecPage:
             sites = ("bottom", "top") if by >= ay + ah else ("top", "bottom")
         else:
             sys.exit(f"{loc}（arrow）: 両端の部品が重なっているので引けない")
-        if boxed and not bent and abs(x1 - x2) > 0.01 and abs(y1 - y2) > 0.01:  # ずらした線（offset）も、両端の箱の中央からずらすので同じ  # 2026-10-16 の依頼文の試しで、枝の 1 本だけ直線にして斜めになった
+        if route != "straight":  # Google は幅か高さが 0 の折れ線を作れず、build が止まる。along は出る向き、across はそれと直交する向きの長さ
+            along, across = (abs(x1 - x2), abs(y1 - y2)) if sites[0] in ("left", "right") else (abs(y1 - y2), abs(x1 - x2))
+            if along < 0.01 or elbow and across < 0.01:  # 箱の辺が接している（bent）か、折れる前か後が短い（hv・vh）
+                sys.exit(f"{loc}（arrow）.route: {route} の線に 0.01 in より短い区間ができる（箱の間が狭いか、折れる前か後が短い）。箱を離すか、まっすぐの矢印にする")
+            if across < 0.01:
+                bent = False  # 中央がそろった箱の折れ線は、まっすぐ引く
+        if boxed and route == "straight" and abs(x1 - x2) > 0.01 and abs(y1 - y2) > 0.01:  # ずらした線（offset）も、両端の箱の中央からずらすので同じ  # 2026-10-16 の依頼文の試しで、枝の 1 本だけ直線にして斜めになった
             self.warns.append(f"{loc}: 矢印が斜めになる。枝分かれなら、どの枝も \"route\": \"bent\" にする（中央が同じ高さの枝はまっすぐ引かれる）か、両端の箱の高さをそろえる")
         self.emit("arrow", loc, e, x1=x1, y1=y1, x2=x2, y2=y2, color=spec_color(e.get("color", "SUB")), head=e.get("head", True), dash=e.get("dash", False), weight=e.get("weight", 1.25),
-                  **({"link": [a, sites[0], b, sites[1]], "bent": bent} if a and b else {}))
+                  **({"link": [a, sites[0], b, sites[1]], "bent": bent or elbow} if a and b else {}))
         pts = [(x1, y1), (x2, y2)]
+        if elbow:
+            pts[1:1] = [(x2, y1) if route == "hv" else (x1, y2)]
         if bent:  # Google は横・縦・横（縦・横・縦）の真ん中で折る（見込み）
             m = (x1 + x2) / 2 if sites[0] in ("left", "right") else (y1 + y2) / 2
             pts[1:1] = [(m, y1), (m, y2)] if sites[0] in ("left", "right") else [(x1, m), (x2, m)]
-            # 両端の中央がそろうと真ん中の区間の長さが 0 になり、札を横の線の向きに置いてしまう。1 本の直線に並ぶ折れ点を外す
-            pts = [pts[0], *(b for a, b, c in zip(pts, pts[1:], pts[2:]) if abs((b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])) > 1e-9), pts[-1]]
         lab = None
         if "label_side" in e and "label" not in e:
             sys.exit(f"{loc}（arrow）.label_side: label がない")
@@ -1750,7 +1772,8 @@ class SpecPage:
         for loc, pts, _, ends, lab in self.lines:
             for l2, k2, r in rs:
                 if l2 not in ends and not point_in(pts[0], r) and not point_in(pts[-1], r) and any(seg_hits(p, q, r) for p, q in zip(pts, pts[1:])):
-                    self.warns.append(f"{loc}: 斜めの線の札（label）が線に重なる。両端の高さをそろえるか、折れ線にする" if l2 == lab else
+                    self.warns.append((f"{loc}: 斜めの線の札（label）が線に重なる。両端の高さをそろえるか、折れ線にする" if len(pts) == 2 else
+                                       f"{loc}: 折れ線の札（label）が線に重なる。label_side で反対の側に置くか、札を置く区間を長くする") if l2 == lab else
                                       f"{loc}: 矢印の線が {l2}（{k2}）の上を通る。部品か矢印の端を動かす")
         heads = [(loc, pts[-1]) for loc, pts, head, _, _ in self.lines if head]
         for i, (l1, p) in enumerate(heads):
@@ -1866,7 +1889,7 @@ SPEC_UNIT = {"w": "幅（in）", "h": "高さ（in）", "x": "frame の左上か
              "size": "pt", "icon.size": "in", "num.size": "small は図の中の印、medium はカードと手順（既定）、large は大きな段",
              "variant": "会社のテンプレートの表紙・扉のパターンの番号（テンプレートの見本のページにある。テンプレートがなければ 1 だけ）", "gap": "部品の間（in）", "id": "矢印の from・to で指す名前", "spacing": "行間（%）", "para_gap": "段落の間（pt）",
              "pad": "箱の端と文字の間（in）", "radius": "角の丸み（in）", "step": "項目の間隔（in）",
-             "route": "bent は折れ線（両端を id でつないだとき）。id の両端が箱なら、線は箱につながる", "today": "今日の縦線の位置（1 が 1 列目の左端、1.5 が 1 列目の中ほど）",
+             "route": "bent は折れ線（横・縦・横か縦・横・縦）。hv は横に出て相手の上か下の辺に入り、vh は縦に出て相手の左か右の辺に入る（1 回だけ折れる）。折れ線は両端を id でつないだとき。id の両端が箱なら、線は箱につながる", "today": "今日の縦線の位置（1 が 1 列目の左端、1.5 が 1 列目の中ほど）",
              "label_side": "札の置き場所。横の線は top（既定）か bottom、縦の線は right（既定）か left",
              "offset": "線を箱の中央からずらす in。横の線は下が正、縦の線は右が正。ずらした線は箱につながない（同じ 2 つの箱の間に 2 本引くとき）",
              "bars.unit": "数のあとに付ける単位", "stat.unit": "単位（数字の半分の大きさ）", "horizontal": "横の棒（名前が長い・順位）。既定は縦の棒（時の流れ）", "bars.hot": "強調する棒の番号（1 から。赤）",
@@ -3967,6 +3990,34 @@ def selftest_spec():
     d, bent = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [{"type": "label", "id": "a", "text": "A", "x": 0, "y": 0, "w": 2},
         {"type": "label", "id": "b", "text": "B", "x": 0, "y": 2, "w": 2}, {"type": "arrow", "from": "a", "to": "b", "route": "bent", "label": "transfer"}]}]})
     assert not d.warnings and near(next(e for e in bent if e["call"] == "text")["x"], arr["x1"] + 2 * LABEL_GAP), d.warnings  # 中央のそろった折れ線も縦の線の右（PR #47 のレビュー）
+    assert not next(e for e in bent if e["call"] == "arrow")["bent"]  # 中央のそろった折れ線は、まっすぐ引く（Google は幅 0 の折れ線を作れない）
+    try:  # 辺の接した階段の箱の折れ線は、まっすぐにすると箱の辺の上を通るので止める（round 3 のレビュー）
+        run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [{"type": "label", "id": "a", "text": "A", "x": 0, "y": 0, "w": 2, "h": 0.6},
+            {"type": "label", "id": "b", "text": "B", "x": 2, "y": 1.5, "w": 2, "h": 0.6}, {"type": "arrow", "from": "a", "to": "b", "route": "bent"}]}]})
+        raise AssertionError("階段の bent")
+    except SystemExit as ex:
+        assert "0.01 in より短い区間" in str(ex), ex
+    elbow = lambda *arrows: run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [{"type": "label", "id": "a", "text": "A", "x": 0, "y": 2, "w": 2, "h": 0.6},
+        {"type": "label", "id": "b", "text": "B", "x": 4, "y": 0, "w": 2, "h": 0.6}, {"type": "label", "id": "c", "text": "C", "x": 0, "y": 0, "w": 2, "h": 0.6}, *arrows]}]})
+    d, els = elbow({"type": "arrow", "from": "a", "to": "b", "route": "hv", "label": "札"}, {"type": "arrow", "from": "b", "to": "a", "route": "vh"},
+                   {"type": "arrow", "from": "b", "to": "a", "route": "hv"}, {"type": "arrow", "from": "a", "to": "b", "route": "vh"})
+    hv, vh, hv2, vh2 = (e for e in els if e["call"] == "arrow")
+    assert len(d.warnings) == 2 and all("（label）の上を通る" in w and "items[2]" in w for w in d.warnings), d.warnings  # 左上へ戻る 2 本は C の上を通る（L 字の線も見る）
+    assert hv["bent"] and hv["link"][1::2] == ["right", "bottom"] and vh["link"][1::2] == ["bottom", "right"], (d.warnings, hv, vh)  # 横に出て下の辺に入る・縦に出て右の辺に入る
+    assert hv2["link"][1::2] == ["left", "top"] and vh2["link"][1::2] == ["top", "left"], (hv2, vh2)  # 左に出て上の辺に入る・上に出て左の辺に入る
+    assert near(hv["x1"], X + 2) and near(hv["y1"], Y_BODY_NOLEAD + 2.3) and near(hv["x2"], X + 5) and near(hv["y2"], Y_BODY_NOLEAD + 0.6)
+    elab = next(e for e in els if e["loc"].endswith(".label"))
+    assert near(elab["x"] + elab["w"] / 2, X + 3.5) and near(elab["y"] + elab["h"] + LABEL_GAP, hv["y1"])  # 札は出る区間（横の線）の上の中央
+    d, _ = elbow({"type": "label", "id": "d", "text": "D", "x": 1.6, "y": 0.8, "w": 1, "h": 0.4},  # 出る区間が短く、上に置いた札を縦の線が通る
+                 {"type": "arrow", "from": "a", "to": "d", "route": "hv", "label": "とても長い札の名前"})
+    assert any("折れ線の札（label）が線に重なる" in w for w in d.warnings), d.warnings
+    for bad, want in [({"type": "arrow", "from": "a", "to": "c", "route": "hv"}, "hv は、"), ({"type": "arrow", "from": "c", "to": "b", "route": "vh"}, "vh は、"),  # 真上の相手には横に出られず、同じ高さの相手には縦に出られない
+                      ({"type": "label", "id": "d", "text": "D", "x": 1.5, "y": 0.8, "w": 1.01, "h": 0.4}, "0.01 in より短い")]:  # 中央が a の右の辺の 0.005 in 外
+        try:
+            elbow(bad, *([{"type": "arrow", "from": "a", "to": "d", "route": "hv"}] if bad["type"] == "label" else []))
+            raise AssertionError(bad)
+        except SystemExit as ex:
+            assert want in str(ex), (bad, ex)
     d, _ = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [{"type": "arrow", "from": [0, 0], "to": [4, 2.5], "label": "斜めの線"}]}]})
     assert any("札（label）が線に重なる" in w for w in d.warnings), d.warnings  # 斜めの線の上の中央に置いた札は、線にかかる（fixture 04 の子が見つけた）
     assert near(lab["x"], arr["x1"] + 2 * LABEL_GAP) and near(lab["y"] + lab["h"] / 2, (arr["y1"] + arr["y2"]) / 2)  # 縦の線は右の中ほど
