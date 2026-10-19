@@ -1,4 +1,4 @@
-{"apiVersion": "slides/v1", "kind": "Page",
+{"apiVersion": "slides/v1", "kind": "page",
  "title": "数字を強調する", "lead": "大きな数字と単位、何の数かを 1 つの箱に組む", "kicker": "stat",
  "body": [
   {"type": "row", "items": [

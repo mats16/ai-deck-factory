@@ -1,4 +1,4 @@
-{"apiVersion": "slides/v1", "kind": "Page",
+{"apiVersion": "slides/v1", "kind": "page",
  "title": "row で書けない図は frame に置く", "lead": "囲みと枝分かれは位置で置き、矢印は id で箱につなぐ（枝分かれは折れ線、線の名前は label）", "kicker": "frame・grid",
  "body": [
   {"type": "frame", "h": 2.4, "items": [

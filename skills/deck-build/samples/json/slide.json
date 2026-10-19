@@ -1,4 +1,4 @@
-{"apiVersion": "slides/v1", "kind": "Page", "type": "slide", "bg": "PANEL", "foot": true,
+{"apiVersion": "slides/v1", "kind": "page", "type": "slide", "bg": "PANEL", "foot": true,
  "body": [
   {"type": "stack", "gap": 0.2, "items": [
     {"type": "text", "text": "{28:**型のないページ**}"},

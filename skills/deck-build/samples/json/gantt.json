@@ -1,4 +1,4 @@
-{"apiVersion": "slides/v1", "kind": "Page",
+{"apiVersion": "slides/v1", "kind": "page",
  "title": "移行は 12 月に終え、1 月から使い始める", "lead": "月ごとの予定。濃紺は決まったもの、淡い灰色は終わったもの、点線の枠は未定のもの、淡い赤は遅らせられないもの",
  "kicker": "gantt",
  "body": [

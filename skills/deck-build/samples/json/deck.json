@@ -1,4 +1,4 @@
-{"apiVersion": "slides/v1", "kind": "Deck",
+{"apiVersion": "slides/v1", "kind": "deck",
  "name": "JSON のページの見本｜Internal Only",
  "theme": "visual",
  "pages": ["cover.json", "divider.json", "text.json", "cards.json", "stat.json", "table.json", "diagram.json", "arrows.json", "gantt.json", "bars.json", "charts.json", "combo.json", "slide.json", "dark.json"]}

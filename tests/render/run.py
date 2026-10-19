@@ -84,7 +84,7 @@ def main():
         shutil.copy(f, build)
     c = json.loads((SAMPLES / "component.json").read_text())  # 部品 1 つのファイルはデッキに並べられないので、型のないページに置く
     body = {k: v for k, v in c.items() if k not in ("apiVersion", "kind")}
-    (build / "component_page.json").write_text(json.dumps({"apiVersion": "slides/v1", "kind": "Page", "type": "slide", "body": [body], "note": "部品 1 つ。"}, ensure_ascii=False))
+    (build / "component_page.json").write_text(json.dumps({"apiVersion": "slides/v1", "kind": "page", "type": "slide", "body": [body], "note": "部品 1 つ。"}, ensure_ascii=False))
     deck = json.loads((SAMPLES / "deck.json").read_text())
     deck["pages"].append("component_page.json")
     (build / "deck.json").write_text(json.dumps(deck, ensure_ascii=False))

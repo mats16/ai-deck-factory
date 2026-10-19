@@ -1,4 +1,4 @@
-{"apiVersion": "slides/v1", "kind": "Page",
+{"apiVersion": "slides/v1", "kind": "page",
  "title": "矢印は上下にも引き、枝分かれは折れ線にする", "lead": "上下に離れた箱は縦に引き、ずれた箱と 1 つから分かれる枝は折れ線にする", "kicker": "arrow",
  "body": [
   {"type": "frame", "h": 2.8, "items": [

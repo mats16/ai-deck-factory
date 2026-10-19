@@ -1,4 +1,4 @@
-{"apiVersion": "slides/v1", "kind": "Theme",
+{"apiVersion": "slides/v1", "kind": "theme",
  "description": "見本のテーマ。会社のテンプレートから作るテーマの書き方（書かない役割は visual の色、書かない値は既定）",
  "font": "Noto Sans JP", "mono": "Cascadia Mono",
  "copyright": "© 2026 Example, Inc. All rights reserved.",

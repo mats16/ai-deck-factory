@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """AI Deck Factory のテンプレートを作る・合わせ直す（../slides.md の 3。会社のテンプレートから作る流れは ../../deck-template/SKILL.md）。
-テーマはテーマのファイル（kind Theme。組み込みの ../themes/<名前>.json と、ワークスペースの themes/slides/<名前>.json）。色は役割の名前で書く。
+テーマはテーマのファイル（kind theme。組み込みの ../themes/<名前>.json と、ワークスペースの themes/slides/<名前>.json）。色は役割の名前で書く。
 テーマのファイルだけを見る（形と役割の組のコントラスト）のは slides.py lint <ファイル>（Google を読まない）。
 usage:
   template.py audit <Google Slides の URL>  元にするテンプレートを読み、ページの大きさ・マスターの配色とコントラスト・レイアウト・書体と大きさ・和文の有無を出す（変えない）

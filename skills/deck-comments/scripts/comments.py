@@ -261,7 +261,7 @@ def selftest():
         b.mkdir()
         (b / "p05.json").write_text('{\n  "title": "売上は **前年の 2 倍**",\n  "body": "ほか"\n}\n')
         (b / "doc.md").write_text("# 要旨\n\n売上は前年の 2 倍になった。\n")
-        (b / "deck.json").write_text('{"apiVersion": "slides/v1", "kind": "Deck", "name": "x", "pages": ["p01.json", "p05.json"]}')
+        (b / "deck.json").write_text('{"apiVersion": "slides/v1", "kind": "deck", "name": "x", "pages": ["p01.json", "p05.json"]}')
         assert where("売上は前年の 2 倍", b) == ["doc.md:3", "p05.json:2"]
         assert where("ない文", b) == [] and where("x", b) == [] and where("売上", root / "no") == []
         T = lambda h: f"2026-10-19T{h:02d}:00:00.000Z"

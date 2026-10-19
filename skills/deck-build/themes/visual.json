@@ -1,6 +1,6 @@
 {
  "apiVersion": "slides/v1",
- "kind": "Theme",
+ "kind": "theme",
  "description": "既定の配色。濃紺の扉、淡い Oat の本文面、赤のアクセント。会社の色の指定がない資料（勉強会、技術の説明、提案）",
  "colors": {
   "NAVY": "1B3139",

@@ -26,7 +26,7 @@ python3 $K/slides.py dry [pages_<担当>.py | <ページ>.json] [<URL>]  # 組�
 python3 $K/slides.py resolve <ページ>.json [<URL>]   # JSON のページの解いた形（in の位置とすべての値）を出す（slides-034）
 python3 $K/slides.py schema [--brief]   # JSON のページの書く形の JSON Schema（--brief は型とキーの早見表。ページを書くときはこちらを読む）
 python3 $K/slides.py stats    # JSON のページの形の外の書き方（raw）を、キーごとに使った資料の数で出す（slides-035）
-python3 $K/slides.py upgrade <ファイル>…   # raw のうち形のキーで書けるものを書き換える（slides-035）
+python3 $K/slides.py upgrade <ファイル>…   # raw のうち形のキーで書けるものと、大文字の kind（前の版の Deck・Page・Component・Theme）を書き換える（slides-035）
 python3 $K/slides.py themes   # テーマの名前・説明・テンプレートがあるか・既定か（下の 3）
 python3 $K/slides.py theme <URL> [<名前>] [--force]   # テンプレートかデッキが持つテーマを themes/slides/<名前>.json に書く（下の 3）
 python3 $K/gslides.py check <URL> [--talk]          # 組んだら。lint・テキスト・変えたページの画像（/tmp/slides_<ID の頭 8 字>/）・画像で測る箱の下の余白・changed.json（e2e）
@@ -68,7 +68,7 @@ python3 $K/slides.py merge fix_a.py fix_b.py          # pages.py の資料で、
 - [slides-034] **ページは JSON で書く（`slides/v1`）。** LLM が書くのは並べ方と意味だけにし、座標・枠・角丸・余白・文字の色はスクリプトが決める。`slides.py` が書く形を解いて、in の絶対位置ですべての値を埋めた形（解いた形）にし、それを `Deck` の同じ名前のメソッドで組む。組む要求、lint、`build` の差分（変えたページだけ組み直す）は、pages.py で書いたときと同じ。コードを走らせずに読めるので、部品やページを 1 つずつ書かせ、組む前に止められる（2026-10-16。代表の 3 枚も、子のページも JSON で書く）。
 
   ```json
-  {"apiVersion": "slides/v1", "kind": "Page",
+  {"apiVersion": "slides/v1", "kind": "page",
    "title": "取り込みは 3 つの段に分ける", "lead": "生のデータを残したまま、使う形へ段ごとに整える", "kicker": "構成",
    "body": [
      {"type": "row", "arrows": true, "items": [
@@ -82,8 +82,8 @@ python3 $K/slides.py merge fix_a.py fix_b.py          # pages.py の資料で、
   ```
 
   - **見本:** 一通りの書き方（すべての型とキー）を入れたデッキが [samples/json/](samples/json/)（`deck.json` と 14 ページ、部品 1 つの `component.json`）にある。書き方に迷ったら、同じ型の見本のページを開く。selftest が、見本が形のすべての型とキーを使っているかと、警告なしに組めるかを確かめる（形にキーを足したら、見本にも足す）。
-  - **ファイルの頭:** どのファイルも頭に `"apiVersion": "slides/v1"` と `"kind"` を書く（k8s にならった。形の版は slides-035）。`kind` は `Deck`（`name` と `pages`）、`Page`（1 ページ）、`Component`（部品 1 つ。型のないページに置いて確かめる）。
-  - **デッキのファイル:** `build/deck.json`（`kind: Deck`）に資料名（`name`。社内向けは `｜Internal Only`、秘密扱いは `｜Confidential` を末尾に書く。資料名はフッターに出ず、秘密区分だけが著作権表示の末尾に残る）とページの順（`pages`）を書き、ページは 1 ページ 1 ファイルの `build/p<構成案の番号>.json`（`kind: Page`）に書く（直しの子がページごとにファイルを直せるように。slides-031）。`pages` には、ページのファイルのパスと、ほかのデッキのファイル（子の `pages_<担当>.json`）のパスだけを並べる（ページは 1 ページ 1 ファイル）。デッキに `theme`（`slides.py themes` の名前）を書くと、`new` が `--theme` を省いたときに使い、`lint`・`dry` がそのテーマのファイルで見て、`build` はデッキのテーマと違えば止める（子の `pages_<担当>.json` には書かない）。`build/` の `deck.json` を `new`・`build`・`lint`・`dry` が読む（pages.py と両方あると止める）。pages.py から呼ぶときは、`make` の中で `d.spec("p05.json")`（ファイルの並びも dict も渡せる。Python から渡す dict は頭を省ける）。
+  - **ファイルの頭:** どのファイルも頭に `"apiVersion": "slides/v1"` と `"kind"` を書く（k8s にならった。形の版は slides-035）。`kind` は小文字で、`deck`（`name` と `pages`）、`page`（1 ページ）、`component`（部品 1 つ。型のないページに置いて確かめる）。
+  - **デッキのファイル:** `build/deck.json`（`kind: deck`）に資料名（`name`。社内向けは `｜Internal Only`、秘密扱いは `｜Confidential` を末尾に書く。資料名はフッターに出ず、秘密区分だけが著作権表示の末尾に残る）とページの順（`pages`）を書き、ページは 1 ページ 1 ファイルの `build/p<構成案の番号>.json`（`kind: page`）に書く（直しの子がページごとにファイルを直せるように。slides-031）。`pages` には、ページのファイルのパスと、ほかのデッキのファイル（子の `pages_<担当>.json`）のパスだけを並べる（ページは 1 ページ 1 ファイル）。デッキに `theme`（`slides.py themes` の名前）を書くと、`new` が `--theme` を省いたときに使い、`lint`・`dry` がそのテーマのファイルで見て、`build` はデッキのテーマと違えば止める（子の `pages_<担当>.json` には書かない）。`build/` の `deck.json` を `new`・`build`・`lint`・`dry` が読む（pages.py と両方あると止める）。pages.py から呼ぶときは、`make` の中で `d.spec("p05.json")`（ファイルの並びも dict も渡せる。Python から渡す dict は頭を省ける）。
   - **ページ:** `type` は `page`（省いたとき。`title`・`lead`・`kicker`・`body`・`band`・`source`・`note`）、`cover`（`title`・`kicker`・`sub`・`variant`・`note`）、`divider`（`num`・`title`・`sub`・`variant`・`note`）、`slide`（型のないページ。`bg`・`foot`・`body`・`source`・`note`）。`band` は結論バンドで、`"文"` か `{"text": …, "sub": …}`。`source` は出典の行（頭の「出典: 」は付く）。
   - **並べ方:** `body` は上から順に 0.3 in ずつ空けて並べる（本文の左端と幅、リードの有無で決まる上端から）。`stack` は縦に 0.24 in ずつ、`row` は横に並べて高さを中身のいちばん高いものにそろえる（カード・箱・札・コード・塗りのある文字が伸びる）。`row` の幅は、`num`・`icon`、`w` を書いた部品と `"w": "fit"` の札はその幅、残りを等分する。`"widths": [3, 2]` なら比で分ける。`"arrows": true` で、隣どうしの間に、上下の中央に横の矢印を引く（間は 0.6 in）。`grid` は `cols` の列で折り返す。`gap` で間を変える。
   - **自由に置く図:** `frame`（`h` が要る）の中だけは、部品に `x`・`y`・`w`（frame の左上からの in）を書く。`h` を省くと中身から決める。`frame` は、`row`・`stack`・`grid` で書けない図（枝分かれ、上下にずらした箱、軸の上の点）だけに使う。横に並ぶ流れ（A → B → C）は、`row` の `"arrows": true` に、印のあるカードか `label` を並べる（幅を本文いっぱいに使い、高さと矢印の位置がそろう）。`frame` の箱も `label`（塗りの箱と文字が 1 つの図形）か、印のあるカード（アイコンを置くなら `"valign": "middle"`）で置き、塗りの `box` に文字の `text` を重ねない（塗りの箱の中に文字だけが入っていると止まる。見出しとカードを入れた囲みは置ける）。横 1 列に並べて矢印でつないだ `frame` は、組むときの警告で `row` を勧める。
@@ -108,16 +108,16 @@ python3 $K/slides.py merge fix_a.py fix_b.py          # pages.py の資料で、
   - **コマンド:** `slides.py lint p05.json <URL>`・`dry`（ほかのファイルと同じ。ページへのリンクは親が組むときに見る。`lint` は、既定では前に回したときから変わったページだけを見るので、全部の指摘を見るときは `--all`）、`slides.py resolve p05.json [<URL>]`（解いた形を出す。どこに何を置いたかを確かめる）、`slides.py schema`（書く形の JSON Schema。structured outputs やエディタに渡す）、`slides.py stats`・`upgrade`（slides-035）。
   - **止めるもの:** JSON として読めない、頭の `apiVersion`・`kind` がないか読めない、知らない `type`・キー・色・形、要るキーがない、型が違う、`id` が重なる・ない、frame の外の `x`・`y`、表のセルの記法、表にない行か列の `fills`、ない画像、比の分からない画像に `h` がない、`raw` に書いた引数がメソッドにない、範囲の外の数（大きさ・太さ・行間・`h` は 0 より大きく、間と位置は 0 以上、`cols`・`variant` は 1 以上）、`frame` の外に出る部品と矢印の端、箇条書きの段落と地の文の段落が交ざった、塗りの箱の中に文字だけを重ねた。どれも `p05.json.body[0].items[2]（card）: …` のように場所を付けて止まる。リンク先のページがない、同じページを 2 回並べたも止まる。本文が結論バンドか出典の行に重なる見込みは、組むときの警告に出る。`h` を書いた `card`・`stat`・`label`・塗りか枠線のある `text` の文字か印が、その高さに収まらない見込みも、組むときの警告に出る（見た目のための上下の余白と、`label` の既定の 0.4 in は詰めてよい。1 行の上下中央のカードを 0.6 in にするなど）。
   - **lint の場所:** `slides.py lint` の指摘が文を引いていれば、後ろに部品の場所（`（p05.json.body[1]）`）が付く（`gslides.py check` の指摘には付かない）。
-  - **lint の単位:** `slides.py lint` は、渡したファイルの単位で規則を選ぶ。`deck.json`・pages.py はデッキ全体（すべての規則）。ページのファイル（`kind: Page`）と子の `pages_<担当>.json`・`.py` はページで、デッキ全体を見て決まる規則（1 枚目が表紙か、扉、結論バンドの数、言い切りの見出しの数、社外秘の表示）を出さない。部品 1 つのファイル（`kind: Component`）は部品で、そのうえページの規則（見出し、ノート、出典、ページの下と中ほどの空き、字数）も出さず、部品の中の規則（文字の大きさ・書体・コントラスト・箱の余白・折り返し・言い回しなど）だけを出す。
+  - **lint の単位:** `slides.py lint` は、渡したファイルの単位で規則を選ぶ。`deck.json`・pages.py はデッキ全体（すべての規則）。ページのファイル（`kind: page`）と子の `pages_<担当>.json`・`.py` はページで、デッキ全体を見て決まる規則（1 枚目が表紙か、扉、結論バンドの数、言い切りの見出しの数、社外秘の表示）を出さない。部品 1 つのファイル（`kind: component`）は部品で、そのうえページの規則（見出し、ノート、出典、ページの下と中ほどの空き、字数）も出さず、部品の中の規則（文字の大きさ・書体・コントラスト・箱の余白・折り返し・言い回しなど）だけを出す。
   - **JSON の部品で書けないページ:** 自由な図は `frame` の中に、`box`・`text`・`label`・`arrow`・`image` を位置で置けば組める。形の外の書き方（slides-035 の `raw`）でも書けない部品が要るデッキは、`deck.json` を置かずに pages.py を書き、`make` の中で JSON のページを `d.spec` で順に呼び、そのページだけを関数で書く（`NAME` は pages.py に書く。下の「pages.py の書き方」）。2 つ目の資料で要ったら、JSON の部品に足す（slides-004 と同じ。`factory-kaizen`）。
 - [slides-035] **形の版と、形の外の書き方。** 形は使われ方を見て育てる（2026-10-16）。
   - **版:** ファイルの頭の `apiVersion`（今は `slides/v1`）。上げるのは、キーの意味が変わるとき（名前を変える・外す、既定の動きを変える）だけ。キー・型・記法を足すときは上げない（古いファイルはそのまま読める。古いプラグインは新しいキーを「知らないキー」で止め、update を勧める）。上げたら、前の版のファイルは `slides.py upgrade` で書き換え、組むときも前の版を書き換えて読む。版はキーの意味の約束で、見た目の約束ではない（並べ方の既定の値を変えても上げない。見た目が変わったページは、ページのハッシュで組み直される）。解いた形（`resolve`）には版を付けない（その場で作り、保存しない）。
   - **形の外の書き方:** 形のキーで書けないものは、部品に `"raw": {…}`（並べ方の箱〔`row`・`stack`・`grid`・`frame`〕には書けない。同じ `Deck` のメソッドの引数。上の 2 の表と `slides.py` の docstring。`{"zebra": false}` など）を書く。引数の名前は組む前に確かめる。lint の要確認（「JSON の形の外の書き方」）に出て、形のキーで書けるものには、そのキーが添えられる。Slides API の要求をそのまま書く口は持たない（静的に読めず、順番に意味がある）。`raw` でも書けないものは、pages.py に書く（slides-034 の「JSON の部品で書けないページ」）。
   - **育て方:** `build` は、JSON のページのデッキを組むたびに、使った `raw` のキーと数を、ワークスペースの `.factory/spec_raw.jsonl` に残す（`raw` がなくても残すので、外したキーは数から消える。資料の文は残さない。名前に tmp の入った資料は数えない）。`slides.py stats` が、キーごとに使った資料の数を出す。2 本以上の資料で使ったキーは、形に足す提案にする（dreaming の 5 から `factory-kaizen`）。持ち主が形に足したら、`slides.py` の `SPEC_PROMOTED` に「raw の引数 → 形のキー」を足し、`slides.py upgrade <ファイル>…` で前の資料の `raw` を書き換える（値は形の書き方に直す。`"CENTER"` は `"center"`、`"DARK1"` は `"NAVY"`。直せない値は `raw` に残す。書き換えたファイルは JSON を整え直す）。
-- [slides-031] **ページを別のファイルに分けて書く（子に書かせるとき。`../deck-practices/SKILL.md` の「作業の始め方」の 7 の deck-practices-016）。** 子は担当のページを JSON（slides-034）で、1 ページ 1 ファイルの `build/p<構成案の番号>.json` に書き、構成案の順に並べた `build/pages_<担当>.json`（`{"apiVersion": "slides/v1", "kind": "Deck", "name": "<担当>", "pages": ["p06.json", …]}`）を置く。ほかのファイル（`deck.json`、代表の 3 枚、ほかの担当のページ）は書き換えない。子は組まずに `slides.py lint pages_<担当>.json <URL>` で確かめる（`[p<番号>]` は担当の中の何枚目。`dry` は lint をかけずに、止まるかと組むときの警告だけを見る）。URL は代表の 3 枚を組んだデッキで、`build` と同じく表紙・扉のパターン（`variant`）とテーマをそこから読む（読むだけ。渡さなければパターンは 1 だけで、2 からは止まる）。画像と、ページへのリンクと、ページをまたぐ lint（扉・結論バンドの数など）は、親が組んだあとの `gslides.py check` で見る。親は子のページのファイルを `deck.json` の `pages` に構成案の順に並べ、1 回だけ組む（担当のページが続いていれば `pages_<担当>.json` を 1 つ並べてよい）。1 ページ 1 ファイルにするのは、`/deck-review` の直しの子がページごとにファイルを直せるようにするため（`../deck-review/prompt_fix.md`）。
+- [slides-031] **ページを別のファイルに分けて書く（子に書かせるとき。`../deck-practices/SKILL.md` の「作業の始め方」の 7 の deck-practices-016）。** 子は担当のページを JSON（slides-034）で、1 ページ 1 ファイルの `build/p<構成案の番号>.json` に書き、構成案の順に並べた `build/pages_<担当>.json`（`{"apiVersion": "slides/v1", "kind": "deck", "name": "<担当>", "pages": ["p06.json", …]}`）を置く。ほかのファイル（`deck.json`、代表の 3 枚、ほかの担当のページ）は書き換えない。子は組まずに `slides.py lint pages_<担当>.json <URL>` で確かめる（`[p<番号>]` は担当の中の何枚目。`dry` は lint をかけずに、止まるかと組むときの警告だけを見る）。URL は代表の 3 枚を組んだデッキで、`build` と同じく表紙・扉のパターン（`variant`）とテーマをそこから読む（読むだけ。渡さなければパターンは 1 だけで、2 からは止まる）。画像と、ページへのリンクと、ページをまたぐ lint（扉・結論バンドの数など）は、親が組んだあとの `gslides.py check` で見る。親は子のページのファイルを `deck.json` の `pages` に構成案の順に並べ、1 回だけ組む（担当のページが続いていれば `pages_<担当>.json` を 1 つ並べてよい）。1 ページ 1 ファイルにするのは、`/deck-review` の直しの子がページごとにファイルを直せるようにするため（`../deck-review/prompt_fix.md`）。
 
   ```json
-  {"apiVersion": "slides/v1", "kind": "Deck", "name": "〇〇様_ご説明資料", "pages": [
+  {"apiVersion": "slides/v1", "kind": "deck", "name": "〇〇様_ご説明資料", "pages": [
     "p01.json",
     "pages_a.json",
     "p05.json", "p06.json", "p07.json"]}
@@ -185,9 +185,9 @@ def make(d):
 
 組み込みのテーマは 2 つ（`themes/visual.json`・`themes/company.json`）。役割と色の対応は visual.md の 1。ほかの会社のテンプレートから作るテーマ（会社の書体と色）は `../deck-template/SKILL.md`。
 
-- [slides-036] **テーマはテーマのファイル（`kind: Theme`）に書く。** ワークスペースの `themes/slides/<名前>.json`（ファイルの名前がテーマの名前。英数字と - _）。同じ名前の組み込みのテーマより優先する。ページの JSON と同じ `apiVersion`（slides-035）で、`slides.py schema` に形がある。ドキュメントのテーマも、あとで `themes/docs/<名前>.json` に同じ形で置く。
+- [slides-036] **テーマはテーマのファイル（`kind: theme`）に書く。** ワークスペースの `themes/slides/<名前>.json`（ファイルの名前がテーマの名前。英数字と - _）。同じ名前の組み込みのテーマより優先する。ページの JSON と同じ `apiVersion`（slides-035）で、`slides.py schema` に形がある。ドキュメントのテーマも、あとで `themes/docs/<名前>.json` に同じ形で置く。
   ```json
-  {"apiVersion": "slides/v1", "kind": "Theme",
+  {"apiVersion": "slides/v1", "kind": "theme",
    "description": "アクメの会社の色のテーマ。顧客に出す提案・説明と社外の登壇に使う。社内の勉強会には使わない（visual）",
    "font": "Noto Sans JP", "mono": "Cascadia Mono", "copyright": "© 2026 Acme, Inc. All rights reserved.",
    "colors": {"NAVY": "002B5C", "RED": "E4002B", "TEXT": "303F47", "HEAD": "002B5C"},

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Google Slides を Slides API で直接組む（2026-10-07 に pptx から切り替えた。組み方と落とし穴は ../slides.md）。
-資料ごとの build/deck.json（kind Deck。資料名と、ページのファイルの並び）と、1 ページ 1 つの build/p<番号>.json（kind Page）に書く（../slides.md の slides-034。書く形は schema）。
+資料ごとの build/deck.json（kind deck。資料名と、ページのファイルの並び）と、1 ページ 1 つの build/p<番号>.json（kind page）に書く（../slides.md の slides-034。書く形は schema）。
 前の資料の build/pages.py（NAME・ページの関数・make(d)。部品は Deck のメソッド）も組める。
 usage（資料の build/ で。deck.json か pages.py は今いるフォルダのもの）:
   slides.py new <Drive のフォルダの URL か ID> <Drive 上の名前> [--theme <テーマ>]   テンプレートを複製して組む（テンプレートは factory.toml の [slides.templates] の <テーマ>。
@@ -12,13 +12,13 @@ usage（資料の build/ で。deck.json か pages.py は今いるフォルダ�
                                           作り直したページを /tmp/slides_<ID の頭 8 字>/changed.json に、工程ごとの秒を標準エラーに出す
   slides.py lint [<ファイル>] [<URL か ID>] [--pages 3,5 | --all] [--talk]   組まずに、組む要求を手元で presentations.get の形にして lint をかける（テストの unit。
                                           直すたびに回す）。既定は前に回したときから変わったページ（と要修正が残ったページ。テーマか規則が変わったら全ページ）。テーマはテーマのファイルから読み、Google を読まない
-                                          （URL はテーマのファイルがないデッキだけに要る）。テーマのファイル（kind Theme）を渡すと、形と役割の組のコントラストを見る
+                                          （URL はテーマのファイルがないデッキだけに要る）。テーマのファイル（kind theme）を渡すと、形と役割の組のコントラストを見る
   slides.py dry [<ファイル>] [<URL か ID>]   組まずに make を走らせ、組むときの警告・枚数・ノートのないページを出す（既定は deck.json か pages.py。子が書いた JSON のページの .json か build/pages_<担当>.py を確かめる。
                                           テーマは lint と同じ。../slides.md の 2）
   slides.py resolve [<ファイル>.json] [<URL か ID>]   JSON のページを解いた形（in の位置とすべての値。Deck のメソッドの呼び出し）を出す（../slides.md の slides-034）
   slides.py schema [--brief]   JSON のページの書く形の JSON Schema を出す（--brief は型・キー・色の早見表）
   slides.py stats   JSON のページの形の外の書き方（raw）を、キーごとに使った資料の数で出す（ワークスペースの .factory/spec_raw.jsonl。形に足す候補）
-  slides.py upgrade <ファイル>...   JSON のページの raw のうち、形のキーで書けるものを書き換える
+  slides.py upgrade <ファイル>...   JSON のページの raw のうち、形のキーで書けるものと、大文字の kind を書き換える
   slides.py themes   テーマの名前・説明・テンプレートがあるか・既定か。資料ごとに選ぶ（../../deck-practices/SKILL.md の「作業の始め方」の 5）。
                      [drive] shared_themes と [drive] factory の下の Themes の、[slides.templates] にないテンプレートも候補に出す
   slides.py theme <URL か ID> [<名前>] [--force]   テンプレートかデッキが持つテーマ（マスターの配色・書体・目印）を、ワークスペースの themes/slides/<名前>.json に書く。
@@ -101,7 +101,7 @@ HEAD, CARD, SUB_ON_NAVY, ON_RED = NAMED  # 本文のページの見出しの文�
 THEME_MARK = re.compile(r"ai-deck-factory theme=([A-Za-z0-9_-]+)(?: (\{.*\}))?", re.S)
 THEME_PROP = "adf.theme"  # template.py がテンプレートの Drive のプロパティ（公開。どの OAuth クライアントでも読める）に書くテーマの名前。共有テーマのフォルダでテンプレートを見分ける
 THEMES_DIR = "Themes"  # template.py --from-base がテンプレートを作る Drive のフォルダ。[drive] factory の下（なければ作る）。使うテンプレートは [slides.templates] で 1 つずつ指す
-# テーマのファイル（kind Theme）。組み込みは deck-build/themes/<名前>.json、ワークスペースは themes/slides/<名前>.json（同じ名前ならワークスペースが勝つ）。
+# テーマのファイル（kind theme）。組み込みは deck-build/themes/<名前>.json、ワークスペースは themes/slides/<名前>.json（同じ名前ならワークスペースが勝つ）。
 # ドキュメントのテーマも、あとで themes/docs/<名前>.json に同じ形で置く
 BUILTIN_THEMES = Path(__file__).resolve().parent.parent / "themes"
 WS_THEMES = ("themes", "slides")
@@ -892,7 +892,8 @@ def make_deck(make, name):
 # Deck のメソッドの引数をすべて持つ。slides.py resolve が出す）→ 要求（Deck）。
 # 形の版は k8s にならい、ファイルの頭の apiVersion と kind で持つ。上げるのは、キーの意味が変わるときだけ（足すときは上げない。../slides.md の slides-035）
 API_VERSION = "slides/v1"
-KINDS = ("Deck", "Page", "Component", "Theme")
+KINDS = ("deck", "page", "component", "theme")
+OLD_KINDS = tuple(k.capitalize() for k in KINDS)  # 2026-10-19 より前の kind。止めて、slides.py upgrade が小文字に書き換える
 COLOR_NAMES = ("NAVY", "BG", "RED_ON_NAVY", "PANEL", "NAVY_BLOCK", "GA", "RED_TEXT", "PREVIEW", "SUB", "OSS", "RED", "WHITE", "PUBLIC_PREVIEW",
                "TEXT", "RULE", "RED_SOFT", "STAGE_TEXT", "DECOR", "HEAD", "CARD", "SUB_ON_NAVY", "ON_RED")
 ON_FILL = {"NAVY": ("WHITE", "RED_ON_NAVY"), "NAVY_BLOCK": ("WHITE", "RED_ON_NAVY"), "RED": ("ON_RED", "ON_RED"), "OSS": ("WHITE", "WHITE")}  # 濃い塗り → (文字の色, ***強調*** の色)。ほかの地は TEXT・RED_TEXT
@@ -1927,7 +1928,7 @@ class SpecPage:
 def spec_files(src, base=None, where=None, file=False):
     """src（ファイルのパス、dict、そのどちらかの並び）から (ページ, 画像のパスの起点, 場所, 名前) を順に出す。デッキのページのファイルは、デッキのファイルのあるフォルダから読む。
     名前はページのファイル名（拡張子なし。[名前](#p12) のリンク先）で、ファイルでないページは None。
-    ファイルの頭には apiVersion と kind（Deck・Page・Component）が要る。Python から渡した dict は、書いていなければ中身から kind を決める。"""
+    ファイルの頭には apiVersion と kind（deck・page・component）が要る。Python から渡した dict は、書いていなければ中身から kind を決める。"""
     base = base or Path.cwd()
     if isinstance(src, (str, Path)):
         path, where = base / src, where or str(src)
@@ -1943,23 +1944,23 @@ def spec_files(src, base=None, where=None, file=False):
             yield from spec_files(p, base, None if isinstance(p, str) else f"{where}[{i}]")
         return
     if not isinstance(src, dict):
-        sys.exit(f'{where}: ファイルの頭は {{"apiVersion": "{API_VERSION}", "kind": "Deck"・"Page"・"Component", …}}')
+        sys.exit(f'{where}: ファイルの頭は {{"apiVersion": "{API_VERSION}", "kind": "deck"・"page"・"component", …}}')
     if file or "apiVersion" in src or "kind" in src:
         if (v := src.get("apiVersion")) != API_VERSION:
             sys.exit(f'{where}: ' + (f'apiVersion がない（頭に "apiVersion": "{API_VERSION}" を書く）' if v is None else
                                      f"apiVersion {v!r} は読めない（この slides.py は {API_VERSION}。新しい形ならプラグインを update する）"))
         if (kind := src.get("kind")) not in KINDS:
-            sys.exit(f"{where}: kind {kind!r} はない（{'・'.join(KINDS)}）")
+            bad_kind(where, kind)
     else:
-        kind = "Deck" if "pages" in src else "Component" if src.get("type") in SPEC_EL else "Page"
+        kind = "deck" if "pages" in src else "component" if src.get("type") in SPEC_EL else "page"
     src = {k: v for k, v in src.items() if k not in ("apiVersion", "kind")}
-    if kind == "Deck":
-        spec_check(src, SPEC_DECK, f"{where}（Deck）")
+    if kind == "deck":
+        spec_check(src, SPEC_DECK, f"{where}（deck）")
         for p in src["pages"]:
             yield from spec_files(p, base, p)
-    elif kind == "Theme":
+    elif kind == "theme":
         sys.exit(f"{where}: テーマのファイルはページに並べない（deck.json の theme に名前を書く。テーマのファイルだけを見るなら slides.py lint <ファイル>）")
-    elif kind == "Component":  # 部品 1 つだけのファイルは、型のないページに置く
+    elif kind == "component":  # 部品 1 つだけのファイルは、型のないページに置く
         yield {"type": "slide", "body": [src]}, base, where, None
     else:
         yield src, base, where, Path(where).stem if file else None
@@ -2058,10 +2059,10 @@ def spec_brief():
             out.append(f"{k}{'*' if k in need else ''}（{ty}{'。' + u if (u := spec_unit(kind, k)) else ''}）")
         return " ".join(out)
     lines = [f"# {API_VERSION} の早見表（全部は slides.py schema。見本は samples/json/。* は要るキー）",
-             f'ファイルの頭: {{"apiVersion": "{API_VERSION}", "kind": "Deck"・"Page"・"Component"}}。Deck は 1 ページ 1 ファイルを pages に並べる',
+             f'ファイルの頭: {{"apiVersion": "{API_VERSION}", "kind": "deck"・"page"・"component"}}。deck は 1 ページ 1 ファイルを pages に並べる',
              f"色: {'・'.join(COLOR_NAMES)}（役割の名前だけ。値はテーマが決める。文字の色は塗りと地から決まる）",
              "記法: **太字** ***赤の太字*** {32:文字}（32pt） [名前](URL) [名前](#p12)（p12.json のページ） <br>（段落の中の改行）。\\n で段落、どの段落も「- 」で始めると箇条書き", "",
-             "## デッキ", "Deck: " + keys(SPEC_DECK), "", "## ページ（type。省くと page）"]
+             "## デッキ", "deck: " + keys(SPEC_DECK), "", "## ページ（type。省くと page）"]
     lines += [f"{k}: {keys(v)}" for k, v in SPEC_PAGE.items()]
     lines += ["", "## 部品（type）", "どの部品にも: id（矢印の from・to で指す）、w（幅 in）、h（高さ in。row・stack・grid・gantt と icon・num・arrow は書かない）。"
               "x・y は frame の中だけ。raw は形の外の書き方（lint が要確認に出す）"]
@@ -2117,7 +2118,7 @@ def spec_schema():
                                                              "required": ["head"], "additionalProperties": False}}
     head = {"apiVersion": {"const": API_VERSION}}
 
-    def obj(kind, schema, extra=None, need_type=True, k8s="Component"):
+    def obj(kind, schema, extra=None, need_type=True, k8s="component"):
         need, opt = schema
         props = {"type": {"const": kind}, **head, "kind": {"const": k8s}}
         for k, v in {**need, **opt, **(extra or {})}.items():
@@ -2125,14 +2126,14 @@ def spec_schema():
         return {"type": "object", "properties": props, "required": ([] if not need_type else ["type"]) + list(need), "additionalProperties": False}
     defs = {f"el_{k}": obj(k, v, {g: x for g, x in _GEO.items() if not (k in NO_SIZE and g in ("w", "h")) and not (k in NO_H and g == "h")} | ({} if k in CONTAINERS else _ESC))
             for k, v in SPEC_EL.items()}
-    defs |= {f"page_{k}": obj(k, v, need_type=k != "page", k8s="Page") for k, v in SPEC_PAGE.items()}
+    defs |= {f"page_{k}": obj(k, v, need_type=k != "page", k8s="page") for k, v in SPEC_PAGE.items()}
     defs |= {"element": {"oneOf": [{"$ref": f"#/$defs/el_{k}"} for k in SPEC_EL]}, "page": {"anyOf": [{"$ref": f"#/$defs/page_{k}"} for k in SPEC_PAGE]},
-             "deck": obj("deck", SPEC_DECK, need_type=False, k8s="Deck"), "theme": obj("theme", SPEC_THEME, need_type=False, k8s="Theme")}
+             "deck": obj("deck", SPEC_DECK, need_type=False, k8s="deck"), "theme": obj("theme", SPEC_THEME, need_type=False, k8s="theme")}
     defs["deck"]["properties"].pop("type")
     defs["theme"]["properties"].pop("type")
     root = lambda ref, k8s: {"allOf": [{"$ref": f"#/$defs/{ref}"}], "properties": {"kind": {"const": k8s}}, "required": ["apiVersion", "kind"]}
     return {"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": f"https://github.com/mats16/ai-deck-factory/{API_VERSION}", "title": f"AI Deck Factory のページ（{API_VERSION}）",
-            "anyOf": [root("deck", "Deck"), root("page", "Page"), root("element", "Component"), root("theme", "Theme")], "$defs": defs}
+            "anyOf": [root("deck", "deck"), root("page", "page"), root("element", "component"), root("theme", "theme")], "$defs": defs}
 
 
 SPEC_OUT = "JSON の形の外の書き方（raw）"
@@ -2213,7 +2214,7 @@ def spec_stats(path=None):
 
 
 def spec_upgrade(paths):
-    """JSON のページのファイルの raw のうち、形のキーで書けるもの（spec_promoted）を、そのキーに書き換える。書き換えた数を返す。
+    """JSON のページのファイルの raw のうち、形のキーで書けるもの（spec_promoted）を、そのキーに書き換える。前の版の大文字の kind（OLD_KINDS）も小文字にする。書き換えた数を返す。
     書き換えたファイルは、JSON を整え直して書く（手で付けた改行の位置は残らない。標準ライブラリだけで書き方を保つと、JSON の書き換えの仕組みが要る）。
     形の版（apiVersion）を上げたときの書き換えも、ここに足す（slides-035）。"""
     total = 0
@@ -2231,6 +2232,9 @@ def spec_upgrade(paths):
                 return
             if not isinstance(x, dict):
                 return
+            if "apiVersion" in x and x.get("kind") in OLD_KINDS:  # ファイルの頭と、pages に直に書いたページの頭（部品の raw の kind は別のもの）
+                x["kind"] = x["kind"].lower()
+                n += 1
             raw = x.get("raw")
             for k in list(raw) if isinstance(raw, dict) else []:
                 key = spec_promoted(x.get("type"), k)
@@ -2246,7 +2250,7 @@ def spec_upgrade(paths):
         walk(o)
         if n:
             Path(path).write_text(json.dumps(o, ensure_ascii=False, indent=1) + "\n")
-        print(f"{path}: {n} 個を形のキーに書き換えた")
+        print(f"{path}: {n} 個を書き換えた")
         total += n
     return total
 
@@ -2357,7 +2361,7 @@ def theme_names():
 
 
 def read_theme(path):
-    """テーマのファイル path（kind Theme）を確かめて、テーマの表（colors を開いた平らな dict。theme_values・template.py が読む形）にする。
+    """テーマのファイル path（kind theme）を確かめて、テーマの表（colors を開いた平らな dict。theme_values・template.py が読む形）にする。
     cover・section の名前だけの書き方は {"layout": 名前} にする。書けない値なら場所を付けて止める（組む前に。slides.py lint <ファイル> が見る）。"""
     if not re.fullmatch(r"[A-Za-z0-9_-]+", Path(path).stem):  # 目印（THEME_MARK）と factory.toml の [slides.templates] のキーに、引用符なしで書く
         sys.exit(f"{path}: テーマのファイルの名前は英数字と - _ だけにする（名前がテーマの名前）")
@@ -2365,10 +2369,10 @@ def read_theme(path):
         o = json.loads(Path(path).read_text())
     except (OSError, json.JSONDecodeError) as e:
         sys.exit(f"{path}: 読めない（{e}）")
-    if not isinstance(o, dict) or o.get("apiVersion") != API_VERSION or o.get("kind") != "Theme":
-        sys.exit(f'{path}: ファイルの頭は {{"apiVersion": "{API_VERSION}", "kind": "Theme", …}}')
+    if not isinstance(o, dict) or o.get("apiVersion") != API_VERSION or o.get("kind") != "theme":
+        sys.exit(f'{path}: ファイルの頭は {{"apiVersion": "{API_VERSION}", "kind": "theme", …}}' + ("（kind は小文字。slides.py upgrade で書き換える）" if isinstance(o, dict) and o.get("kind") == "Theme" else ""))
     o = {k: v for k, v in o.items() if k not in ("apiVersion", "kind")}
-    spec_check(o, SPEC_THEME, f"{path}（Theme）")
+    spec_check(o, SPEC_THEME, f"{path}（theme）")
     t = {k: v for k, v in o.items() if k != "colors"} | {k: v.upper() for k, v in o.get("colors", {}).items()}
     for k in ("cover", "section"):
         if k in t:
@@ -2402,7 +2406,7 @@ def theme_mark(name, t):
 
 def theme_file(t):
     """テーマの表 t を、テーマのファイルの形（apiVersion・kind と colors の入れ子）にする（read_theme の逆）。"""
-    out = {"apiVersion": API_VERSION, "kind": "Theme"}
+    out = {"apiVersion": API_VERSION, "kind": "theme"}
     for k in THEME_KEYS:
         if k == "colors":
             if colors := {c: t[c] for c in (*ROLE, *FIXED, *NAMED) if c in t}:
@@ -2850,10 +2854,10 @@ def chosen(files, deck, mark):
         sys.exit("ファイルを選んで組めるのは JSON のページのデッキだけ（pages.py のデッキは、ファイルを渡さずに組む）")
     names = set()
     for f in files:
-        if (kind := file_kind(f)) == "Theme":
+        if (kind := file_kind(f)) == "theme":
             if not (want := theme_path(mark)) or Path(f).resolve() != want.resolve():  # そろえるのはデッキのテーマのファイル（load_theme）。別のファイルを渡して違う値を当てたと思わせない
                 sys.exit(f"{f}: デッキのテーマのファイルは {want or f'（{mark} のファイルがない）'}（テーマを替えるなら slides.py new で作り直す）")
-        elif kind in ("Page", "Deck"):
+        elif kind in ("page", "deck"):
             names |= {n for _, _, _, n in spec_files(f) if n}
         else:
             sys.exit(f"{f}: 読めないか、JSON のページ・デッキ・テーマのファイルでない（選べるのはその 3 つ）")
@@ -3121,7 +3125,7 @@ def load_make(path):
         data = json.loads(Path(path).read_text())
     except (OSError, json.JSONDecodeError) as e:
         sys.exit(f"{path}: 読めない（{e}）")
-    deck = isinstance(data, dict) and data.get("kind") == "Deck"
+    deck = file_kind(path) == "deck"  # 前の版の大文字の kind は、ここで直し方を付けて止める
     return types.SimpleNamespace(NAME=data["name"] if deck and "name" in data else "dry", THEME=data.get("theme") if deck else None, make=lambda d: d.spec(path))
 
 
@@ -3130,20 +3134,28 @@ def declared_theme(path):
     return load_make(path).THEME if path.endswith(".json") else None
 
 
+def bad_kind(where, kind):
+    """kind が KINDS にないので止める。前の版の大文字の kind（OLD_KINDS）なら、直し方を添える。"""
+    sys.exit(f"{where}: kind {kind!r} はない（{'・'.join(KINDS)}" + ("。小文字で書く。slides.py upgrade で書き換える）" if kind in OLD_KINDS else "）"))
+
+
 def file_kind(path):
-    """JSON のファイル path の kind。JSON でない・読めない・頭が dict でなければ None（読めないことは、あとで読むところが場所を付けて止める）。"""
+    """JSON のファイル path の kind。JSON でない・読めない・頭が dict でなければ None（読めないことは、あとで読むところが場所を付けて止める）。
+    前の版の大文字の kind は、ここで直し方を付けて止める（build・plan・lint がファイルを振り分ける前に）。"""
     try:
         o = json.loads(Path(path).read_text()) if path.endswith(".json") else None
     except (OSError, json.JSONDecodeError):
         return None
-    return o.get("kind") if isinstance(o, dict) else None
+    if (kind := o.get("kind") if isinstance(o, dict) else None) in OLD_KINDS:
+        bad_kind(path, kind)
+    return kind
 
 
 def lint_scope(path):
-    """slides.py lint が見る単位。deck.json・pages.py はデッキ全体、部品 1 つのファイル（kind Component）は部品、ほかはページ（子の担当のファイルも）。"""
+    """slides.py lint が見る単位。deck.json・pages.py はデッキ全体、部品 1 つのファイル（kind component）は部品、ほかはページ（子の担当のファイルも）。"""
     if path in ("pages.py", "deck.json"):
         return "deck"
-    if file_kind(path) == "Component":
+    if file_kind(path) == "component":
         return "component"
     return "page"
 
@@ -3219,7 +3231,7 @@ def lint_local(path="pages.py", url=None, talk=False, pages=None):
     テーマは deck_context（テーマのファイルがあれば Google を読まない。url はテーマのファイルがないデッキだけに要る）。pages（番号の集合）のページの指摘だけを出す。
     pages が None なら、前回この pages.py に同じデッキと同じ規則で回したときから変わったページと、前回の要修正が残ったページ（ページの中身のハッシュ pages_of で見る）。
     デッキ全体の規則（扉・結論バンドの数など）とワークスペースの点検はいつも全ページを見る。組んで画像を取るのは区切りだけにする（../slides.md の 1）。"""
-    if file_kind(path) == "Theme":  # テーマのファイル（themes/slides/）は、形と役割の組のコントラストを見る
+    if file_kind(path) == "theme":  # テーマのファイル（themes/slides/）は、形と役割の組のコントラストを見る
         return lint_theme(path)
     if Path(path).parent != Path("."):
         sys.exit(f"lint はファイルのあるフォルダ（build/）で、名前だけを渡して回す: {path}")
@@ -3554,7 +3566,7 @@ def selftest():
                                              for t in map(read_theme, BUILTIN_THEMES.glob("*.json")))  # 配色は 12 の枠をすべて決める（API の決まり）
     with tempfile.TemporaryDirectory() as d:
         f = Path(d, "acme.json")
-        put = lambda o: f.write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Theme", **o}))
+        put = lambda o: f.write_text(json.dumps({"apiVersion": API_VERSION, "kind": "theme", **o}))
         put({"font": "DM Sans", "copyright": "© 2026 Acme, Inc. All rights reserved.", "colors": {"NAVY": "002b5c", "TEXT": "111111", "HEAD": "222222"},
              "cover": ["Title 1", {"layout": "Title 2", "w": 7.08, "tone": "accent"}]})
         acme = read_theme(f)
@@ -3570,7 +3582,8 @@ def selftest():
                 raise AssertionError(f"{bad} を通した")
             except SystemExit as e:
                 assert want in str(e), (bad, str(e))
-        for path, text, want in ((f, json.dumps({"apiVersion": API_VERSION, "kind": "Page", "title": "x"}), '"kind": "Theme"'), (Path(d, "a b.json"), "{}", "英数字")):
+        for path, text, want in ((f, json.dumps({"apiVersion": API_VERSION, "kind": "page", "title": "x"}), '"kind": "theme"'), (f, "[]", '"kind": "theme"'),
+                                 (f, json.dumps({"apiVersion": API_VERSION, "kind": "Theme"}), "小文字"), (Path(d, "a b.json"), "{}", "英数字")):
             path.write_text(text)
             try:
                 read_theme(path)
@@ -3824,20 +3837,20 @@ def selftest_sample():
     for f in root.glob("*.json"):
         o = json.loads(f.read_text())
         kinds.add(o["kind"])
-        if o["kind"] == "Deck":
-            used["Deck"] |= set(o) - {"apiVersion", "kind"}
-        elif o["kind"] == "Theme":
+        if o["kind"] == "deck":
+            used["deck"] |= set(o) - {"apiVersion", "kind"}
+        elif o["kind"] == "theme":
             read_theme(f)
-            used["Theme"] |= set(o) - {"apiVersion", "kind"}
-        elif o["kind"] == "Page":
+            used["theme"] |= set(o) - {"apiVersion", "kind"}
+        elif o["kind"] == "page":
             used["page:" + o.get("type", "page")] |= set(o) - {"apiVersion", "kind", "type"}
             for e in o.get("body", []):
                 el(e)
         else:
             el({k: v for k, v in o.items() if k not in ("apiVersion", "kind")})
     want = {t: set(n) | set(o) for t, (n, o) in SPEC_EL.items()} | {f"page:{t}": set(n) | set(o) for t, (n, o) in SPEC_PAGE.items()}
-    want["Deck"] = set(SPEC_DECK[0]) | set(SPEC_DECK[1])
-    want["Theme"] = set(SPEC_THEME[1])
+    want["deck"] = set(SPEC_DECK[0]) | set(SPEC_DECK[1])
+    want["theme"] = set(SPEC_THEME[1])
     want |= {"gantt.rows": set(GANTT_ROW[0]) | set(GANTT_ROW[1]), "gantt.bars": set(GANTT_BAR[0]) | set(GANTT_BAR[1]) | {f"status:{k}" for k in GANTT_STATUS},
              "gantt.marks": set(GANTT_MARK[0]),  # バーの状態は、どれも見本で組む
              "bars.line": set(BARS_LINE[0]) | set(BARS_LINE[1]), "bars.threshold": set(BARS_THRESHOLD[0]) | set(BARS_THRESHOLD[1])}
@@ -3919,12 +3932,13 @@ def selftest_spec():
         (Path(t) / "img" / "a.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\0" * 8 + (200).to_bytes(4, "big") + (100).to_bytes(4, "big"))
         (Path(t) / "sub").mkdir()
         head = {"apiVersion": API_VERSION}
-        (Path(t) / "sub" / "p.json").write_text(json.dumps({**head, "kind": "Page", "title": "画像", "body": [{"type": "image", "src": "../img/a.png", "w": 4}]}))
-        (Path(t) / "pages_a.json").write_text(json.dumps({**head, "kind": "Deck", "name": "a", "pages": ["sub/p.json"]}))  # 子が担当のページを並べたもの
-        (Path(t) / "cover.json").write_text(json.dumps({**head, "kind": "Page", "type": "cover", "title": "表紙", "kicker": "k", "note": "[画像のページ](#p)"}))
-        (Path(t) / "deck.json").write_text(json.dumps({**head, "kind": "Deck", "name": "資料", "theme": "visual", "pages": ["pages_a.json", "cover.json"]}))
-        for bad, want in [({"kind": "Page", "title": "t"}, "apiVersion がない"), ({"apiVersion": "slides/v2", "kind": "Page", "title": "t"}, "apiVersion 'slides/v2' は読めない"),
-                          ({**head, "kind": "Slide", "title": "t"}, "kind 'Slide' はない"), ([{"title": "t"}], "ファイルの頭は")]:
+        (Path(t) / "sub" / "p.json").write_text(json.dumps({**head, "kind": "page", "title": "画像", "body": [{"type": "image", "src": "../img/a.png", "w": 4}]}))
+        (Path(t) / "pages_a.json").write_text(json.dumps({**head, "kind": "deck", "name": "a", "pages": ["sub/p.json"]}))  # 子が担当のページを並べたもの
+        (Path(t) / "cover.json").write_text(json.dumps({**head, "kind": "page", "type": "cover", "title": "表紙", "kicker": "k", "note": "[画像のページ](#p)"}))
+        (Path(t) / "deck.json").write_text(json.dumps({**head, "kind": "deck", "name": "資料", "theme": "visual", "pages": ["pages_a.json", "cover.json"]}))
+        for bad, want in [({"kind": "page", "title": "t"}, "apiVersion がない"), ({"apiVersion": "slides/v2", "kind": "page", "title": "t"}, "apiVersion 'slides/v2' は読めない"),
+                          ({**head, "kind": "Slide", "title": "t"}, "kind 'Slide' はない（deck"),
+                          ({**head, "kind": "Page", "title": "t"}, "小文字で書く"), ([{"title": "t"}], "ファイルの頭は")]:
             (Path(t) / "bad.json").write_text(json.dumps(bad))
             try:
                 make_deck(lambda x: x.spec(Path(t) / "bad.json"), "x")
@@ -3942,17 +3956,17 @@ def selftest_spec():
                 raise AssertionError("deck.json と違うテーマのデッキに組んだ")
             except SystemExit as e:
                 assert "new で作り直す" in str(e)
-            (Path(t) / "cover.json").write_text(json.dumps({**head, "kind": "Page", "type": "page", "title": "目次", "body": [{"type": "text", "text": "[画像のページ](#p) へ"}]}))
+            (Path(t) / "cover.json").write_text(json.dumps({**head, "kind": "page", "type": "page", "title": "目次", "body": [{"type": "text", "text": "[画像のページ](#p) へ"}]}))
             dl = make_deck(m.make, m.NAME)
             link = next(r["updateTextStyle"]["style"]["link"] for r in dl.reqs if "link" in r.get("updateTextStyle", {}).get("style", {}))
             assert link == {"pageObjectId": dl.page_names["p"]} == {"pageObjectId": dl.slides[0]}  # リンクはページのファイル名で指す（並べ替えてもずれない）
-            (Path(t) / "cover.json").write_text(json.dumps({**head, "kind": "Page", "title": "目次", "body": [{"type": "text", "text": "[x](#nai)"}]}))
+            (Path(t) / "cover.json").write_text(json.dumps({**head, "kind": "page", "title": "目次", "body": [{"type": "text", "text": "[x](#nai)"}]}))
             try:
                 make_deck(m.make, m.NAME)
                 raise AssertionError("ないページへのリンクを通した")
             except SystemExit as e:
                 assert "「nai」がない" in str(e)
-            (Path(t) / "deck.json").write_text(json.dumps({**head, "kind": "Deck", "name": "資料", "pages": ["sub/p.json", "pages_a.json"]}))
+            (Path(t) / "deck.json").write_text(json.dumps({**head, "kind": "deck", "name": "資料", "pages": ["sub/p.json", "pages_a.json"]}))
             try:
                 make_deck(load_make("deck.json").make, "x")
                 raise AssertionError("同じページを 2 回並べた")
@@ -4015,13 +4029,23 @@ def selftest_spec():
         finally:
             globals()["spec_log_path"] = real_log
         f = Path(t) / "p.json"
-        f.write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Page", "title": "t", "body": [
+        f.write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Page", "title": "t", "body": [  # 大文字の kind も小文字に直す
             {"type": "box", "h": 1, "raw": {"kind": "CAN", "radius": 0.2, "dash": True}}, {"type": "stack", "items": [{"type": "table", "rows": [["a"]], "raw": {"row_h": 0.5}}]},
             {"type": "text", "text": "a", "raw": {"align": "CENTER", "fill": NAVY, "kind": "STAR"}},
             {"type": "table", "rows": [["a"]], "raw": {"mono_cols": [0], "zebra": False}}]}))
         with contextlib.redirect_stdout(io.StringIO()):
-            assert spec_upgrade([f]) == 7
+            assert spec_upgrade([f]) == 8
         up = json.loads(f.read_text())
+        assert up["kind"] == "page"
+        f.write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Deck", "name": "d", "pages": [{"apiVersion": API_VERSION, "kind": "Page", "title": "t"}]}))
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert spec_upgrade([f]) == 2 and json.loads(f.read_text())["pages"][0]["kind"] == "page"  # pages に直に書いたページの頭も
+        f.write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Deck", "name": "d", "theme": "company", "pages": []}))
+        try:
+            declared_theme(str(f))
+            raise AssertionError("大文字の kind のデッキの theme を読まずに通した")
+        except SystemExit as e:
+            assert "upgrade" in str(e), str(e)  # new が「テーマを選んでから」と取り違えずに、直し方を出す
         assert up["body"][0] == {"type": "box", "h": 1, "shape": "can", "radius": 0.2, "dash": True} and up["body"][1]["items"][0]["row_h"] == 0.5
         assert up["body"][2] == {"type": "text", "text": "a", "raw": {"kind": "STAR"}, "align": "center", "fill": "NAVY"}  # 値を形の書き方に直す。形にない形は raw に残す
         assert up["body"][3] == {"type": "table", "rows": [["a"]], "raw": {"mono_cols": [0]}, "zebra": False}  # 数え始めの違う mono_cols は移さない
@@ -4085,9 +4109,9 @@ def selftest_spec():
         here = os.getcwd()
         os.chdir(t)
         try:
-            Path("c.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Component", "type": "stat", "value": "3"}))
-            Path("p.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Page", "title": "t"}))
-            Path("c.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Component", "type": "label", "text": "札"}))
+            Path("c.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "component", "type": "stat", "value": "3"}))
+            Path("p.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "page", "title": "t"}))
+            Path("c.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "component", "type": "label", "text": "札"}))
             real_dp, real_argv = default_pages, sys.argv
             globals()["default_pages"] = lambda: (_ for _ in ()).throw(AssertionError("ファイルを渡したのに default_pages を呼んだ"))
             sys.argv = ["slides.py", "dry", "c.json"]
@@ -4096,11 +4120,17 @@ def selftest_spec():
                     main()  # pages.py も deck.json もないフォルダで、渡したファイルだけを見る
             finally:
                 globals()["default_pages"], sys.argv = real_dp, real_argv
-            Path("c.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Component", "type": "stat", "value": "3"}))
+            Path("c.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "component", "type": "stat", "value": "3"}))
             Path("l.json").write_text("[]")
             assert [lint_scope(f) for f in ("deck.json", "pages.py", "c.json", "p.json", "pages_a.py", "l.json")] == ["deck", "deck", "component", "page", "page", "page"]
             Path("bad.json").write_text("{壊れた")
             assert lint_scope("bad.json") == "page" and file_kind("bad.json") is None and file_kind("pages.py") is None  # 読めない JSON は、読むところが場所を付けて止める
+            Path("old.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Component", "type": "label", "text": "札"}))
+            try:
+                lint_scope("old.json")
+                raise AssertionError("大文字の kind を振り分けた")
+            except SystemExit as e:
+                assert "upgrade" in str(e), str(e)  # 前の版の kind は、ページとして見ずに直し方を出して止める
         finally:
             os.chdir(here)
     d, _ = run({"title": "t", "body": [{"type": "frame", "h": 2, "items": [  # 囲みの中に見出しとカードを入れるのはよい。横 1 列の流れは row を勧める
@@ -4529,8 +4559,8 @@ def selftest_diff():
             assert live[0] != first and link == {"pageObjectId": live[1]} and len(live) == 2, (first, live, link)  # S を作り直し、残ったページを指す
             # ファイルを選んで組む: 選んだページだけを作り直し、選んでいないページは中身が変わっていても前のスライドを残す（ID のファイル名の印で探す）
             with tempfile.TemporaryDirectory() as t:
-                page = lambda n, title: Path(t, f"{n}.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Page", "title": title, "note": "ノート。"}))
-                Path(t, "deck.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Deck", "name": "選ぶ", "pages": ["p1.json", "p2.json", "p3.json"]}))
+                page = lambda n, title: Path(t, f"{n}.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "page", "title": title, "note": "ノート。"}))
+                Path(t, "deck.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "deck", "name": "選ぶ", "pages": ["p1.json", "p2.json", "p3.json"]}))
                 for n in ("p1", "p2", "p3"):
                     page(n, f"{n} の前")
                 spec = lambda: make_deck(lambda d: d.spec(Path(t, "deck.json")), "選ぶ")
@@ -4557,7 +4587,7 @@ def selftest_diff():
                         except SystemExit as e:
                             assert want and want in str(e), str(e)
                     # 選んでいないページは、中身の同じページへのリンクを持っていても前のまま（twins の作り直しは、作り直すページにだけ当てる）
-                    Path(t, "p1.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Page", "title": "p1 の前", "note": "ノート。",
+                    Path(t, "p1.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "page", "title": "p1 の前", "note": "ノート。",
                                                              "body": [{"type": "text", "text": "[p2 へ](#p2)"}]}))
                     page("p2", "同じ")
                     page("p3", "同じ")
@@ -4599,7 +4629,7 @@ def selftest_diff():
                     build("x" * 10, dk, only=chosen(["p1.json"], dk, None))
                     assert live == before, (live, before)
                     # deck.json の theme のファイルがあれば、URL を渡しても Google を読まない
-                    Path(t, "d2.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "Deck", "name": "d", "theme": "visual", "pages": ["p1.json"]}))
+                    Path(t, "d2.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "deck", "name": "d", "theme": "visual", "pages": ["p1.json"]}))
                     req0, c0 = globals()["request"], COPYRIGHT
                     globals()["request"] = lambda *a, **k: (_ for _ in ()).throw(AssertionError("Google を読んだ"))
                     try:

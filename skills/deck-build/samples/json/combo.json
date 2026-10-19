@@ -1,4 +1,4 @@
-{"apiVersion": "slides/v1", "kind": "Page",
+{"apiVersion": "slides/v1", "kind": "page",
  "title": "売上は 4 年で 2 倍になり、利益率も上がった", "lead": "左は年ごとの売上と利益率、右は窓口ごとの 1 件の対応の時間と目標", "kicker": "bars・line・threshold",
  "body": [
   {"type": "row", "widths": [3, 2], "items": [

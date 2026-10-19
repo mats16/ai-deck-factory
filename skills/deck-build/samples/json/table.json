@@ -1,4 +1,4 @@
-{"apiVersion": "slides/v1", "kind": "Page",
+{"apiVersion": "slides/v1", "kind": "page",
  "title": "表とコードを並べる", "lead": "表は見出しの行から数えて塗る行を決め、コードは赤くする行を番号で書く", "kicker": "table・code",
  "body": [
   {"type": "row", "widths": [3, 2], "items": [
