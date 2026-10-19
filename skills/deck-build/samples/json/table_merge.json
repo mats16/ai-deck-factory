@@ -1,0 +1,12 @@
+{"apiVersion": "slides/v1", "kind": "page",
+ "title": "セルを結合した比べる表", "lead": "見出しの行を 2 段にし、セルに記法・塗り・寄せを書く", "kicker": "table のセル",
+ "body": [
+  {"type": "table", "header": 2, "borders": "grid", "valign": "top", "widths": [1.1, 1.5, 2.2, 2.2], "align": ["left", "left", "center", "center"],
+   "rows": [
+    [{"text": "観点", "rowspan": 2, "valign": "middle"}, {"text": "項目", "rowspan": 2, "valign": "middle"}, {"text": "仕組みの比べ", "colspan": 2, "align": "center"}],
+    ["今の仕組み", {"text": "新しい仕組み", "fill": "RED"}],
+    [{"text": "運用", "rowspan": 2, "valign": "middle"}, "障害の対応", "手で切り替える", "**自動で切り替える**"],
+    ["保守", {"text": "対象外", "color": "SUB"}, {"text": "- 版の更新\n- 監視の設定", "align": "left"}],
+    ["手間", "夜間の当番", "要る", {"text": "***要らない***", "fill": "RED_SOFT"}],
+    ["資料", "詳しいこと", "[docs](https://docs.databricks.com/)", "[構成図のページ](#diagram)"]]}],
+ "note": "header: 2 で上の 2 行が見出しの行。rowspan・colspan のセルが覆う位置には、セルを書かない（HTML と同じ）。"}
