@@ -1,11 +1,11 @@
 ---
 name: deck-review
-description: 資料（Google Slides・Google Docs）をユーザーに返す前に通す、全体のレビュー。lint、全ページを並べた一覧の画像、別のサブエージェントの目で、ページをまたぐ欠陥と 1 ページの欠陥を洗い出し、指摘を確かめてから、直してよいものは直して組み直し、主張・数字・順序が変わるものは聞く。作っている途中の確認と直しは deck-build の gslides.py check・doc-build の docs.py check で行い、ここは返す前に通す。依頼文は形式ごとのファイル（prompt_slides.md・prompt_doc.md）。`/deck-review <URL>`。「レビューして」「見直して」「渡す前に確認して」と頼まれたときと、資料をユーザーに返す前に必ず使う。
+description: 資料（Google Slides・Google Docs）をユーザーに返す前に通す、全体のレビュー。lint、全ページを並べた一覧の画像、別のサブエージェントの目で、ページをまたぐ欠陥と 1 ページの欠陥を洗い出し、指摘を確かめてから、直してよいものは直して組み直し、主張・数字・順序が変わるものは聞く。作っている途中の確認と直しは deck-build の gslides.py check・doc-build の docs.py check で行い、ここは返す前に通す。依頼文は形式ごとのファイル（prompt_slides.md・prompt_doc.md）。`/deck-review <URL>`。「レビューして」「見直して」「渡す前に確認して」と頼まれたときと、新しく作った資料をユーザーに返す前に必ず使う。返したあとの直しでは、deck-practices の「返したあとの依頼」で決めた範囲だけを回す。
 ---
 
 # 返す前の全体のレビュー
 
-[deck-review-001] 作っている途中は、スライドは deck-build の `gslides.py check`、ドキュメントは doc-build の `docs.py check` で lint を通し、変えたページの画像を自分で開いて直す（`../deck-build/SKILL.md` の「結果の見方」、`../doc-build/SKILL.md` の 5）。ここは、それが済んでからユーザーに返す前に通す、資料全体のレビュー。手順・直す範囲・指摘の形・頼み方は形式によらず同じで、依頼文だけを形式ごとに分けてある（スライドは [prompt_slides.md](prompt_slides.md)、ドキュメントは [prompt_doc.md](prompt_doc.md)）。1 枚ずつ見ていると拾えない、ページをまたぐ欠陥（話の筋、同じ型の連続、余白と密度のばらつき、飾りの数）と、作った本人が見落とす欠陥を、別の目で洗い出す（研究 1-3、AI 実践 1-4、中身 1-12。略称は `../deck-practices/SKILL.md` の表）。
+[deck-review-001] 作っている途中は、スライドは deck-build の `gslides.py check`、ドキュメントは doc-build の `docs.py check` で lint を通し、変えたページの画像を自分で開いて直す（`../deck-build/SKILL.md` の「結果の見方」、`../doc-build/SKILL.md` の 5）。ここは、それが済んでからユーザーに返す前に通す、資料全体のレビュー。手順・直す範囲・指摘の形・頼み方は形式によらず同じで、依頼文だけを形式ごとに分けてある（スライドは [prompt_slides.md](prompt_slides.md)、ドキュメントは [prompt_doc.md](prompt_doc.md)）。1 枚ずつ見ていると拾えない、ページをまたぐ欠陥（話の筋、同じ型の連続、余白と密度のばらつき、飾りの数）と、作った本人が見落とす欠陥を、別の目で洗い出す（研究 1-3、AI 実践 1-4、中身 1-12。略称は `../deck-practices/SKILL.md` の表）。返したあとの直しで、どこまで回すか（変えたページだけを 1 ラウンド、全体、回さない）は `../deck-practices/SKILL.md` の deck-practices-017 で決める。
 
 `/deck-review <Google Slides か Google Docs の URL> [--talk]`。URL を省いたら、作業中のフォルダの構成案に書いた URL を使う。形式は URL で決める（`/presentation/` はスライド、`/document/` はドキュメント）。`--talk` は LT など話す資料（スライドだけ）。下の手順の 1〜6（確かめ直す・頼む・指摘を確かめる・直す・組み直して確かめる）を 1 ラウンドと数え、上限のラウンドまで回す。
 
