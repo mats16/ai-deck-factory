@@ -37,7 +37,7 @@ python3 $K/docs.py export <URL> /tmp/<資料名>.docx                 # 相手�
 
 頭（`---` で挟む）に資料の情報を、本文に markdown を書く。書式は書かない。書体・大きさ・色・空きは、docs.py の名前付きスタイル（`STYLES`）とテーマが決め、組むたびに入れ直す（`STYLES` を変えれば、組み直した資料すべてに効く）。文字の記法はスライドと同じ（`../deck-build/slides.md` の 2 の「文字の記法」。大きさの `{32:…}` はスライドだけ）。
 
-```markdown
+````markdown
 ---
 name: Acme様_Lakebase導入の検討｜Internal Only   # 末尾の秘密区分（Internal Only・Confidential）だけがフッターに出る
 theme: acme                                      # ワークスペースの themes/docs/acme.json。省くと既定（A4・10.5pt・濃紺の見出し）
@@ -64,7 +64,7 @@ title: Lakebase の導入の検討について              # 表紙を作らな
 flowchart LR
   A[(基幹の DB)] -->|数秒| B[Lakebase] --> C[分析]
 ```
-```
+````
 
 | 書き方 | 組まれるもの |
 |---|---|
