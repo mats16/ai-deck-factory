@@ -899,6 +899,7 @@ STAT_PAD, HEAD_GAP = 0.2, 0.06  # 数字の強調の箱の端と文字の間、�
 # ガント（過去の資料の gantt。slides-010）: 項目の列、補足の列の最小、月の列の最大と最小、バーの高さ（9pt の 2 行）、段の間、行の上下、バーと列の端、
 # 余った高さを 1 行に足す上限（in）
 G_HEAD, G_NOTE, G_COL, G_COL_MIN, G_BAR, G_LANE, G_PAD, G_INSET, G_GROW = 2.2, 2.4, 1.0, 0.4, 0.42, 0.06, 0.1, 0.04, 0.4
+G_MARK, G_MARK_GAP = 0.2, 0.06  # 節目の印（赤の菱形）の大きさ、印と言葉の間（in）
 # 棒グラフ: 縦の棒の既定の高さ、数字と名前の行の高さ、棒の幅（枠の幅に対する比）と最大、横の棒の行の高さと棒の太さ（in）
 B_H, B_LABEL, B_FILL, B_MAX, B_ROW, B_BAR = 2.6, 0.3, 0.6, 1.2, 0.42, 0.28
 SITE = {"top": 0, "left": 1, "bottom": 2, "right": 3}  # 四角の図形の辺 → Slides API の接続点の番号（Deck.arrow の link）
@@ -930,8 +931,11 @@ SPEC_EL = {  # type → (要るキー, 書けるキー)
     "grid": ({"items": "kids", "cols": "pi"}, {"gap": "n"}),
     "frame": ({"items": "kids", "h": "p"}, {}),
 }
-GANTT_ROW = ({"head": "s"}, {"bars": "gbars", "note": "s"})  # ガントの行: 項目、バーの並び、補足（右の列。どれかの行に書くと列ができる）
-GANTT_BAR = ({"from": "pi", "to": "pi"}, {"text": "s", "fill": "c", "dash": "b"})  # バー: 何列目から何列目まで（1 から、両端を含む）、文字、塗り、点線の枠（未定）
+GANTT_ROW = ({"head": "s"}, {"bars": "gbars", "marks": "gmarks", "note": "s"})  # ガントの行: 項目、バーの並び、節目の並び、補足（右の列。どれかの行に書くと列ができる）
+GANTT_STATUS = {"plan": "NAVY", "tbd": "CARD", "done": "PANEL", "hot": "RED_SOFT"}  # バーの状態 → 塗り（決まった予定・未定〔点線の枠〕・終わった・強調〔赤の文字〕）。色は書かせず、資料をまたいで意味をそろえる
+# 強調を RED の地にしないのは、9pt の白の文字が 3.62:1 で 4.5:1 に届かないから（2026-10-19、見本を組んで lint が止めた）。淡い赤の地に RED_TEXT は 4.69:1
+GANTT_BAR = ({"from": "pi", "to": "pi"}, {"text": "s", "status": tuple(GANTT_STATUS)})  # バー: 何列目から何列目まで（1 から、両端を含む）、文字、状態（既定は plan）
+GANTT_MARK = ({"at": "p", "text": "s"}, {})  # 節目: 位置（today と同じ。3 は 3 列目の左端、3.5 は中ほど）、言葉（11pt の 1 行）
 NO_SIZE = ("icon", "num", "arrow")  # w・h を書かない（大きさは size、矢印は両端）
 CONTAINERS = ("row", "stack", "grid", "frame")  # 並べ方の箱（中の部品を置くだけで、Deck を呼ばない）
 NO_H = ("row", "stack", "grid", "gantt")  # h を書かない（高さは中身から決まる。中身より小さい h は次の部品と重なる。frame だけは h が要る）
@@ -981,7 +985,7 @@ SPEC_OK = {"s": lambda v: isinstance(v, str), "md": lambda v: isinstance(v, str)
            "pt": lambda v: isinstance(v, str) or isinstance(v, list) and len(v) == 2 and all(map(_num, v)),
            "items": lambda v: isinstance(v, list) and all(_strs(x, 2) for x in v),
            "cols": lambda v: _strs(v) and bool(v), "grows": lambda v: isinstance(v, list) and bool(v) and all(isinstance(x, dict) for x in v),
-           "gbars": lambda v: isinstance(v, list) and all(isinstance(x, dict) for x in v),
+           "gbars": lambda v: isinstance(v, list) and all(isinstance(x, dict) for x in v), "gmarks": lambda v: isinstance(v, list) and all(isinstance(x, dict) for x in v),
            "bitems": lambda v: isinstance(v, list) and bool(v) and all(isinstance(x, list) and len(x) == 2 and isinstance(x[0], str) and _num(x[1]) and x[1] >= 0 for x in v),
            "rows": lambda v: isinstance(v, list) and bool(v) and all(_strs(x) and x for x in v),
            "nums": lambda v: isinstance(v, list) and all(_num(x) and x > 0 for x in v), "ints": lambda v: isinstance(v, list) and all(_int(x) and x > 0 for x in v),
@@ -1019,8 +1023,8 @@ SPEC_TYPES = {"s": "文字列", "md": "記法つきの文字列", "n": "0 以上
               "w": '0 より大きい数（in）か "fit"（label だけ。中身の文字の幅にする）', "nh": "0 より大きい数（in）か、行ごとのその並び",
               "els": "部品の並び", "kids": "1 つ以上の部品の並び", "pages": "ページかデッキのファイルのパス（.json）の並び", "pt": "部品の id（\"<id>.<辺>\" で出る辺・入る辺。辺は top・bottom・left・right）か [x, y]", "items": '[["見出し", "説明"], …]',
               "rows": '[["見出しの行", …], ["セル", …], …]', "nums": "正の数の並び",
-              "cols": '列の名前の並び（["10 月", "11 月", …]）', "grows": '[{"head": 項目, "bars": [{"from": 列, "to": 列, …}], "note": 補足}, …]',
-              "bitems": '[["名前", 0 以上の数], …]', "gbars": '[{"from": 列, "to": 列, "text": 文字, "fill": 色, "dash": true}, …]', "ints": "1 から始まる番号の並び", "aligns": '列ごとの left・center・right の並び（["left", "right", "right"]）',
+              "cols": '列の名前の並び（["10 月", "11 月", …]）', "grows": '[{"head": 項目, "bars": [{"from": 列, "to": 列, …}], "marks": [{"at": 位置, "text": 言葉}], "note": 補足}, …]',
+              "bitems": '[["名前", 0 以上の数], …]', "gbars": '[{"from": 列, "to": 列, "text": 文字, "status": "plan"・"tbd"・"done"・"hot"}, …]', "gmarks": '[{"at": 位置, "text": 言葉}, …]', "ints": "1 から始まる番号の並び", "aligns": '列ごとの left・center・right の並び（["left", "right", "right"]）',
               "fills": '[[行, 列, 色], …]（rows の何番目かで、見出しの行が 1 行目・いちばん左の列が 1 列目。"all" はその列か行の全部）', "ns": "文字列か整数", "band": '"文字" か {"text": …, "sub": …}',
               "raw": "Deck のメソッドの引数（{\"zebra\": false} など）",
               "colors": f"役割の名前（{'・'.join([*ROLE, *FIXED, *NAMED])}）→ 6 桁の色（# は付けない）", "layouts": 'レイアウトの名前か {"layout": 名前, "w": 幅, "tone": "dark"・"accent"・"light"} の並び'}
@@ -1251,6 +1255,14 @@ class SpecPage:
                     sys.exit(f"{l}.bars[{j}]: from・to は 1〜{n}（cols の何列目か。両端を含む）で、from ≤ to")
                 if b.get("text", "").count("\n") > 1:
                     sys.exit(f"{l}.bars[{j}].text: バーの文字は 2 行まで（1 行 5 字ほど。改行の位置は \\n で決める。slides-010）")
+            for j, m in enumerate(r.get("marks", [])):
+                spec_check(m, GANTT_MARK, f"{l}.marks[{j}]")
+                if not 1 <= m["at"] <= n + 1:
+                    sys.exit(f"{l}.marks[{j}].at: 1〜{n + 1}（today と同じ。1 が 1 列目の左端、1.5 が 1 列目の中ほど）")
+                if "\n" in m["text"]:
+                    sys.exit(f"{l}.marks[{j}].text: 節目の言葉は 1 行（短い名前にし、詳しいことは補足の列かノートに書く）")
+                if re.search(r"\*\*|`|\]\(|<br>", m["text"]):  # 言葉は記法を解かずに描く（項目・補足と同じ）
+                    sys.exit(f"{l}.marks[{j}].text: 節目の言葉には記法を書けない: {m['text']!r}")
         if "today" in e and not 1 <= e["today"] <= n + 1:
             sys.exit(f"{loc}（gantt）.today: 1〜{n + 1}（1 が 1 列目の左端、1.5 が 1 列目の中ほど）")
 
@@ -1265,19 +1277,29 @@ class SpecPage:
         rows = [["", *e["cols"], *([""] if note else [])]] + [[r["head"], *[""] * n, *([r.get("note", "")] if note else [])] for r in e["rows"]]
         hs, lanes = [], []
         for r, cells in zip(e["rows"], rows[1:]):
+            # バーと節目が占める [左, 右)（列の境目の位置。today と同じ数え方）。左から順に、空いたいちばん上の段に置く
+            spans = [(b["from"], b["to"] + 1, j, b) for j, b in enumerate(r.get("bars", []))] + [(*self.gantt_mark(m, cw, n)[:2], j, m) for j, m in enumerate(r.get("marks", []))]
             ends, lane = [], []
-            for j, b in sorted(enumerate(r.get("bars", [])), key=lambda jb: jb[1]["from"]):
-                k = next((i for i, end in enumerate(ends) if end < b["from"]), len(ends))
-                ends[k:k + 1] = [b["to"]]
-                lane.append((k, j, b))
+            for a, z, j, o in sorted(spans, key=lambda t: t[0]):
+                k = next((i for i, end in enumerate(ends) if end <= a + 1e-9), len(ends))
+                ends[k:k + 1] = [z]
+                lane.append((k, j, o))
             nl = max(len(ends), 1)
             hs.append(max(nl * G_BAR + (nl - 1) * G_LANE + 2 * G_PAD, table_h(widths, [cells], 11, 0.36, False)))
             lanes.append((nl, lane))
         return widths, cw, rows, table_h(widths, rows[:1], 11, 0.36, True), hs, lanes
 
+    @staticmethod
+    def gantt_mark(m, cw, n):
+        """節目の印と言葉が占める [左, 右)（列の境目の位置）、言葉の幅（in）、言葉を印の左に置くか。言葉は印の右に置き、表の右端を越えるなら左に置く。"""
+        tw = em_width(m["text"]) * 11 / 72 + 0.1
+        side = (G_MARK / 2 + G_MARK_GAP + tw) / cw
+        left = m["at"] + side > n + 1
+        return (m["at"] - side, m["at"] + G_MARK / 2 / cw, tw, True) if left else (m["at"] - G_MARK / 2 / cw, m["at"] + side, tw, False)
+
     def gantt(self, e, x, y, w, h, loc):
         """[slides_py-025] ガント（過去の資料の gantt。slides-010）: 表を格子にし（見出しの行に列の名前、1 列目に項目、月の間に縦の罫線）、バーを塗りの札（9pt。visual-037）で重ね、
-        today に赤の縦線を引く。h が中身より大きければ（本文の最後のガント）、余りを行に等しく配り、バーは行の上下の中央に置く。"""
+        節目に赤の菱形と 11pt の言葉（塗りのない文字なので 9pt にしない）を置き、today に赤の縦線を引く。バーの塗りは status から決める（GANTT_STATUS）。h が中身より大きければ（本文の最後のガント）、余りを行に等しく配り、バーは行の上下の中央に置く。"""
         widths, cw, rows, hd, hs, lanes = self.gantt_layout(e, w, loc)
         n = len(e["cols"])
         hs = [v + max(h - hd - sum(hs), 0) / len(hs) for v in hs]
@@ -1291,17 +1313,28 @@ class SpecPage:
         for i, ((nl, lane), rh) in enumerate(zip(lanes, hs)):
             by = top + (rh - nl * G_BAR - (nl - 1) * G_LANE) / 2
             for k, j, b in lane:
-                l = f"{loc}.rows[{i}].bars[{j}]"
-                fill = b.get("fill", "CARD" if b.get("dash") else "NAVY")
-                on, emph = ON_FILL.get(fill, ("TEXT", "RED_TEXT"))
+                ly = by + k * (G_BAR + G_LANE)
+                if "at" in b:  # 節目
+                    l, (a, _, tw, left) = f"{loc}.rows[{i}].marks[{j}]", self.gantt_mark(b, cw, n)
+                    mx = x0 + (b["at"] - 1) * cw
+                    if left and a < 1 - 1e-9:  # 左に回した言葉が 1 列目の左端を越える（右に置くときの a は印の左端なので見ない）
+                        self.warns.append(f"{l}.text: 節目の言葉「{b['text']}」が表の月の列に収まらない見込み。短くする")
+                    self.index.append((l, b["text"]))
+                    self.emit("box", l, x=mx - G_MARK / 2, y=ly + (G_BAR - G_MARK) / 2, w=G_MARK, h=G_MARK, fill=spec_color("RED"), kind="DIAMOND")
+                    self.emit("text", f"{l}.text", x=mx - G_MARK / 2 - G_MARK_GAP - tw if left else mx + G_MARK / 2 + G_MARK_GAP, y=ly, w=tw, h=G_BAR,
+                              parts=b["text"], size=11, color=spec_color("TEXT"), align="END" if left else "START", valign="MIDDLE", spacing=100, edge=True)
+                    continue
+                l, status = f"{loc}.rows[{i}].bars[{j}]", b.get("status", "plan")
+                fill, tbd = GANTT_STATUS[status], status == "tbd"
+                on, emph = ("RED_TEXT", "RED_TEXT") if status == "hot" else ON_FILL.get(fill, ("TEXT", "RED_TEXT"))
                 parts = spec_md(b.get("text", ""), spec_color(emph), l)
                 self.index.append((l, spec_plain(parts)))
                 bw = (b["to"] - b["from"] + 1) * cw - 2 * G_INSET
                 if sum(est_lines(ln, bw - 2 * INSET, 9) for ln in spec_plain(parts).split("\n")) > 2:  # バーの高さは 9pt の 2 行
                     self.warns.append(f"{l}.text: バーの文字が 3 行以上に折り返す見込み「{spec_plain(parts)}」。短くするか、\\n で 2 行に分ける（1 行 5 字ほど）")
-                self.emit("text", l, x=x0 + (b["from"] - 1) * cw + G_INSET, y=by + k * (G_BAR + G_LANE), w=bw, h=G_BAR,
+                self.emit("text", l, x=x0 + (b["from"] - 1) * cw + G_INSET, y=ly, w=bw, h=G_BAR,
                           parts=parts, size=9, color=spec_color(on), bold=True, align="CENTER", valign="MIDDLE", spacing=100, fill=spec_color(fill),
-                          line=SUB if b.get("dash") else None, dash=b.get("dash", False))
+                          line=SUB if tbd else None, dash=tbd)
             top += rh
 
     def bars(self, e, x, y, w, h, loc):
@@ -1945,7 +1978,7 @@ def spec_brief():
     lines += ["", "## 部品（type）", "どの部品にも: id（矢印の from・to で指す）、w（幅 in）、h（高さ in。row・stack・grid・gantt と icon・num・arrow は書かない）。"
               "x・y は frame の中だけ。raw は形の外の書き方（lint が要確認に出す）"]
     lines += [f"{k}: {keys(v, k)}" for k, v in SPEC_EL.items()]
-    lines += ["  gantt の rows: " + keys(GANTT_ROW), "  gantt の bars: " + keys(GANTT_BAR)]
+    lines += ["  gantt の rows: " + keys(GANTT_ROW), "  gantt の bars: " + keys(GANTT_BAR), "  gantt の marks: " + keys(GANTT_MARK)]
     return "\n".join(lines)
 
 
@@ -1967,9 +2000,12 @@ def spec_schema():
          "nums": {"type": "array", "items": {"type": "number", "exclusiveMinimum": 0}, "description": "比"},
          "cols": {"type": "array", "items": {"type": "string"}, "minItems": 1, "description": "列の名前（月・週）。左から 1 列目"},
          "gbars": {"type": "array", "items": {"type": "object", "properties": {"from": {"type": "integer", "minimum": 1}, "to": {"type": "integer", "minimum": 1},
-                                                                               "text": {"type": "string", "description": "9pt。1 行 5 字・2 行まで（改行は \\n）"}, "fill": color,
-                                                                               "dash": {"type": "boolean", "description": "点線の枠（未定）"}},
+                                                                               "text": {"type": "string", "description": "9pt。1 行 5 字・2 行まで（改行は \\n）"},
+                                                                               "status": {"enum": list(GANTT_STATUS), "description": "plan（決まった予定。既定、濃紺）・tbd（未定。点線の枠）・done（終わった。淡い灰色）・hot（遅らせられないもの。淡い赤の地に赤の文字）"}},
                                                "required": ["from", "to"], "additionalProperties": False}, "description": "何列目から何列目まで（1 から、両端を含む）。重なるバーは下の段に回る"},
+         "gmarks": {"type": "array", "items": {"type": "object", "properties": {"at": pos, "text": {"type": "string", "description": "11pt の 1 行（印の右。表の右端を越えるなら左）。記法なし"}},
+                                                "required": ["at", "text"], "additionalProperties": False},
+                    "description": "節目（赤の菱形と言葉）。at は today と同じ位置で、3 は 3 列目の左端、3.5 は 3 列目の中ほど。バーと重なれば下の段に回る"},
          "bitems": {"type": "array", "items": {"type": "array", "prefixItems": [{"type": "string"}, {"type": "number", "minimum": 0}], "minItems": 2, "maxItems": 2},
                     "minItems": 1, "description": "[名前, 数]。数は棒の端に書く"},
          "ints": {"type": "array", "items": {"type": "integer", "minimum": 1}, "description": "1 から始まる番号"},
@@ -1984,7 +2020,7 @@ def spec_schema():
                                                                              "required": ["layout"], "additionalProperties": False}]},
                      "description": "会社のテンプレートから残す表紙・扉のレイアウトの名前（並びの順が variant の番号）。w（文字の幅）と tone（地の明るさ）は template.py が書き込む"}}
     t["grows"] = {"type": "array", "minItems": 1, "items": {"type": "object", "properties": {"head": {"type": "string", "description": "項目（表のセル。記法なし）"}, "bars": t["gbars"],
-                                                                                           "note": {"type": "string", "description": "補足（右の列。記法なし）"}},
+                                                                                           "marks": t["gmarks"], "note": {"type": "string", "description": "補足（右の列。記法なし）"}},
                                                              "required": ["head"], "additionalProperties": False}}
     head = {"apiVersion": {"const": API_VERSION}}
 
@@ -2146,11 +2182,18 @@ def carry(paths):
         raise
 
 
-STAMP = "slides_py_revision"  # 組んだときの版（presentations の revisionId）を、Drive のファイルの appProperties に残す
+STAMP = "slides_py_revision"  # 組んだときの版（revision）を、Drive のファイルの appProperties に残す
 
 
 def revision(pid):
-    return request("GET", f"{SLIDES}/{pid}?fields=revisionId")["revisionId"]
+    """Drive の版の一覧の最後の ID。中身を直すと進み、コメント・返信・解決と appProperties の書き込みでは進まない。presentations の revisionId は
+    コメントを付けても返信しても解決しても進み、comments.py reply --resolve のあとの build が画面で直されたと取り違えるので使わない（2026-10-19 に確かめた）。"""
+    last, page = None, None
+    while True:  # 古い順に並ぶ
+        r = request("GET", f"{DRIVE}/files/{pid}/revisions?pageSize=1000&fields=nextPageToken,revisions(id)" + (f"&pageToken={urllib.parse.quote(page)}" if page else ""))
+        last = (r.get("revisions") or [{"id": last}])[-1]["id"]
+        if not (page := r.get("nextPageToken")):
+            return last
 
 
 def need_brand():
@@ -3678,7 +3721,9 @@ def selftest_sample():
         for r in e["rows"] if e["type"] == "gantt" else []:  # ガントの行とバーのキーも
             used["gantt.rows"] |= set(r)
             for b in r.get("bars", []):
-                used["gantt.bars"] |= set(b)
+                used["gantt.bars"] |= set(b) | {f"status:{b.get('status', 'plan')}"}
+            for m in r.get("marks", []):
+                used["gantt.marks"] |= set(m)
         for c in e["items"] if e["type"] in ("row", "stack", "grid", "frame") else []:
             el(c)
     for f in root.glob("*.json"):
@@ -3698,7 +3743,8 @@ def selftest_sample():
     want = {t: set(n) | set(o) for t, (n, o) in SPEC_EL.items()} | {f"page:{t}": set(n) | set(o) for t, (n, o) in SPEC_PAGE.items()}
     want["Deck"] = set(SPEC_DECK[0]) | set(SPEC_DECK[1])
     want["Theme"] = set(SPEC_THEME[1])
-    want |= {"gantt.rows": set(GANTT_ROW[0]) | set(GANTT_ROW[1]), "gantt.bars": set(GANTT_BAR[0]) | set(GANTT_BAR[1])}
+    want |= {"gantt.rows": set(GANTT_ROW[0]) | set(GANTT_ROW[1]), "gantt.bars": set(GANTT_BAR[0]) | set(GANTT_BAR[1]) | {f"status:{k}" for k in GANTT_STATUS},
+             "gantt.marks": set(GANTT_MARK[0])}  # バーの状態は、どれも見本で組む
     miss = {t: sorted(k - used[t]) for t, k in want.items() if k - used[t]}
     assert not miss and geo == set(_GEO) and kinds == set(KINDS), ("見本に足りない型とキー", miss, set(_GEO) - geo, set(KINDS) - kinds)
     real = {k: globals()[k] for k in ("iconify", "asset")}
@@ -4130,6 +4176,10 @@ def selftest_spec():
                           ({"type": "slide", "body": [{"type": "gantt", "cols": ["1 月"], "rows": [{"head": "a", "bars": [{"from": 1, "to": 2}]}]}]}, "from・to は 1〜1"),
                           ({"type": "slide", "body": [{"type": "gantt", "cols": ["1 月"], "rows": [{"head": "**a**"}]}]}, "記法を書けない"),
                           ({"type": "slide", "body": [{"type": "gantt", "cols": ["**1 月**"], "rows": [{"head": "a"}]}]}, "列の名前は"),
+                          ({"type": "slide", "body": [{"type": "gantt", "cols": ["1 月"], "rows": [{"head": "a", "marks": [{"at": 2.5, "text": "x"}]}]}]}, "at: 1〜2"),
+                          ({"type": "slide", "body": [{"type": "gantt", "cols": ["1 月"], "rows": [{"head": "a", "marks": [{"at": 1, "text": "x\ny"}]}]}]}, "節目の言葉は 1 行"),
+                          ({"type": "slide", "body": [{"type": "gantt", "cols": ["1 月"], "rows": [{"head": "a", "marks": [{"at": 1, "text": "**本番**"}]}]}]}, "節目の言葉には記法を書けない"),
+                          ({"type": "slide", "body": [{"type": "gantt", "cols": ["1 月"], "rows": [{"head": "a", "bars": [{"from": 1, "to": 1, "fill": "RED"}]}]}]}, "fill"),
                           ({"type": "slide", "body": [{"type": "gantt", "cols": [str(i) for i in range(30)], "rows": [{"head": "a"}]}]}, "列が多くて"),
                           ({"type": "slide", "body": [{"type": "bars", "items": [["a", 1]], "hot": [2]}]}, "棒の数（1）より大きい")]:
             try:
@@ -4139,7 +4189,7 @@ def selftest_spec():
                 assert want in str(x), (want, str(x))
     # ガント: 重なるバーは下の段、本文の最後なら余った高さを行に配る（1 行に 0.4 in まで）、今日の線はバーより先に引く
     g = {"type": "gantt", "cols": ["10 月", "11 月", "12 月"], "today": 2, "rows": [{"head": "a", "bars": [{"from": 1, "to": 2, "text": "x"}, {"from": 2, "to": 3, "text": "y"}]},
-                                                                                {"head": "b", "note": "補足", "bars": [{"from": 3, "to": 3, "text": "z", "dash": True}]}]}
+                                                                                {"head": "b", "note": "補足", "bars": [{"from": 3, "to": 3, "text": "z", "status": "tbd"}]}]}
     _, els = run({"title": "t", "body": [g]})
     tb, today, bars = els[0], els[1], [e for e in els if e["call"] == "text"]
     assert tb["call"] == "table" and tb["vlines"] == (1, 3) and len(tb["widths"]) == 5 and near(sum(tb["widths"]), W) and today["call"] == "arrow" and near(today["x1"], tb["x"] + G_HEAD + tb["widths"][1])
@@ -4151,6 +4201,23 @@ def selftest_spec():
     assert near(sum(els[0]["row_h"][1:]), sum(hs) + 2 * G_GROW)  # 後ろが矢印だけなら伸ばす（矢印は場所を取らない）
     _, els = run({"title": "t", "body": [g, {"type": "text", "text": "下"}]})
     assert near(sum(els[0]["row_h"][1:]), sum(hs))  # 下に部品があれば伸ばさない
+    # 節目: 赤の菱形の中心が at の位置。バーと重なれば下の段、表の右端では言葉を左に置く。状態の塗り
+    g = {"type": "gantt", "cols": ["10 月", "11 月", "12 月"], "rows": [{"head": "a", "bars": [{"from": 1, "to": 2, "text": "x", "status": "done"}],
+                                                                       "marks": [{"at": 2.5, "text": "本番"}, {"at": 3, "text": "振り返り"}, {"at": 4, "text": "終わり"}]}]}
+    _, els = run({"title": "t", "body": [g]})
+    tb, bar, (m1, m2, m3) = els[0], els[1], [e for e in els if e["call"] == "box"]
+    x0, cw = tb["x"] + G_HEAD, tb["widths"][1]
+    assert bar["fill"] == PANEL and m1["kind"] == "DIAMOND" and m1["fill"] == RED and near(m1["x"] + G_MARK / 2, x0 + 1.5 * cw)
+    assert near(m1["y"], bar["y"] + G_BAR + G_LANE + (G_BAR - G_MARK) / 2) and near(m2["y"], m1["y"]) and near(m3["y"], bar["y"] + (G_BAR - G_MARK) / 2)  # バーに重なる 2 つは下の段（2 つは重ならない）、右端の 1 つは上の段
+    t3 = next(e for e in els if e["loc"].endswith("marks[2].text"))
+    assert t3["align"] == "END" and near(t3["x"] + t3["w"], m3["x"] - G_MARK_GAP) and t3["size"] == 11
+    d, _ = run({"title": "t", "body": [{"type": "gantt", "cols": ["1 月", "2 月"], "rows": [{"head": "a", "marks": [{"at": 1, "text": "開始"}]}]}]})
+    assert not d.warnings, d.warnings  # 1 列目の左端の節目は、言葉が右に収まれば警告しない
+    with contextlib.redirect_stderr(io.StringIO()):
+        d, _ = run({"title": "t", "body": [{"type": "gantt", "cols": ["1 月"], "rows": [{"head": "a", "marks": [{"at": 2, "text": "あ" * 80}]}]}]})
+    assert any("収まらない見込み" in w for w in d.warnings)  # 左に回しても収まらない言葉は警告する
+    _, els = run({"title": "t", "body": [{"type": "gantt", "cols": ["1 月"], "rows": [{"head": "a", "bars": [{"from": 1, "to": 1, "text": "x", "status": "hot"}]}]}]})
+    assert els[1]["fill"] == RED_SOFT and els[1]["color"] == RED_TEXT  # 強調は淡い赤の地に赤の文字（赤の地に白の 9pt は 4.5:1 に届かない）
     # 棒グラフ: 一番大きい数の棒が高さいっぱい。hot は赤
     _, els = run({"type": "slide", "body": [{"type": "bars", "items": [["a", 50], ["b", 100]], "unit": "件", "hot": [2]}]})
     boxes = [e for e in els if e["call"] == "box"]
@@ -4280,6 +4347,9 @@ def selftest_diff():
                 live.remove(v["slideObjectIds"][0])
                 live.insert(v["insertionIndex"], v["slideObjectIds"][0])
 
+    revs = {"": {"revisions": [{"id": "1"}, {"id": "4"}], "nextPageToken": "t+1"}, "t%2B1": {"revisions": [{"id": "8"}], "nextPageToken": "t2"}, "t2": {}}
+    globals()["request"] = lambda m, u, *a, **k: revs[u.partition("pageToken=")[2]]
+    assert revision("x") == "8"  # 版の一覧は古い順。最後のページの最後の ID（空のページが続いても前の ID）
     globals().update(request=lambda m, u, *a, **k: {**p, "slides": [{"objectId": o, "slideProperties": {"notesPage": {"notesProperties": {"speakerNotesObjectId": o + "_sp"}}}} for o in live]},
                      batch=fake_batch, revision=lambda pid: "rev")
     gapi.guard = gapi.stamp = lambda *a: None
