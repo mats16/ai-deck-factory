@@ -83,6 +83,7 @@ NUM_NO_UNIT = "大きな数字に単位がない"  # [lint-006] visual.md の 2�
 PHRASE_BREAK = "自動の折り返しが文節の途中に入る見込み"  # [lint-024] visual.md の visual-013。Google Slides は和文を 1 字ずつ折り返す。レビューで直した改行でいちばん多かった
 NO_HEAD = "、。，．）」』】〕・ー!?！？：；"  # 行頭に来ない字（禁則で前の行に戻るので、見込みの位置で折れない）
 OPEN_HEAD = "手の改行のあとの行頭に全角の開き括弧"  # [lint-007] visual.md の 2 の「改行」。行頭の「（」「「」は半字下がって見え、左端がそろわない
+TEXT_OVER = "文字が枠の下からはみ出し、下の文字に重なる見込み"  # [lint-025] 枠の高さを決め打ちにした見出しが折り返したとき（2026-10-19。カードの太字の見出しを Regular の字幅で見込み、2 行目が本文に重なった）
 COL_SHIFT = "隣り合う列の箱の上端か下端がずれている"  # [lint-008] visual.md の 4。片方の列にだけ小見出しを置くと、箱の上下がそろわない
 BIG_NUM_PT, COL_TOL, COL_MAX, NEST = 28, 0.03 * EMU, 1.0 * EMU, 0.25 * EMU  # 大きな数字の大きさ。列のずれは 0.03〜1.0 in を出す（それより大きいのは中身の量の違いとみなす）
 DASH_ROUND = "点線の角丸が Google 標準の丸み"  # slides.md の 5。中のカード（半径 0.1 in）と曲率が合わない。JSON の box の dash にする（2026-10-08）
@@ -99,7 +100,7 @@ FONT_NG = f"書体が {FONT} でない"  # スライドはテンプレートの�
 MONO_NG = f"等幅の {MONO_DEFAULT} に和文"  # 名前は既定の書体のまま（台帳と lint_runs.jsonl が名前で数える）。テーマの mono なら指摘にその名前を出す。MONO に和文の字形はなく、Google が別の書体で描く。和文は FONT にする（slides.py の mono_reqs。visual.md の 2）
 DECK_WIDE = {NO_COVER, NO_DIVIDER, SHORT_CH, MANY_BANDS, HEAD_CLAIMS}  # デッキ全体を見て出す規則。lint_slides の only で絞らない（ページの番号が付いていても、ほかのページで決まる）
 PAGE_ONLY = {NO_NOTES, NO_SOURCE, NO_LINK, TALK, TWO_LINES, HEAD_PERIOD, HEAD_POLITE, EMPTY_BELOW, EMPTY_HOLE}  # ページを見て出す規則。部品だけを見るときは出さない
-ESTIMATE = {TWO_LINES, BODY_LINES, PHRASE_BREAK, EMPTY_BELOW, EMPTY_BOX, EMPTY_HOLE}  # 字幅と行の高さの見積もりから出す指摘。Google が描いた画像で確定する（ほかは JSON で決まる）
+ESTIMATE = {TWO_LINES, BODY_LINES, PHRASE_BREAK, EMPTY_BELOW, EMPTY_BOX, EMPTY_HOLE, TEXT_OVER}  # 字幅と行の高さの見積もりから出す指摘。Google が描いた画像で確定する（ほかは JSON で決まる）
 HARD_NAMES = set(HARD) | {HEAD_PERIOD, HEAD_POLITE, f"{MIN_PT}pt 未満の文字", f"{DOC_MIN_PT}pt 未満の文字", COPYRIGHT_NG, FONT_NG, MONO_NG, "用紙が A4 でない", "追跡の印の付いたリンク"}
 INS = INSET * 72  # 文字の枠の内側の余白（pt）。Slides API の既定は 0.1 in で、変えられない
 BODY_TOP, BODY_BOTTOM = Y_BODY_NOLEAD * EMU, BAND_BOTTOM * EMU  # 本文の領域（visual.md の 1 の配置）
@@ -245,7 +246,7 @@ def est_lines(para, avail):
         for i, part in enumerate(c.split("\v")):
             if i:
                 segs.append(0.0)
-            segs[-1] += em_width(part) * (size_of(st) or 0)
+            segs[-1] += em_width(part, bold=st.get("bold", False)) * (size_of(st) or 0)
     return sum(max(1, math.ceil(x / avail - 1e-9)) for x in segs)
 
 
@@ -254,7 +255,7 @@ def wrap_breaks(para, avail):
     （和文は 1 字ずつ、英数字の語はまとめて次の行へ、1 行より長い語は字で折る）。run ごとの大きさを見る。文字の大きさの分からない run があれば []"""
     if any(size_of(st) is None for c, st in para[1] if c.strip()):
         return []
-    ws = [em_width(ch, st.get("fontFamily") == MONO) * (size_of(st) or 0) for c, st in para[1] for ch in c]
+    ws = [em_width(ch, st.get("fontFamily") == MONO, st.get("bold", False)) * (size_of(st) or 0) for c, st in para[1] for ch in c]
     t, out, cur = "".join(c for c, _ in para[1]), [], 0.0
     for m in re.finditer(r"[!-~]+| +|\v|.", t):
         if m.group() == "\v":
@@ -325,7 +326,7 @@ def text_lines(sh, width):
 
 
 def text_bottom(sh, b):
-    """文字の下端の見込み（EMU）。行送りは slides.py の est_h と同じ（大きさの 1.2 倍 × 行間）。上下の中央・下のそろえも見る。大きさの分からない段落があれば None。"""
+    """文字の下端の見込み（EMU）。行送りは slides.py の spec_text_h と同じ（大きさの 1.2 倍 × 行間）。上下の中央・下のそろえも見る。大きさの分からない段落があれば None。"""
     h = 0
     for para in paras(sh.get("text")):
         avail = b[2] / EMU * 72 - 2 * INS - para[0].get("indentStart", {}).get("magnitude", 0)
@@ -447,6 +448,22 @@ def off_center_arrows(lines, boxes):  # [lint-016] 2 つの箱をつなぐ横の
         if left and right:
             pairs.setdefault((tuple(left[0]), tuple(right[0])), []).append((max(abs(y - (b[1] + b[3] / 2)) for b in (left[0], right[0])), y))
     return [f"{d / EMU:.2f} in ずれている（y={y / EMU:.2f} in）" for ys in pairs.values() if len(ys) == 1 for d, y in ys if d > tol]
+
+
+def text_over(els):
+    """文字が枠の下からはみ出し、その下の文字の枠の文字に届く見込み。文字の枠を上下に分けて置いた見出しと本文（カード）で、上の文字が折り返したとき。"""
+    ts = [(e, b) for e, b in els if has_text(e)]
+    out = []
+    for e, b in ts:
+        bot = text_bottom(e["shape"], b)  # 下にそろえた文字は上に伸びるので、下にははみ出さない
+        if e["shape"].get("shapeProperties", {}).get("contentAlignment") == "BOTTOM" or bot is None or bot <= b[1] + b[3] - (INSET - 0.02) * EMU:  # 文字の下端が、枠の内側の余白の中なら収まっている
+            continue
+        for e2, b2 in ts:
+            if e2 is not e and b2[1] > b[1] + b[3] / 2 and b2[0] < b[0] + b[2] and b[0] < b2[0] + b2[2] and b2[1] + (INSET + 0.02) * EMU < bot:
+                out.append(f"「{ptext(paras(e['shape'].get('text'))[0])[:20]}」が「{ptext(paras(e2['shape'].get('text'))[0])[:20]}」に {(bot - b2[1]) / EMU - INSET:.2f} in 重なる。"
+                           "言い方を縮めるか、枠を広げる（見込みなので画像で確かめる）")
+                break
+    return out
 
 
 def column_shift(cards, filled):
@@ -632,9 +649,10 @@ def lint_slides(p, r, reuse=False, talk=False, only=None, scope="deck"):
             best = top
         if best[1] is not None:
             sz, e, b = best
-            ts = [ptext(x) for text, _ in cells(e) for x in paras(text) if ptext(x).strip()]
+            ps = [x for text, _ in cells(e) for x in paras(text) if ptext(x).strip()]
+            ts = [ptext(x) for x in ps]
             avail = b[2] / EMU * 72 - 2 * INS
-            n = sum(max(1, -(-em_width(t) * sz // avail)) for t in ts) if avail > 0 else 1
+            n = sum(max(1, -(-em_width(ptext(x), bold=x[1][0][1].get("bold", False)) * sz // avail)) for x in ps) if avail > 0 else 1  # 見出しは太字（1 つめの run の太さで見る）
             titles.append(f"p{i}  {' / '.join(ts)}" + (f"  （{int(n)} 行の見込み）" if n > 1 else ""))
             head = "".join(ts).rstrip()
             if "。" in head:  # 文の途中の句点も（2 文の見出しは短い名詞句でない）
@@ -654,6 +672,7 @@ def lint_slides(p, r, reuse=False, talk=False, only=None, scope="deck"):
                 if k and k > 1:
                     r.hits[TWO_LINES].append(f"p{i} のリード: 「{lead[:30]}」")
         r.hits[ARROW_MID].extend(f"p{i}: {m}" for m in off_center_arrows(lines, boxes))
+        r.hits[TEXT_OVER].extend(f"p{i}: {m}" for m in text_over(els))
         r.hits[LINE_GRID].extend(f"p{i}: 同じ長さの縦線が {n} 本。格子は表にし、月をまたぐバーなどだけ図形で上に置く（slides.md の 4）" for n in line_grid(grid))
         n = body_chars(els, best[1])
         chars.append(f"p{i} {n}")
@@ -732,7 +751,7 @@ def lint_slides(p, r, reuse=False, talk=False, only=None, scope="deck"):
     print(f"\n== 本文の字数（見出し・リード・出典・フッターを除く。話す資料は {TALK_MAX} 字まで） ==")
     print(" / ".join(chars))
     hard = r.show(list(HARD) + [f"{MIN_PT}pt 未満の文字", COPYRIGHT_NG, FONT_NG, MONO_NG, HEAD_PERIOD, HEAD_POLITE], "要修正")
-    r.show(list(WARN) + list(SLIDE_ONLY) + list(NOTES_ONLY) + [NO_SOURCE, NO_LINK, BODY_LINES, TWO_LINES, HEAD_CLAIMS, BULLET_PERIOD, TALK, NO_NOTES, ARROW_MID, LINE_GRID, EMPTY_BELOW, EMPTY_BOX, EMPTY_HOLE, PAD_NG, NUM_NO_UNIT, OPEN_HEAD, PHRASE_BREAK, COL_SHIFT, DASH_ROUND, STAGE_NG, CODE_NOT_MONO, BLOCK_ON_NAVY, MANY_BANDS, NO_COVER, NO_DIVIDER, SHORT_CH], "要確認")
+    r.show(list(WARN) + list(SLIDE_ONLY) + list(NOTES_ONLY) + [NO_SOURCE, NO_LINK, BODY_LINES, TWO_LINES, HEAD_CLAIMS, BULLET_PERIOD, TALK, NO_NOTES, ARROW_MID, TEXT_OVER, LINE_GRID, EMPTY_BELOW, EMPTY_BOX, EMPTY_HOLE, PAD_NG, NUM_NO_UNIT, OPEN_HEAD, PHRASE_BREAK, COL_SHIFT, DASH_ROUND, STAGE_NG, CODE_NOT_MONO, BLOCK_ON_NAVY, MANY_BANDS, NO_COVER, NO_DIVIDER, SHORT_CH], "要確認")
     hard += workspace_checks("slides", p, r)
     print("\n== 文字サイズ（pt: run の数） ==")
     print(", ".join(f"{k:g}: {v}" for k, v in sorted(sizes.items())))
@@ -1216,6 +1235,12 @@ def selftest():
     assert not run(deck([(NAVY, two + [line(1.58, 1.1, 1.34, 0, oid="m"), line(1.58, 1.36, 1.34, 0, oid="n")])]))[0].hits[ARROW_MID]  # 同じ 2 つの箱の間の 2 本はずらすのが意図
     thin = [{"objectId": f"v{k}", "shape": {"shapeType": "RECTANGLE", "shapeProperties": {}}, **box(k, 1, 0.03, 4)} for k in range(3)]
     assert len(run(deck([(NAVY, thin)]))[0].hits[LINE_GRID]) == 1  # 細い四角の格子も見る
+    head = lambda n: shape(1, text=["あ" * n]) | box(0, 2, (120 + 2 * INS) / 72, 0.4)  # 12pt で 10 字が 1 行の幅、高さは 1 行の枠（0.2 in と上下の余白）
+    over = lambda n: run(deck([(OAT, [head(n), shape(1, text=["本文"]) | box(0, 2.35, 3, 0.4)])]))[0].hits[TEXT_OVER]
+    assert not over(10) and len(over(15)) == 1  # 見出しが 2 行に折れると、下の本文の枠の文字に届く
+    low = head(15)
+    low["shape"]["shapeProperties"]["contentAlignment"] = "BOTTOM"
+    assert not run(deck([(OAT, [low, shape(1, text=["本文"]) | box(0, 2.35, 3, 0.4)])]))[0].hits[TEXT_OVER]  # 下にそろえた文字は上に伸びる
     dashed = lambda kind: [{"objectId": "d", "shape": {"shapeType": kind, "shapeProperties": {"outline": {"dashStyle": "DASH"}}}, **box(1, 1, 3, 2)}]
     # 濃紺の箱の上の NAVY_BLOCK: 本文ページでは出し、淡色なら出さない。扉（濃紺の地）では出さない
     blk = lambda pg_bg, h: len(run(deck([(pg_bg, [title(), shape(1, y=2, w=6, text=[""], fill=NAVY), shape(1, y=2.5, w=3, text=["群"], fill={"rgbColor": rgb(h)})])]))[0].hits[BLOCK_ON_NAVY])

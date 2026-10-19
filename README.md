@@ -95,7 +95,7 @@ pi install git:github.com/mats16/ai-deck-factory        # git から
 | ドキュメントの本文 | `[docs.themes.<名前>] font` | Noto Sans JP | スライドの本文と同じ |
 | ドキュメントのコード | `[docs.themes.<名前>] mono` | Cascadia Mono | スライドのコードと同じ |
 
-- **文字の幅の見込みは、測った書体のものを使う。** `slides.py` の `em_width` は、本文の英数字を `FONT_EM` の幅（Noto Sans JP Regular の `ASCII_EM`、DM Sans の `DM_SANS_EM`）で、コードを `MONO_EM`（Cascadia Mono、0.586 em）で見込む。測っていない書体は Noto Sans JP の幅で見込み、折り返しの見込み（組むときの警告、`d.card` の高さ、lint の行数）がずれるので、Google が描いたページの画像で見る。
+- **文字の幅の見込みは、測った書体のものを使う。** `slides.py` の `em_width` は、本文の英数字を `FONT_EM` の幅（Noto Sans JP Regular の `ASCII_EM`、DM Sans の `DM_SANS_EM`。太字はそれぞれの Bold の `ASCII_BOLD_EM`・`DM_SANS_BOLD_EM`）で、コードを `MONO_EM`（Cascadia Mono、0.586 em）で見込む。測っていない書体は Noto Sans JP の幅で見込み、折り返しの見込み（組むときの警告、`d.card` の高さ、lint の行数）がずれるので、Google が描いたページの画像で見る。
 - **Google Fonts にない名前は、API が受け付けて黙って別の書体で描く。** 書いたら見本のページ（`template.py <名前>`、ドキュメントはそのテーマの文書）を組み、画像で確かめる。
 - lint の「書体が … でない」「等幅の … に和文」は、テーマの書体と比べる。
 
