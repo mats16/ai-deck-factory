@@ -11,7 +11,7 @@ from collections import Counter, defaultdict
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from slides import BAND_BOTTOM, COPYRIGHT_PT, EMU, FONT, INSET, LAYOUT_MARK, MONO_DEFAULT, STAGE_FILL, Y_BODY, Y_BODY_NOLEAD, Y_FOOT, Y_LEAD, deck_card, deck_font, deck_mono, em_width, use_font  # 版面・書体・字幅の見積もりは、組む側（slides.py）と同じものを使う
+from slides import BAR_MARK, BAND_BOTTOM, COPYRIGHT_PT, EMU, FONT, INSET, LAYOUT_MARK, MONO_DEFAULT, STAGE_FILL, Y_BODY, Y_BODY_NOLEAD, Y_FOOT, Y_LEAD, deck_card, deck_font, deck_mono, em_width, use_font  # 版面・書体・字幅の見積もりは、組む側（slides.py）と同じものを使う
 
 DOC_MIN_PT = 9  # ドキュメントの文字の下限。図表の題・出典・表の中・フッターが 9pt（visual_doc.md の 1）
 MIN_PT = 11  # [lint-001] スライドの文字の下限。社内資料の差し替え用（名前に「差し替え用」）は元の大きさのままなので見ない
@@ -363,6 +363,8 @@ def empty_space(els, scheme):
     for e, b, _ in body:
         sh = e.get("shape")  # 箱は塗りで見分ける（slides.py は文字の枠も塗りのない RECTANGLE で作る）
         if not sh or not solid(sh.get("shapeProperties", {}).get("shapeBackgroundFill"), scheme) or min(b[2], b[3]) < THIN:
+            continue
+        if e.get("title") == BAR_MARK:  # 棒グラフの棒（slides.py の bars）。棒の中の数字の下が空くのは決まった形
             continue
         inner = [k for e2, b2, k in body if e2 is not e and (has_text(e2) or "table" in e2 or "image" in e2)  # 文字のない図形（角丸を組む部品・枠線）は中身に数えない
                  and b[0] <= b2[0] + b2[2] / 2 <= b[0] + b[2] and b[1] <= b2[1] + b2[3] / 2 <= b[1] + b[3]]
@@ -1271,6 +1273,7 @@ def selftest():
     assert pads([card(2, 4), stat]) == 0
     frame = {"objectId": "f", "shape": {"shapeType": "RECTANGLE", "shapeProperties": {}}, **box(0.6, 2, 6, 4)}  # 角丸のカードを組む、文字のない枠
     assert hits([card(2, 4), frame, shape(1, y=2.1)]) == (0, 1)  # [lint-021] 文字のない部品は中身に数えない
+    assert hits([card(3, 3) | {"title": BAR_MARK}, shape(1, y=3.1, text=["260 百万円/月"])]) == (0, 0) and hits([card(3, 3), shape(1, y=3.1, text=["98 %"])]) == (0, 1)  # 棒（代替テキストの印）だけは見ない
     # 本文の中ほどの穴: 1 行の文字が 2 つ、2 in 離れていれば出す。近ければ出さない
     holes = lambda els: len(run(deck([(OAT, [title()] + els)]))[0].hits[EMPTY_HOLE])
     assert holes([shape(1, y=2), shape(1, y=4.5)]) == 1 and holes([shape(1, y=2), shape(1, y=2.6)]) == 0
