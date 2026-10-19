@@ -111,6 +111,7 @@ READ_ERRORS = (gapi.ApiError, urllib.error.URLError)  # Drive を読めない（
 # 会社のテンプレートから残した表紙・扉のレイアウト（図形・ロゴ・写真付き。パターンごとに番号）。template.py がそのレイアウトのページ番号の枠の
 # 代替テキストに書く。w は元のタイトルの枠の右端までの文字の幅（in）、tone は地の明るさ（文字の色を決める）。なければ表紙・扉も Blank に組む
 # （2026-10-13、ユーザー「元の図形が入ったタイトルスライドなどを、維持して欲しい」「セクション区切りで異なる背景の区切りページを使い分けることはよくします」）
+BAR_MARK = "ai-deck-factory bar"  # 棒グラフの棒の代替テキストの title（description は名前と数）。lint が、棒の中の数字の下を「箱の中の下の空き」に数えない
 LAYOUT_MARK = re.compile(r"ai-deck-factory layout=(cover|section):(\d+)(?: w=([\d.]+))?(?: tone=(dark|accent|light))?")
 VARIANTS = {}  # 組んでいるデッキの {"cover"・"section": {番号: (文字の幅 in か None, tone)}}（目印の番号で引く。build の @COVER<番号> と同じ。use_layouts が決める）
 # 表紙・扉の地の明るさごとの文字の色（タイトル、小見出し・副題、章番号、社名とフッター）。dark は濃紺の地（Blank に組むときも）、accent は
@@ -466,23 +467,31 @@ class Deck:
                       {"updateShapeProperties": {"objectId": e, "shapeProperties": props, "fields": "shapeBackgroundFill,outline"}}]
         return e
 
-    def box(self, sid, x, y, w, h, fill=None, line=None, kind=None, radius=CORNER_RADIUS, inner=0, dash=False, weight=None):
+    def box(self, sid, x, y, w, h, fill=None, line=None, kind=None, radius=CORNER_RADIUS, inner=0, dash=False, weight=None, alt=None, title=None):
         """塗りの箱は半径 0.1 in の角丸が既定。輪郭だけの枠は四角。kind='RECTANGLE' で四角を明示できる。
         ROUND_RECTANGLE は四角と円の合成で半径を固定する。radius=None だけが Google 規定の丸み。
         戻りは文字を入れる透明の枠の ID。finish で背景とまとめ、編集可能な 1 グループにする。
         inner（in）は、文字の枠を左右だけ箱の内に縮める幅（枠の内側の余白 0.1 in に足す。text の pad）。
         dash で枠線を点線にし、weight（pt）で枠線の太さを変える。角丸の点線は、辺の線と角の円弧に点線を付けるので、半径は 0.1 in のまま
         [slides_py-005] （Google 標準の角丸に点線を付けると、半径が短い辺の約 1/6 になって中のカードと曲率が合わない）。
-        weight を省くと、赤（RED）の線は EMPH_PT（2pt。強調の囲み）、ほかは 0.75pt。"""
+        weight を省くと、赤（RED）の線は EMPH_PT（2pt。強調の囲み）、ほかは 0.75pt。
+        alt・title は代替テキストの description・title（1 つの図形で描く箱だけ。棒グラフの棒の BAR_MARK）。"""
         weight = weight or (EMPH_PT if line == RED else 0.75)
         kind = kind or ("ROUND_RECTANGLE" if fill else "RECTANGLE")
         if inner > 0 and (kind != "ROUND_RECTANGLE" or radius is None):  # 1 つの図形では余白を変えられないので、図形と文字の枠を分けて 1 グループにする
+            if alt or title:
+                raise ValueError("alt・title は 1 つの図形で描く箱（四角か Google 規定の角丸）だけに付けられる")
             bg = self._shape(sid, x, y, w, h, fill, line, kind, dash=dash, weight=weight)
             e = self._shape(sid, x + inner, y, w - 2 * inner, h)
             self.round_groups.append((bg, e, self.oid()))
             return e
         if kind != "ROUND_RECTANGLE" or radius is None:
-            return self._shape(sid, x, y, w, h, fill, line, kind, dash=dash, weight=weight)
+            e = self._shape(sid, x, y, w, h, fill, line, kind, dash=dash, weight=weight)
+            if alt or title:
+                self.reqs.append({"updatePageElementAltText": {"objectId": e, "title": title or "", "description": alt or ""}})
+            return e
+        if alt or title:
+            raise ValueError("alt・title は 1 つの図形で描く箱（四角か Google 規定の角丸）だけに付けられる")
         if not math.isfinite(radius) or radius < 0 or w <= 0 or h <= 0:
             raise ValueError("角丸の半径は有限の非負値、幅と高さは正の値にする")
         r = min(radius, w / 2, h / 2)
@@ -900,8 +909,9 @@ STAT_PAD, HEAD_GAP = 0.2, 0.06  # 数字の強調の箱の端と文字の間、�
 # 余った高さを 1 行に足す上限（in）
 G_HEAD, G_NOTE, G_COL, G_COL_MIN, G_BAR, G_LANE, G_PAD, G_INSET, G_GROW = 2.2, 2.4, 1.0, 0.4, 0.42, 0.06, 0.1, 0.04, 0.4
 G_MARK, G_MARK_GAP = 0.2, 0.06  # 節目の印（赤の菱形）の大きさ、印と言葉の間（in）
-# 棒グラフ: 縦の棒の既定の高さ、数字と名前の行の高さ、棒の幅（枠の幅に対する比）と最大、横の棒の行の高さと棒の太さ（in）
-B_H, B_LABEL, B_FILL, B_MAX, B_ROW, B_BAR = 2.6, 0.3, 0.6, 1.2, 0.42, 0.28
+# 棒グラフ: 縦の棒の既定の高さ、数字と名前の行の高さ、棒の幅（枠の幅に対する比）と最大、横の棒の行の高さと棒の太さ、
+# 折れ線の段の高さ（点の数字の行と、いちばん下の点と棒の段の間を含む）と、その下の間、点の大きさ（in）
+B_H, B_LABEL, B_FILL, B_MAX, B_ROW, B_BAR, B_LINE, B_LINE_GAP, B_DOT = 2.6, 0.3, 0.6, 1.2, 0.42, 0.28, 0.8, 0.1, 0.1
 SITE = {"top": 0, "left": 1, "bottom": 2, "right": 3}  # 四角の図形の辺 → Slides API の接続点の番号（Deck.arrow の link）
 CONNECT = ("text", "label", "card", "stat", "code", "box")  # 矢印をつなげる部品（SpecPage.place が、四角の枠が箱と同じ大きさのものだけを選ぶ）
 # キーの型。s 文字列、md 記法つきの文字（spec_md）、n 数、i 整数、b 真偽、c 色、els 部品の並び、pt ID か [x, y]、ほかは SPEC_OK
@@ -925,7 +935,7 @@ SPEC_EL = {  # type → (要るキー, 書けるキー)
     "arrow": ({"from": "pt", "to": "pt"}, {"color": "c", "head": "b", "dash": "b", "weight": "p", "route": ("straight", "bent"), "label": "md",
                          "label_side": ("top", "bottom", "left", "right"), "offset": "f"}),  # label は線の札、label_side はその置き場所、offset は線を横（縦）にずらす in
     "gantt": ({"cols": "cols", "rows": "grows"}, {"today": "p"}),  # 予定表（slides-010）
-    "bars": ({"items": "bitems"}, {"unit": "s", "horizontal": "b", "hot": "ints"}),  # 1 系列の棒グラフ（visual.md の 5）
+    "bars": ({"items": "bitems"}, {"unit": "s", "horizontal": "b", "hot": "ints", "line": "bline", "threshold": "bthr"}),  # 1 系列の棒グラフ（visual.md の 5）。折れ線と直線を重ねられる
     "row": ({"items": "kids"}, {"gap": "n", "widths": "nums", "arrows": "b"}),
     "stack": ({"items": "kids"}, {"gap": "n"}),
     "grid": ({"items": "kids", "cols": "pi"}, {"gap": "n"}),
@@ -936,6 +946,8 @@ GANTT_STATUS = {"plan": "NAVY", "tbd": "CARD", "done": "PANEL", "hot": "RED_SOFT
 # 強調を RED の地にしないのは、9pt の白の文字が 3.62:1 で 4.5:1 に届かないから（2026-10-19、見本を組んで lint が止めた）。淡い赤の地に RED_TEXT は 4.69:1
 GANTT_BAR = ({"from": "pi", "to": "pi"}, {"text": "s", "status": tuple(GANTT_STATUS)})  # バー: 何列目から何列目まで（1 から、両端を含む）、文字、状態（既定は plan）
 GANTT_MARK = ({"at": "p", "text": "s"}, {})  # 節目: 位置（today と同じ。3 は 3 列目の左端、3.5 は中ほど）、言葉（11pt の 1 行）
+BARS_LINE = ({"values": "bvals"}, {"unit": "s", "label": "s"})  # 棒の折れ線: 棒ごとの数（items の順。mermaid の xychart の line [..]）、単位、何の数か
+BARS_THRESHOLD = ({"value": "n"}, {"label": "s"})  # 棒の直線（目標・上限など）: 棒と同じ目盛りの数、何の線か
 NO_SIZE = ("icon", "num", "arrow")  # w・h を書かない（大きさは size、矢印は両端）
 CONTAINERS = ("row", "stack", "grid", "frame")  # 並べ方の箱（中の部品を置くだけで、Deck を呼ばない）
 NO_H = ("row", "stack", "grid", "gantt")  # h を書かない（高さは中身から決まる。中身より小さい h は次の部品と重なる。frame だけは h が要る）
@@ -986,6 +998,8 @@ SPEC_OK = {"s": lambda v: isinstance(v, str), "md": lambda v: isinstance(v, str)
            "items": lambda v: isinstance(v, list) and all(_strs(x, 2) for x in v),
            "cols": lambda v: _strs(v) and bool(v), "grows": lambda v: isinstance(v, list) and bool(v) and all(isinstance(x, dict) for x in v),
            "gbars": lambda v: isinstance(v, list) and all(isinstance(x, dict) for x in v), "gmarks": lambda v: isinstance(v, list) and all(isinstance(x, dict) for x in v),
+           "bline": lambda v: isinstance(v, dict), "bthr": lambda v: isinstance(v, dict),
+           "bvals": lambda v: isinstance(v, list) and bool(v) and all(_num(x) and x >= 0 for x in v),
            "bitems": lambda v: isinstance(v, list) and bool(v) and all(isinstance(x, list) and len(x) == 2 and isinstance(x[0], str) and _num(x[1]) and x[1] >= 0 for x in v),
            "rows": lambda v: isinstance(v, list) and bool(v) and all(_strs(x) and x for x in v),
            "nums": lambda v: isinstance(v, list) and all(_num(x) and x > 0 for x in v), "ints": lambda v: isinstance(v, list) and all(_int(x) and x > 0 for x in v),
@@ -1024,7 +1038,8 @@ SPEC_TYPES = {"s": "文字列", "md": "記法つきの文字列", "n": "0 以上
               "els": "部品の並び", "kids": "1 つ以上の部品の並び", "pages": "ページかデッキのファイルのパス（.json）の並び", "pt": "部品の id（\"<id>.<辺>\" で出る辺・入る辺。辺は top・bottom・left・right）か [x, y]", "items": '[["見出し", "説明"], …]',
               "rows": '[["見出しの行", …], ["セル", …], …]', "nums": "正の数の並び",
               "cols": '列の名前の並び（["10 月", "11 月", …]）', "grows": '[{"head": 項目, "bars": [{"from": 列, "to": 列, …}], "marks": [{"at": 位置, "text": 言葉}], "note": 補足}, …]',
-              "bitems": '[["名前", 0 以上の数], …]', "gbars": '[{"from": 列, "to": 列, "text": 文字, "status": "plan"・"tbd"・"done"・"hot"}, …]', "gmarks": '[{"at": 位置, "text": 言葉}, …]', "ints": "1 から始まる番号の並び", "aligns": '列ごとの left・center・right の並び（["left", "right", "right"]）',
+              "bitems": '[["名前", 0 以上の数], …]', "bvals": "0 以上の数の並び（items の順）", "bline": '{"values": [数, …], "unit": 単位, "label": 何の数か}',
+              "bthr": '{"value": 数, "label": 何の線か}', "gbars": '[{"from": 列, "to": 列, "text": 文字, "status": "plan"・"tbd"・"done"・"hot"}, …]', "gmarks": '[{"at": 位置, "text": 言葉}, …]', "ints": "1 から始まる番号の並び", "aligns": '列ごとの left・center・right の並び（["left", "right", "right"]）',
               "fills": '[[行, 列, 色], …]（rows の何番目かで、見出しの行が 1 行目・いちばん左の列が 1 列目。"all" はその列か行の全部）', "ns": "文字列か整数", "band": '"文字" か {"text": …, "sub": …}',
               "raw": "Deck のメソッドの引数（{\"zebra\": false} など）",
               "colors": f"役割の名前（{'・'.join([*ROLE, *FIXED, *NAMED])}）→ 6 桁の色（# は付けない）", "layouts": 'レイアウトの名前か {"layout": 名前, "w": 幅, "tone": "dark"・"accent"・"light"} の並び'}
@@ -1195,7 +1210,7 @@ class SpecPage:
     def emit(self, call, loc, e=None, **kw):
         """Deck の呼び出しを解いた形に足す。部品 e の raw は同じメソッドの引数に重ねる。"""
         if e and (raw := e.get("raw")):
-            ps = [n for n in inspect.signature(getattr(Deck, call)).parameters if n not in ("self", "sid")]
+            ps = [n for n in inspect.signature(getattr(Deck, call)).parameters if n not in ("self", "sid", "title") and (call, n) != ("box", "alt")]  # title は棒の印（BAR_MARK。raw で付けると lint が箱を見ない）、box の alt は棒だけ
             if bad := [k for k in raw if k not in ps]:
                 sys.exit(f"{loc}（{e['type']}）.raw: {call} の引数にない {', '.join(bad)}（書けるもの: {'・'.join(ps)}）")
             kw |= {k: spec_color(v) if k in ("fill", "line", "color", "bg") else v for k, v in raw.items()}
@@ -1213,8 +1228,8 @@ class SpecPage:
             self.table_check(e, loc)
         if kind == "gantt":
             self.gantt_check(e, loc)
-        if kind == "bars" and (bad := [i for i in e.get("hot", []) if i > len(e["items"])]):
-            sys.exit(f"{loc}（bars）.hot: 棒の数（{len(e['items'])}）より大きい番号 {bad}")
+        if kind == "bars":
+            self.bars_check(e, loc)
         if e.get("w") == "fit" and kind != "label":
             sys.exit(f"{loc}（{kind}）.w: \"fit\"（中身の幅）は label だけ")
         if in_frame and kind != "arrow" and ("x" not in e or "y" not in e or "w" not in e and kind not in NO_SIZE):
@@ -1239,6 +1254,19 @@ class SpecPage:
             sys.exit(f"{loc}（table）.fills: 表にない行か列 {bad}（{len(rows)} 行 {n} 列。1 から数え、\"all\" はその列か行の全部）")
         if bad := [f for f in e.get("fills", []) if f[2] in ON_FILL]:  # セルの文字の色は地で替えないので、濃い地では読めない
             sys.exit(f"{loc}（table）.fills: 濃い色 {bad} はセルの強調に使えない。淡い色（RED_SOFT・PANEL など）にする")
+
+    def bars_check(self, e, loc):
+        n = len(e["items"])
+        if bad := [i for i in e.get("hot", []) if i > n]:
+            sys.exit(f"{loc}（bars）.hot: 棒の数（{n}）より大きい番号 {bad}")
+        if "line" in e:
+            spec_check(e["line"], BARS_LINE, f"{loc}（bars）.line")
+            if e.get("horizontal"):
+                sys.exit(f"{loc}（bars）.line: 折れ線は縦の棒（時の流れ）だけに重ねる。横の棒には書けない")
+            if len(e["line"]["values"]) != n:
+                sys.exit(f"{loc}（bars）.line.values: 数の数（{len(e['line']['values'])}）が棒の数（{n}）と違う（items の順に 1 つずつ）")
+        if "threshold" in e:
+            spec_check(e["threshold"], BARS_THRESHOLD, f"{loc}（bars）.threshold")
 
     def gantt_check(self, e, loc):
         n = len(e["cols"])
@@ -1339,44 +1367,100 @@ class SpecPage:
 
     def bars(self, e, x, y, w, h, loc):
         """[slides_py-026] 1 系列の棒グラフ（visual.md の 5）。凡例と目盛りを置かず、棒の端に数字を書く（直接のラベル）。棒は NAVY、hot の棒は RED と赤の数字。
-        縦の棒（既定）は、下に名前、棒の上に数字、下端に基準の線。横の棒（horizontal）は、左に名前、棒の右に数字、左端に基準の線。"""
-        items, hot = e["items"], set(e.get("hot", []))
-        top = max(v for _, v in items) or 1
-        fmt = lambda v: f"{int(v) if float(v).is_integer() else v:,}" + (" " + e["unit"].strip() if e.get("unit", "").strip() else "")  # 100.0 も 100 と書く  # 単位の前は 1 字空ける（" 分" と書いても空きを 2 つにしない）
-        self.index.append((loc, " ".join(f"{n} {fmt(v)}" for n, v in items)))
+        縦の棒（既定）は、下に名前、棒の上に数字、下端に基準の線。横の棒（horizontal）は、左に名前、棒の右に数字、左端に基準の線。
+        line（縦の棒だけ）は、棒の上の段に、棒と別の目盛りで SUB の折れ線を引き、点の上に数字を書く。何の数か（label）は段の左上。
+        折れ線は棒と違い 0 から始めず、いちばん小さい数を段の下、いちばん大きい数を段の上にする（段が低いので、0 からだと動きが見えない。数は点に書く）。
+        threshold は、棒と同じ目盛りで赤の点線を引き、縦の棒は線の右、横の棒は線の上に札を置く（札の場所は棒の場所から引く）。
+        直線が棒の端の数字を通るときは、その数字を棒の中（白）に入れる（線の外に出すと、線を越えた数に見える）。棒が短くて入らなければ警告する。"""
+        items, hot, line, th = e["items"], set(e.get("hot", [])), e.get("line"), e.get("threshold")
+        top = max([v for _, v in items] + ([th["value"]] if th else [])) or 1  # 直線が棒より高ければ、直線が高さいっぱい
+        fmt = lambda v, unit=e.get("unit", ""): f"{int(v) if float(v).is_integer() else v:,}" + (" " + unit.strip() if unit.strip() else "")  # 100.0 も 100 と書く  # 単位の前は 1 字空ける（" 分" と書いても空きを 2 つにしない）
+        tl = th and " ".join(filter(None, (th.get("label", "").strip(), fmt(th["value"]))))  # 直線の札（「目標 90 分」）
+        tw = th and em_width(tl) * 11 / 72 + 0.1
+        self.index.append((loc, " ".join(f"{n} {fmt(v)}" for n, v in items) + (f" {tl}" if th else "")))
         bar = lambda i: spec_color("RED" if i in hot else "NAVY")
-        num = lambda i, v: [(fmt(v), {"bold": True, "color": spec_color("RED_TEXT" if i in hot else "TEXT")})]
-        common = dict(size=11, color=spec_color("TEXT"), spacing=100, edge=True)
+
+        def num(i, v, inside=False):  # 棒の端の数字。棒の中は白（赤の棒は ON_RED）、外は本文の色（赤の棒は RED_TEXT）
+            plain, emph = ("WHITE", "ON_RED") if inside else ("TEXT", "RED_TEXT")
+            return [(fmt(v), {"bold": True, "color": spec_color(emph if i in hot else plain)})]
+        common, pad = dict(size=11, color=spec_color("TEXT"), spacing=100, edge=True), 11 / 72 + 0.02  # pad は棒の中の数字と棒の端の間（1 字分。visual-027）
+        thr = lambda **k: self.emit("arrow", f"{loc}.threshold", **k, color=RED, head=False, dash=True, weight=1.25)
+        thl = lambda **k: self.emit("text", f"{loc}.threshold.label", **k, parts=[(tl, {"color": spec_color("RED_TEXT")})], **common)
         if e.get("horizontal"):
             lw = min(max(em_width(n) for n, _ in items) * 11 / 72 + 0.1, w * 0.35)
             vw = max(em_width(fmt(v)) for _, v in items) * 11 / 72 + 0.05
-            pw, rh = w - lw - vw - 0.2, h / len(items)
-            if rh < B_ROW:  # 棒の太さと 11pt の名前が 1 本の行に収まる高さ
+            y0 = y + (B_LABEL if th else 0)  # 直線の札の行
+            x0, pw, rh = x + lw + 0.1, w - lw - vw - 0.2, (y + h - y0) / len(items)
+            if rh < B_ROW - 1e-6:  # 棒の太さと 11pt の名前が 1 本の行に収まる高さ（札の行を引いた割り算の誤差は見ない）
                 sys.exit(f"{loc}（bars）: h が小さくて 1 本の行が {rh:.2f} in になる（{B_ROW} in 以上。h を省くと 1 本 {B_ROW} in）")
             if pw < 1:
                 sys.exit(f"{loc}（bars）: 棒を引く幅が {pw:.2f} in しかない（名前か数字が長い。短くするか、幅を広げる）")
+            if th and tw > w:
+                sys.exit(f"{loc}（bars）: 直線の札「{tl}」が幅 {w:.2f} in に収まらない（label を短くするか、幅を広げる）")
+            tx = th and x0 + th["value"] / top * pw
             for i, (n, v) in enumerate(items, 1):
-                cy, bl, l = y + (i - 1) * rh, v / top * pw, f"{loc}.items[{i - 1}]"
+                cy, bl, l = y0 + (i - 1) * rh, v / top * pw, f"{loc}.items[{i - 1}]"
                 if est_lines(n, lw, 11) > 1:  # 名前の列は本文の幅の 35% まで
                     self.warns.append(f"{l}: 棒の名前「{n}」が折り返す見込み（名前の列 {lw:.2f} in）。短くする")
                 self.emit("text", f"{l}.name", x=x, y=cy, w=lw, h=rh, parts=n, align="END", valign="MIDDLE", **common)
                 if bl > 0:
-                    self.emit("box", l, x=x + lw + 0.1, y=cy + (rh - B_BAR) / 2, w=bl, h=B_BAR, fill=bar(i), kind="RECTANGLE")
-                self.emit("text", f"{l}.value", x=x + lw + 0.1 + bl + 0.08, y=cy, w=vw, h=rh, parts=num(i, v), valign="MIDDLE", **common)
-            return self.emit("arrow", f"{loc}.base", x1=x + lw + 0.1, y1=y, x2=x + lw + 0.1, y2=y + h, color=RULE, head=False, weight=0.75)
-        slot, ph = w / len(items), h - 2 * B_LABEL
+                    self.emit("box", l, x=x0, y=cy + (rh - B_BAR) / 2, w=bl, h=B_BAR, fill=bar(i), kind="RECTANGLE", title=BAR_MARK, alt=f"{n} {fmt(v)}")
+                nw = em_width(fmt(v)) * 11 / 72
+                if th and x0 + bl <= tx <= x0 + bl + 0.08 + nw:  # 直線が数字を通る
+                    if bl < nw + 2 * pad:
+                        self.warns.append(f"{l}: 直線（threshold）が数字「{fmt(v)}」に重なる見込み（棒が短くて数字を中に入れられない）")
+                    else:
+                        self.emit("text", f"{l}.value", x=x0 + bl - nw - pad - 0.1, y=cy, w=nw + 0.1, h=rh, parts=num(i, v, True), align="END", valign="MIDDLE", **common)
+                        continue
+                self.emit("text", f"{l}.value", x=x0 + bl + 0.08, y=cy, w=vw, h=rh, parts=num(i, v), valign="MIDDLE", **common)
+            self.emit("arrow", f"{loc}.base", x1=x0, y1=y0, x2=x0, y2=y + h, color=RULE, head=False, weight=0.75)
+            if th:
+                thr(x1=tx, y1=y0, x2=tx, y2=y + h)
+                thl(x=max(min(tx - tw / 2, x + w - tw), x), y=y, w=tw, h=B_LABEL - 0.04, align="CENTER", valign="BOTTOM")
+            return
+        lh = B_LINE + (B_LABEL if line.get("label") else 0) if line else 0  # 折れ線の段（何の数かの行を含む）
+        pw = w - (tw + 0.08 if th else 0)  # 直線の札は棒の右に置く
+        if th and pw < 1:
+            sys.exit(f"{loc}（bars）: 直線の札「{tl}」を右に置くと、棒を引く幅が {pw:.2f} in しかない（label を短くするか、幅を広げる）")
+        slot, ph = pw / len(items), h - 2 * B_LABEL - lh
         bw, base = min(slot * B_FILL, B_MAX), y + h - B_LABEL
         if ph < 0.5:
-            sys.exit(f"{loc}（bars）: h が小さくて棒を引く高さが {ph:.2f} in しかない")
+            sys.exit(f"{loc}（bars）: h が小さくて棒を引く高さが {ph:.2f} in しかない" + (f"（折れ線の段に {lh:.2f} in を使う。h を省くと棒の段は {B_H - 2 * B_LABEL} in）" if line else ""))
+        ty = th and base - th["value"] / top * ph
         for i, (n, v) in enumerate(items, 1):
             sx, bh, l = x + (i - 1) * slot, v / top * ph, f"{loc}.items[{i - 1}]"
             if bad := [t for t in (n, fmt(v)) if est_lines(t, slot, 11) > 1]:
                 self.warns.append(f"{l}: 棒の名前か数字「{bad[0]}」が折り返す見込み（1 本の幅 {slot:.2f} in）。短くするか、横の棒（horizontal）にする")
             if bh > 0:
-                self.emit("box", l, x=sx + (slot - bw) / 2, y=base - bh, w=bw, h=bh, fill=bar(i), kind="RECTANGLE")
-            self.emit("text", f"{l}.value", x=sx, y=base - bh - B_LABEL, w=slot, h=B_LABEL - 0.04, parts=num(i, v), align="CENTER", valign="BOTTOM", **common)
+                self.emit("box", l, x=sx + (slot - bw) / 2, y=base - bh, w=bw, h=bh, fill=bar(i), kind="RECTANGLE", title=BAR_MARK, alt=f"{n} {fmt(v)}")
+            vy, inside = base - bh - B_LABEL, False
+            if th and vy <= ty <= base - bh:  # 直線が数字を通る
+                if bh < B_LABEL + pad:
+                    self.warns.append(f"{l}: 直線（threshold）が数字「{fmt(v)}」に重なる見込み（棒が低くて数字を中に入れられない）")
+                else:
+                    vy, inside = base - bh + pad, True
+            self.emit("text", f"{l}.value", x=sx, y=vy, w=slot, h=B_LABEL - 0.04, parts=num(i, v, inside), align="CENTER", valign="TOP" if inside else "BOTTOM", **common)
             self.emit("text", f"{l}.name", x=sx, y=base + 0.06, w=slot, h=B_LABEL - 0.06, parts=n, align="CENTER", **common)
-        self.emit("arrow", f"{loc}.base", x1=x, y1=base, x2=x + w, y2=base, color=RULE, head=False, weight=0.75)
+        self.emit("arrow", f"{loc}.base", x1=x, y1=base, x2=x + pw, y2=base, color=RULE, head=False, weight=0.75)
+        if th:
+            thr(x1=x, y1=ty, x2=x + pw, y2=ty)
+            thl(x=x + pw + 0.08, y=ty - B_LABEL / 2, w=tw, h=B_LABEL, valign="MIDDLE")
+        if line:  # 点は、段の上の数字の行の下から、棒の段の B_LINE_GAP 上まで（いちばん高い棒の数字と離す）
+            vals, lu = line["values"], line.get("unit", "")
+            low, span, lo, hi = y + lh - B_LINE_GAP - B_DOT / 2, B_LINE - B_LABEL - B_LINE_GAP - B_DOT, min(vals), max(vals)
+            pts = [(x + (i + 0.5) * slot, low - ((v - lo) / (hi - lo) if hi > lo else 0.5) * span) for i, v in enumerate(vals)]  # 数がみな同じなら段の中ほど
+            self.index.append((f"{loc}.line", " ".join([line.get("label", "")] + [fmt(v, lu) for v in vals]).strip()))
+            if line.get("label"):
+                self.emit("text", f"{loc}.line.label", x=x, y=y, w=pw, h=B_LABEL - 0.04, parts=[(line["label"], {"color": SUB})], valign="BOTTOM", **common)
+            for i, ((px, py), (qx, qy)) in enumerate(zip(pts, pts[1:])):
+                self.emit("arrow", f"{loc}.line.seg[{i}]", x1=px, y1=py, x2=qx, y2=qy, color=SUB, head=False, weight=2)
+            for i, ((px, py), v) in enumerate(zip(pts, vals)):
+                l = f"{loc}.line.values[{i}]"
+                if est_lines(fmt(v, lu), slot, 11) > 1:
+                    self.warns.append(f"{l}: 折れ線の数字「{fmt(v, lu)}」が折り返す見込み（1 本の幅 {slot:.2f} in）。単位を短くするか、幅を広げる")
+                self.emit("box", l, x=px - B_DOT / 2, y=py - B_DOT / 2, w=B_DOT, h=B_DOT, fill=SUB, kind="ELLIPSE")
+                self.emit("text", f"{l}.value", x=px - slot / 2, y=py - B_DOT / 2 - B_LABEL, w=slot, h=B_LABEL - 0.04, parts=[(fmt(v, lu), {"bold": True, "color": SUB})],
+                          align="CENTER", valign="BOTTOM", **common)
 
     # ---- 大きさ ----
     def fixed_w(self, e):
@@ -1449,7 +1533,9 @@ class SpecPage:
             _, _, _, hd, hs, _ = self.gantt_layout(e, w, loc)
             return hd + sum(hs)
         if kind == "bars":
-            return len(e["items"]) * B_ROW if e.get("horizontal") else B_H
+            if e.get("horizontal"):
+                return len(e["items"]) * B_ROW + (B_LABEL if "threshold" in e else 0)  # 直線の札の行
+            return B_H + (B_LINE + (B_LABEL if e["line"].get("label") else 0) if "line" in e else 0)  # 折れ線の段
         if kind == "image":
             src = self.src(e, loc)
             if src.startswith("http") or not (r := image_ratio(src)):
@@ -1949,6 +2035,8 @@ SPEC_UNIT = {"w": "幅（in）", "h": "高さ（in）", "x": "frame の左上か
              "label_side": "札の置き場所。横の線は top（既定）か bottom、縦の線は right（既定）か left",
              "offset": "線を箱の中央からずらす in。横の線は下が正、縦の線は右が正。ずらした線は箱につながない（同じ 2 つの箱の間に 2 本引くとき）",
              "bars.unit": "数のあとに付ける単位", "stat.unit": "単位（数字の半分の大きさ）", "horizontal": "横の棒（名前が長い・順位）。既定は縦の棒（時の流れ）", "bars.hot": "強調する棒の番号（1 から。赤）",
+             "bars.line": "折れ線（縦の棒だけ）。棒と別の目盛りで、棒の上の段に引く（率・累計など単位の違う数）。threshold と一緒に書ける",
+             "bars.threshold": "目標・上限などの直線（いつも棒と同じ目盛り。赤の点線）。折れ線の目盛りの線は引けない", "values": "棒ごとの数（items の順）",
              "code.hot": "赤の太字にする行（1 から）"}
 
 
@@ -1978,7 +2066,7 @@ def spec_brief():
     lines += ["", "## 部品（type）", "どの部品にも: id（矢印の from・to で指す）、w（幅 in）、h（高さ in。row・stack・grid・gantt と icon・num・arrow は書かない）。"
               "x・y は frame の中だけ。raw は形の外の書き方（lint が要確認に出す）"]
     lines += [f"{k}: {keys(v, k)}" for k, v in SPEC_EL.items()]
-    lines += ["  gantt の rows: " + keys(GANTT_ROW), "  gantt の bars: " + keys(GANTT_BAR), "  gantt の marks: " + keys(GANTT_MARK)]
+    lines += ["  gantt の rows: " + keys(GANTT_ROW), "  gantt の bars: " + keys(GANTT_BAR), "  gantt の marks: " + keys(GANTT_MARK), "  bars の line: " + keys(BARS_LINE), "  bars の threshold: " + keys(BARS_THRESHOLD)]
     return "\n".join(lines)
 
 
@@ -2008,6 +2096,11 @@ def spec_schema():
                     "description": "節目（赤の菱形と言葉）。at は today と同じ位置で、3 は 3 列目の左端、3.5 は 3 列目の中ほど。バーと重なれば下の段に回る"},
          "bitems": {"type": "array", "items": {"type": "array", "prefixItems": [{"type": "string"}, {"type": "number", "minimum": 0}], "minItems": 2, "maxItems": 2},
                     "minItems": 1, "description": "[名前, 数]。数は棒の端に書く"},
+         "bline": {"type": "object", "properties": {"values": {"type": "array", "items": {"type": "number", "minimum": 0}, "minItems": 1, "description": "棒ごとの数（items の順。数は棒と同じだけ）"},
+                                                     "unit": {"type": "string"}, "label": {"type": "string", "description": "何の数か（段の左上に書く）"}},
+                   "required": ["values"], "additionalProperties": False},
+         "bthr": {"type": "object", "properties": {"value": {"type": "number", "minimum": 0}, "label": {"type": "string", "description": "何の線か（「目標」。札は「目標 90 分」）"}},
+                  "required": ["value"], "additionalProperties": False},
          "ints": {"type": "array", "items": {"type": "integer", "minimum": 1}, "description": "1 から始まる番号"},
          "fills": {"type": "array", "items": {"type": "array", "prefixItems": [cell, cell, color], "minItems": 3, "maxItems": 3},
                    "description": "[行, 列, 色]。rows の何番目かで数え、見出しの行が 1 行目、いちばん左の列が 1 列目。\"all\" はその列か行の全部（[3, \"all\", \"RED_SOFT\"] は見出しの次の次の行）"},
@@ -3724,6 +3817,8 @@ def selftest_sample():
                 used["gantt.bars"] |= set(b) | {f"status:{b.get('status', 'plan')}"}
             for m in r.get("marks", []):
                 used["gantt.marks"] |= set(m)
+        for k in ("line", "threshold") if e["type"] == "bars" else ():  # 棒の折れ線と直線のキーも
+            used[f"bars.{k}"] |= set(e.get(k, {}))
         for c in e["items"] if e["type"] in ("row", "stack", "grid", "frame") else []:
             el(c)
     for f in root.glob("*.json"):
@@ -3744,7 +3839,8 @@ def selftest_sample():
     want["Deck"] = set(SPEC_DECK[0]) | set(SPEC_DECK[1])
     want["Theme"] = set(SPEC_THEME[1])
     want |= {"gantt.rows": set(GANTT_ROW[0]) | set(GANTT_ROW[1]), "gantt.bars": set(GANTT_BAR[0]) | set(GANTT_BAR[1]) | {f"status:{k}" for k in GANTT_STATUS},
-             "gantt.marks": set(GANTT_MARK[0])}  # バーの状態は、どれも見本で組む
+             "gantt.marks": set(GANTT_MARK[0]),  # バーの状態は、どれも見本で組む
+             "bars.line": set(BARS_LINE[0]) | set(BARS_LINE[1]), "bars.threshold": set(BARS_THRESHOLD[0]) | set(BARS_THRESHOLD[1])}
     miss = {t: sorted(k - used[t]) for t, k in want.items() if k - used[t]}
     assert not miss and geo == set(_GEO) and kinds == set(KINDS), ("見本に足りない型とキー", miss, set(_GEO) - geo, set(KINDS) - kinds)
     real = {k: globals()[k] for k in ("iconify", "asset")}
@@ -4181,7 +4277,15 @@ def selftest_spec():
                           ({"type": "slide", "body": [{"type": "gantt", "cols": ["1 月"], "rows": [{"head": "a", "marks": [{"at": 1, "text": "**本番**"}]}]}]}, "節目の言葉には記法を書けない"),
                           ({"type": "slide", "body": [{"type": "gantt", "cols": ["1 月"], "rows": [{"head": "a", "bars": [{"from": 1, "to": 1, "fill": "RED"}]}]}]}, "fill"),
                           ({"type": "slide", "body": [{"type": "gantt", "cols": [str(i) for i in range(30)], "rows": [{"head": "a"}]}]}, "列が多くて"),
-                          ({"type": "slide", "body": [{"type": "bars", "items": [["a", 1]], "hot": [2]}]}, "棒の数（1）より大きい")]:
+                          ({"type": "slide", "body": [{"type": "bars", "items": [["a", 1]], "hot": [2]}]}, "棒の数（1）より大きい"),
+                          ({"type": "slide", "body": [{"type": "bars", "items": [["a", 1]], "horizontal": True, "line": {"values": [1]}}]}, "横の棒には書けない"),
+                          ({"type": "slide", "body": [{"type": "bars", "items": [["a", 1], ["b", 2]], "line": {"values": [1]}}]}, "棒の数（2）と違う"),
+                          ({"type": "slide", "body": [{"type": "bars", "items": [["a", 1]], "line": {"values": [1], "color": "RED"}}]}, "知らないキー color"),
+                          ({"type": "slide", "body": [{"type": "bars", "items": [["a", 1]], "line": {"values": [1]}, "h": 1.8}]}, "折れ線の段に"),
+                          ({"type": "slide", "body": [{"type": "bars", "items": [["a", 1]], "w": 1.5, "threshold": {"value": 1, "label": "目標"}}]}, "直線の札「目標 1」"),
+                          ({"type": "slide", "body": [{"type": "bars", "horizontal": True, "items": [["a", 1]], "w": 2, "threshold": {"value": 1, "label": "とても長い目標の名前とその説明"}}]}, "収まらない"),
+                          ({"type": "slide", "body": [{"type": "box", "fill": "PANEL", "h": 1, "raw": {"title": "ai-deck-factory bar"}}]}, "引数にない title"),
+                          ({"type": "slide", "body": [{"type": "box", "fill": "PANEL", "h": 1, "raw": {"alt": "x"}}]}, "引数にない alt")]:
             try:
                 run(bad)
                 raise AssertionError(f"止まらない: {want}")
@@ -4221,9 +4325,42 @@ def selftest_spec():
     # 棒グラフ: 一番大きい数の棒が高さいっぱい。hot は赤
     _, els = run({"type": "slide", "body": [{"type": "bars", "items": [["a", 50], ["b", 100]], "unit": "件", "hot": [2]}]})
     boxes = [e for e in els if e["call"] == "box"]
+    assert boxes[1]["title"] == BAR_MARK and boxes[1]["alt"] == "b 100 件"  # 棒の代替テキスト（lint が棒と見分ける）
+    d, _ = run({"type": "slide", "body": [{"type": "bars", "items": [[str(i), i] for i in range(1, 13)], "line": {"values": list(range(1, 13)), "unit": "ポイント/月"}}]})
+    assert any("折れ線の数字" in w for w in d.warnings)  # 折れ線の数字の折り返し
+    try:
+        Deck("t").box("s", 0, 0, 1, 1, fill=NAVY, title=BAR_MARK)  # 角丸（複数の図形）には付けられない
+        raise AssertionError("角丸の箱に title を付けても止まらない")
+    except ValueError:
+        pass
     assert near(boxes[1]["h"], B_H - 2 * B_LABEL) and near(boxes[0]["h"], boxes[1]["h"] / 2) and boxes[1]["fill"] == RED and boxes[0]["fill"] == NAVY
     assert any(e["call"] == "text" and e["parts"] == [("100 件", {"bold": True, "color": RED_TEXT})] for e in els)
+    # 折れ線: 棒の上の段に別の目盛りで引き（いちばん大きい数が段の上）、棒の高さは既定のまま。直線: 棒と同じ目盛りで、棒より高ければ高さいっぱい
+    _, els = run({"type": "slide", "body": [{"type": "bars", "items": [["a", 50], ["b", 100], ["c", 80]], "line": {"values": [5, 10, 0], "unit": "%", "label": "率"}}]})
+    segs, dots = [e for e in els if e["loc"].split(".")[-1].startswith("seg")], [e for e in els if e["call"] == "box" and e["kind"] == "ELLIPSE"]
+    bar_top = min(e["y"] for e in els if e["call"] == "box" and e["kind"] == "RECTANGLE")
+    assert len(segs) == 2 and len(dots) == 3 and dots[1]["y"] < dots[0]["y"] < dots[2]["y"] and dots[2]["y"] + B_DOT < bar_top - B_LABEL  # 点は棒の数字より上
+    assert near(max(e["h"] for e in els if e["call"] == "box" and e["kind"] == "RECTANGLE"), B_H - 2 * B_LABEL)
+    assert any(e["call"] == "text" and e["parts"] == [("10 %", {"bold": True, "color": SUB})] for e in els) and any(e["loc"].endswith("line.label") for e in els)
+    _, els = run({"type": "slide", "body": [{"type": "bars", "items": [["a", 50], ["b", 100]], "unit": "件", "threshold": {"value": 200, "label": "目標"}}]})
+    boxes, th = [e for e in els if e["call"] == "box"], next(e for e in els if e["loc"].endswith("threshold"))
+    assert near(boxes[1]["h"], (B_H - 2 * B_LABEL) / 2) and th["dash"] and th["color"] == RED and near(th["y1"], boxes[1]["y"] - boxes[1]["h"])
+    assert any(e["call"] == "text" and e["parts"] == [("目標 200 件", {"color": RED_TEXT})] and e["x"] > th["x2"] for e in els)  # 札は線の右
+    # 折れ線と直線を一緒に書くと、直線は棒の段に、札は棒の右の外に置き、折れ線の段は棒の幅だけ使う
+    d, els = run({"type": "slide", "body": [{"type": "bars", "items": [["a", 50], ["b", 100]], "line": {"values": [1, 2], "label": "率"}, "threshold": {"value": 80}}]})
+    th, tl = (next(e for e in els if e["loc"].endswith(k)) for k in ("threshold", "threshold.label"))
+    dots = [e for e in els if e["call"] == "box" and e["kind"] == "ELLIPSE"]
+    assert not d.warnings and th["y1"] > max(e["y"] + B_DOT for e in dots) + B_LABEL and all(e["x"] + B_DOT < tl["x"] for e in dots)
+    _, els = run({"type": "slide", "body": [{"type": "bars", "items": [["a", 95], ["b", 3]], "threshold": {"value": 100}}]})
+    assert next(e for e in els if e["loc"].endswith("items[0].value"))["parts"][0][1]["color"] == WHITE  # 直線が通る数字は棒の中に白で
+    assert any("棒が低くて" in w for w in run({"type": "slide", "body": [{"type": "bars", "items": [["a", 100], ["b", 2]], "threshold": {"value": 3}}]})[0].warnings)
+    _, els = run({"type": "slide", "body": [{"type": "bars", "horizontal": True, "items": [["a", 78], ["b", 100]], "threshold": {"value": 80}}]})
+    v = next(e for e in els if e["loc"].endswith("items[0].value"))
+    assert v["parts"][0][1]["color"] == WHITE and v["x"] + v["w"] < next(e for e in els if e["loc"].endswith("threshold"))["x1"]  # 棒の中に白で
+    th, base, tl = (next(e for e in els if e["loc"].endswith(k)) for k in ("threshold", "base", "threshold.label"))
+    assert near(th["x1"], th["x2"]) and th["x1"] > base["x1"] and near(th["y1"], base["y1"]) and near(tl["y"] + B_LABEL, base["y1"])  # 縦の線、上に札の行
     brief = spec_brief()
+    assert "bars の line:" in brief and "bars の threshold:" in brief
     assert all(re.search(rf"^{k}: ", brief, re.M) for k in [*SPEC_EL, *SPEC_PAGE]) and "gantt の bars:" in brief  # 早見表に、すべての型
     # 四角でない図形はつながない（接続点の番号が違う）。つながない斜めの矢印は、折れ線を勧めない
     d, els = run({"type": "slide", "body": [{"type": "frame", "h": 2, "items": [{"type": "box", "id": "o", "shape": "ellipse", "fill": "PANEL", "x": 0, "y": 0, "w": 1, "h": 1},
