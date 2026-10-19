@@ -2,7 +2,7 @@
 """usage: doctor.py [<ワークスペース>] [--local]   （--selftest で自己確認）
 AI Deck Factory を動かす前提を確かめる。--local は手元だけ見て、Google の API を呼ばない。
 1 行 1 項目で「OK」「要修正」「要確認」を出す。要修正が 1 つでもあれば exit 1。標準ライブラリだけ。"""
-import io, contextlib, json, os, shutil, subprocess, sys, tempfile, tomllib
+import io, contextlib, json, math, os, re, shutil, subprocess, sys, tempfile, tomllib
 from pathlib import Path
 
 SKILLS = Path(__file__).resolve().parents[2]  # プラグインの skills/
@@ -105,6 +105,8 @@ def check(ws, local=False):
         ng("review.plan_reviewer", f"{p!r} は使えない。\"ai\" か \"human\" にする")
     if type(n := review.get("deck_review_max_rounds", 3)) is not int or not 1 <= n <= 3:  # bool は int の子なので type で見る
         ng("review.deck_review_max_rounds", f"{n!r} は使えない。1〜3 の整数にする（直すと欠陥が増えるので 3 より多くしない）")
+    if type(h := cfg.get("feedback", {}).get("google_comments", {}).get("watch_hours", 0)) not in (int, float) or not math.isfinite(h) or h < 0:  # 0 か書いていなければ、頼まれたときだけ見張る（deck-comments）
+        ng("feedback.google_comments.watch_hours", f"{h!r} は使えない。時間の数にする（見張らないなら 0）")
     for k in ("customers", "internal", "docs", "factory"):
         if not dr.get(k):
             warn(f"drive.{k}", "空。資料の置き場所が決まらない")
@@ -230,6 +232,10 @@ def selftest():
         assert "review.plan_reviewer" not in kinds() and kinds()["review.deck_review_max_rounds"] == "要修正"
         toml.write_text(toml.read_text().replace("deck_review_max_rounds = true", "deck_review_max_rounds = 1"))
         assert "review.deck_review_max_rounds" not in kinds()
+        assert "feedback.google_comments.watch_hours" not in kinds()  # 雛形の 0（見張らない）
+        for v, ok in (('"48h"', False), ("-1", False), ("true", False), ("inf", False), ("nan", False), ("48", True), ("1.5", True), ("0", True)):
+            toml.write_text(re.sub(r"(?m)^watch_hours = .*$", f"watch_hours = {v}", toml.read_text(), count=1))
+            assert ("feedback.google_comments.watch_hours" not in kinds()) == ok, v
         with contextlib.redirect_stdout(io.StringIO()):
             assert main([tmp, "--local"]) == (0 if shutil.which("uv") else 1)
         toml.write_text(toml.read_text().replace('shared_themes = ""', 'shared_themes = "shared"'))

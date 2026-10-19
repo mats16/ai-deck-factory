@@ -120,6 +120,8 @@ description: 資料（スライドとドキュメント）を作る・直すと�
 - 代表の 3 枚の記録の要点（3 行まで。deck-practices-009）
 - どの修正の指示をどの決まりに戻したか（AGENTS.md の「修正の指示」）
 
+`factory.toml` の `[feedback.google_comments] watch_hours` が 0 より大きければ、返したあとにコメントの見張りを始める（`../deck-comments/SKILL.md` の deck-comments-004）。0 か書いていなければ見張らない。
+
 ### 11. 片付ける
 
 この資料の指摘に、戻し先が「未」のまま残ったものがないか（`ledger.py list --deck <資料のフォルダ> --open`。会話の要約で指示が落ちても、台帳から拾い直せるようにするため）と、代表の 3 枚の記録の「あと」が埋まっているかを確かめる（[rules.md](rules.md)）。使った資料を `references_index.md` に足す。確認用の PDF や画像はフォルダに残さない（下の「残すもの」）。
@@ -169,6 +171,7 @@ description: 資料（スライドとドキュメント）を作る・直すと�
 | ドキュメントを書く | `doc-build/SKILL.md`（doc.md の書き方と確かめるループ、テンプレート、Docs API の落とし穴）と `deck-practices/visual_doc.md`（版面・見出し・表と図） |
 | 組んで確かめる・納品 | `deck-build/SKILL.md`（確かめ方の 3 つの層、`gslides.py check` と lint の見方、納品物、Drive への置き方）、ドキュメントは `doc-build/SKILL.md` |
 | 返す前のレビュー | `deck-review/SKILL.md` |
+| 組んだ資料のコメントで直す・コメントを見張る | `deck-comments/SKILL.md`（コメントの取り方、修正の指示としての扱い、返信と解決） |
 | テンプレートを作る・整える（会社のテンプレートから） | `deck-template/SKILL.md`（3 つの場合、役割への色の当て方、書体、コントラストの直し方） |
 | 修正の指示を受けた・決まりを足す | `deck-practices/rules.md`（決まりの層、修正の指示の戻し方、決まりの確かめ方） |
 | プラグインを直す | `factory-kaizen/SKILL.md`（過去の資料での検証と Issue） |

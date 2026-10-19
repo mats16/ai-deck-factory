@@ -9,7 +9,7 @@
 - **Claude Code と pi で同じソースを使う。** `skills/` は両方が読む。`rules/` を続けて出す仕組みは、`hooks/rules_overlay.py` を Claude Code（`hooks/hooks.json`）と pi（`extensions/rules.ts`）の両方から呼んでいる。片方だけに効く直しにしない。
 - **スクリプトは標準ライブラリだけで書く。** Pillow などが要るものだけ、先頭の `# /// script` に依存を書いて `uv run` で回す。Python は 3.11 以上で動かす（README の「入れ方」）。
 - **直したスクリプトは `--selftest` を通す。** 回し方は下の「sandbox で確かめる」の 2。見た目に効く部品（`slides.py`・`template.py`・`docs.py`）を直したら、テンプレートの見本を組み直して画像で見る（`deck-build/slides.md`・`doc-build/SKILL.md`）。JSON のページの形と部品を直したら、sandbox で `python3 ../tests/render/run.py --judge` を回し、`skills/deck-build/samples/json/` の見本を全部組んで、全ページの画像をページごとの見るところ（`tests/render/expect.json`）と比べる（形にキーを足したら見本にも足す。selftest が見る。見本のページを足したら見るところも足す）。部品や書き方の説明を直したら、`docs/fixtures/` の依頼文を会話を持たない子に渡し、説明だけで正しい部品を選べるかを見る（[docs/development.md](docs/development.md) の「依頼文で試す」）。
-- **スキルを足す・外す・名前を変えるときは、数と名前の出てくるところをそろえる。** README の表、`docs/` の「11 個」、`deck-practices` などから指しているパス。
+- **スキルを足す・外す・名前を変えるときは、数と名前の出てくるところをそろえる。** README の表、`docs/` の「12 個」、`deck-practices` などから指しているパス。
 - **PR の本文は `.github/pull_request_template.md` の節で書く。** 回したコマンドと結果はそのまま貼り、「レビューで見てほしいところ」にファイル:行と確信のない判断を書く。レビューする人も AI も、そこから読む。
 - **ユーザーが決めたことは、README の「決めたこと」に日付とユーザーの発言（原文）で残す。** 後回しにしたものは「残っている課題」に書く。
 - **文体は今のファイルに合わせる。** 平易な和文で、言い切りの「〜する」。漢語やカタカナ語より、やさしい言い方を選ぶ（「検証」より「確かめる」、「ルール」より「決まり」）。例外: `/deck-review` を回す単位は「ラウンド」（README の「決めたこと」の 2026-10-19）。
@@ -51,7 +51,7 @@ worktree の直下に検証用のワークスペース `sandbox/` を置き、wo
    claude --plugin-dir ..
    ```
 
-   読まれたスキルが worktree のものかは、次で確かめる（worktree のパスと、`ai-deck-factory:` の 11 個が出る）。
+   読まれたスキルが worktree のものかは、次で確かめる（worktree のパスと、`ai-deck-factory:` の 12 個が出る）。
 
    ```sh
    claude --plugin-dir .. -p ok --model haiku --max-turns 1 --output-format stream-json --verbose 2>/dev/null \
@@ -70,7 +70,7 @@ worktree の直下に検証用のワークスペース `sandbox/` を置き、wo
      | python3 -c "import json,os,sys; r=os.path.realpath('..'); e=next(e for e in map(json.loads, sys.stdin) if e.get('command')=='get_commands'); print(sorted(c['name'] for c in e['data']['commands'] if c.get('sourceInfo',{}).get('path','').startswith(r)))"
    ```
 
-   worktree から読まれた 11 個のスキルが出る。足りないときは、同じ名前のスキルがほかにあって負けている（パッケージのものはいちばん優先が低い）か、trust を保存していない（[docs/pi.md](docs/pi.md)）。
+   worktree から読まれた 12 個のスキルが出る。足りないときは、同じ名前のスキルがほかにあって負けている（パッケージのものはいちばん優先が低い）か、trust を保存していない（[docs/pi.md](docs/pi.md)）。
 
 5. **`rules/` が続けて出るかを見る。** `sandbox/rules/deck-practices/visual.md` に目印の 1 行を書き、会話で `../skills/deck-practices/visual.md` を開かせる。目印が続けて差し込まれれば、hook（Claude Code）と拡張（pi）が効いている。hook だけなら、会話を開かずに確かめられる。
 
