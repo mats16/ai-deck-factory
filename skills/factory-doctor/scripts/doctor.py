@@ -38,8 +38,11 @@ def check(ws, local=False):
     if old := sorted((root / "Customers").glob("*/CLAUDE.md")):
         how = lambda p: f"{p.relative_to(root)}（{'memory.md に中身を移して消す' if (p.parent / 'memory.md').exists() else 'memory.md に名前を変える'}）"
         warn("顧客の memory", f"前の形の CLAUDE.md がある。Claude Code しか読まない（hook が Claude Code と pi で続けて出すのは memory.md）: {', '.join(map(how, old))}")
-    if "人がレビューするかも選んでもらう" in ((root / "AGENTS.md").read_text() if (root / "AGENTS.md").is_file() else ""):  # 2026-10-13 までの雛形
+    agents = (root / "AGENTS.md").read_text() if (root / "AGENTS.md").is_file() else ""
+    if "人がレビューするかも選んでもらう" in agents:  # 2026-10-13 までの雛形
         warn("AGENTS.md の方針のレビュー", "前の雛形の「人がレビューするかも選んでもらう」が残っている。ワークスペースの決まりが優先するので、factory.toml の [review] plan_reviewer が効かず、資料ごとに聞く。factory-init の雛形の今の文（plan_reviewer に従う）に替える")
+    if "- ユーザーに返す前に、スキル `deck-review` で全体をレビューする。" in agents:  # 2026-10-19 までの雛形
+        warn("AGENTS.md の返したあとの直し", "前の雛形の「ユーザーに返す前に、スキル deck-review で全体をレビューする」が残っている。ワークスペースの決まりが優先するので、返したあとの小さな直しや問いでも全体のレビューを回す。factory-init の雛形の今の文（新しく作った資料は deck-review、返したあとは deck-practices の「返したあとの依頼」）に替える")
     if cfg.get("factory", {}).get("source"):  # 2026-10-14 まで、factory-kaizen が worktree を作る checkout
         warn("factory.source", "使わなくなった（factory-kaizen は .factory/kaizen/ に自分で clone する）。factory.toml から消す")
     names = sorted(p.parent.name for p in SKILLS.glob("*/SKILL.md"))
@@ -183,6 +186,9 @@ def selftest():
         assert "AGENTS.md の方針のレビュー" not in kinds()  # 今の雛形
         agents.write_text(agents.read_text() + "\n同じ問いで、方針を決めたあとを AI のレビューでそのまま作るか、人がレビューするかも選んでもらう。\n")
         assert kinds()["AGENTS.md の方針のレビュー"] == "要確認"
+        assert "AGENTS.md の返したあとの直し" not in kinds()  # 今の雛形
+        agents.write_text(agents.read_text().replace("- 新しく作った資料は、ユーザーに返す前に、", "- ユーザーに返す前に、"))
+        assert kinds()["AGENTS.md の返したあとの直し"] == "要確認"
         toml = Path(tmp) / "factory.toml"
         assert kinds()["brand.copyright"] == "要修正" and kinds()["brand.company"] == "要確認"
         toml.write_text(toml.read_text().replace("[brand]", '[brand]\ncopyright = "© Acme 2026"', 1))

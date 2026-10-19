@@ -31,7 +31,7 @@ python3 $K/docs.py export <URL> /tmp/<資料名>.docx                 # 相手�
 2. 中身を書く。構成案で合意した中身を、ユーザーを待たずに doc.md に書く（`../deck-practices/SKILL.md` の deck-practices-006）。ユーザーが doc.md で中身を詰めたいと言ったときは、そうしてよい（読む人に見せるのは、組んだ Google Docs）。
 3. `docs.py new`（初回）か `docs.py build` で組み、`docs.py check` で確かめる。
 4. 要修正を 0 にし、要確認を 1 件ずつ見て、画像を開いて見る（下の 5）。直しは doc.md か docs.py に入れ、3 に戻る。
-5. 返す前に `/deck-review`（`../deck-review/SKILL.md`）。指摘も doc.md に入れて組み直す。
+5. 新しく作った文書は、返す前に `/deck-review`（`../deck-review/SKILL.md`）。指摘も doc.md に入れて組み直す。返したあとの直しでは、`../deck-practices/SKILL.md` の deck-practices-017 で決めた範囲だけを回す。
 
 ### 1.2 doc.md の形
 
@@ -149,7 +149,7 @@ JSON では、どこで改ページされ、どこで行が折り返すかが分
 - **画像:** 組んだら、全ページの画像を自分で開いて見て、直す。見るところは、表の列の幅と折り返し、図の大きさ、図と題・表と題が別のページに分かれていないか、段落の間の空き、ページの末尾に残った見出し。仕上がりは Google が描いたこの画像で判断する。
 - **テキスト:** 抜けや順番の誤りがないか、`text.md` を読む。
 - **lint:** 要修正は 0 にする。要確認は 1 件ずつ見て、直すか、残す理由を言えるようにする（例: 顧客の発言の引用に だ・である が残るのはよい）。
-- **返す前:** ユーザーに返す前に `/deck-review <Google Docs の URL>`（`../deck-review/SKILL.md`）で全体をレビューする。
+- **返す前:** 新しく作った文書は、ユーザーに返す前に `/deck-review <Google Docs の URL>`（`../deck-review/SKILL.md`）で全体をレビューする。返したあとの直しでは、`../deck-practices/SKILL.md` の deck-practices-017 で決めた範囲だけを回す。
 - 確認が済んだら `/tmp/docs_<ID>/` は消してよい。資料のフォルダには残さない。
 
 ## 6. 納品物と Drive

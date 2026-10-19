@@ -25,7 +25,7 @@ python3 <このスキルのフォルダ>/scripts/doctor.py --local  # 手元だ�
 | `slides.themes`（前の版の書き方） | テーマの表を、ワークスペースの `themes/slides/<名前>.json`（`kind: Theme`。色は `colors` の下に同じ名前で書き、`url` は書かない）に移し、`url` を `[slides.templates]` の「<名前> = "<url>"」に移して、表を消す。テンプレートのある名前は `slides.py theme <url>` でも写せる（2026-10-16 より前のテンプレートは、テーマに入れない色・`copyright`・`mono`・`description` が抜けるので、表から写す）。移す前に、表のコメントに残した経緯をどこに残すかをユーザーに聞く（JSON にはコメントを書けない） |
 | `themes/slides/<名前>.json`、テーマのファイル、`slides.default_theme` | 書けない値は、出た場所を直して `slides.py lint <ファイル>` で確かめる。テンプレートだけでファイルのないテーマは `slides.py theme <URL>` で写す |
 | テーマの説明 | `description` がないテーマは、エージェントが資料ごとに選べない。何のテーマで、どの資料・聞き手に使うかを書く（`deck-build/slides.md` の 3） |
-| `review.*`、AGENTS.md の方針のレビュー | `review.*` は雛形の範囲の値（`"ai"`・`"human"`、1〜3）に直す。AGENTS.md に前の雛形の「人がレビューするかも選んでもらう」が残っていれば、ユーザーに見せてから雛形の今の文（`[review] plan_reviewer` に従う）に替える（ワークスペースの決まりなので、黙って直さない） |
+| `review.*`、AGENTS.md の方針のレビュー・返したあとの直し | `review.*` は雛形の範囲の値（`"ai"`・`"human"`、1〜3）に直す。AGENTS.md に前の雛形の「人がレビューするかも選んでもらう」か「ユーザーに返す前に、スキル `deck-review` で全体をレビューする」が残っていれば、ユーザーに見せてから雛形の今の文（`[review] plan_reviewer` に従う。新しく作った資料は `deck-review`、返したあとは `deck-practices` の「返したあとの依頼」）に替える（ワークスペースの決まりなので、黙って直さない） |
 | Google の認証 | 出たコマンド（`gcloud auth application-default login --scopes=…`）をユーザーに回してもらう。トークンの取り方は `factory.toml` の `[google]` のコメント |
 | テンプレート・Drive のフォルダ | 開けないものは、URL の誤りか、共有されていない。持ち主に共有を頼むか、URL を直す |
 
