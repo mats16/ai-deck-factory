@@ -28,7 +28,7 @@
 
 - mingrammer/diagrams の `gcp/`（旧い絵柄。Google は 2026 年から使わないよう案内している）と `onprem/analytics/databricks.png`（旧いロゴ）。Google Cloud は、このフォルダのものを使う。
 - クレジットの要るもの（Icons8、Twemoji、Noto Emoji のアニメーション版）。ほかで足りる。
-- URL から図を作るサービス（mermaid.ink・kroki.io・quickchart.io）。図の中身が第三者に渡るので、顧客の情報を渡さない。図は表と図形で組む（slides.md の 4）。
+- URL から図を作るサービス（mermaid.ink・kroki.io・quickchart.io）。図の中身が第三者に渡るので、顧客の情報を渡さない。スライドの図は表と図形で組む（slides.md の 4）。ドキュメントの mermaid の図は、`docs.py` が手元の mermaid-cli で描く（`../../doc-build/SKILL.md` の doc-build-009）。
 
 ## このフォルダのもの
 

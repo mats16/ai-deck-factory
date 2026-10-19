@@ -33,16 +33,9 @@ default_theme = "visual"  # 説明で決まらないときのテーマ。テー�
 # visual = "https://docs.google.com/presentation/d/…/edit"
 
 # [docs]
-# default_theme = "acme"  # doc.md に theme: を書かないときのテーマ。書かなければ既定（A4）
+# default_theme = "acme"  # doc.md に theme: を書かないときのテーマ（themes/docs/acme.json）。書かなければ既定（A4）
 
-# [docs.themes.acme]  # 会社の文書のテンプレートに合わせたドキュメントのテーマ（doc-build の SKILL.md の 1.2）。doc.md の頭に theme: acme
-# description = "米国の本社に出す文書。Letter の版面"  # どの資料・聞き手に使うか（docs.py themes）
-# page = [215.9, 279.4]  # 用紙（mm）
-# margins = [12.7, 12.7]  # 上下・左右の余白（mm）
-# body = 10  # 本文（pt）
-# headings = [12, 11, 10.5]  # 見出し 1〜3（pt）
-# heading = "4A86E8"  # 見出しの色
-# table_head = ["F3F3F3", "303F47"]  # 表の見出しの行の地と文字の色
+# ドキュメントのテーマ（版面・見出しの大きさと色・書体）は、ワークスペースの themes/docs/<名前>.json に書く（doc-build の SKILL.md の doc-build-010）。doc.md の頭に theme: <名前>
 
 [docs.templates]  # ドキュメントのテンプレート（Google Docs）。正本は rules/doc-build/templates/<名前>/doc.md。そのフォルダで docs.py new して URL を書く
 

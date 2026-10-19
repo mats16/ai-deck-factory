@@ -143,13 +143,13 @@ Google Slides で描けるのは Google Fonts の書体だけ。描けると確�
 - 描けたかどうかは API の値では分からない（指定した名前をそのまま返す）。見本のページの画像で見る。
 - 欧文の書体で `font` に書けるのは DM Sans だけ（`slides.py` の `FONT_EM`）。和文の字がないので、Google Slides は和文を別のゴシックで描く（2026-10-15 に描いて見た。1 字 0.92 em ほどで、見込みの 1 em より少し狭い）。`template.py audit` は「欧文（和文は別のゴシック。字幅を測ってあり、font に書ける）」と出す。
 - `slides.py` の字幅の見積もり（`em_width`）は、本文の英数字を `FONT_EM` の幅（Noto Sans JP の `ASCII_EM`、DM Sans の `DM_SANS_EM`。太字はそれぞれの Bold の `ASCII_BOLD_EM`・`DM_SANS_BOLD_EM`）で、コードを `MONO_EM`（Cascadia Mono）で見込む。ほかの書体を `font`・`mono` に書くと、Noto Sans JP と Cascadia Mono の幅で見込むので、英数字の幅が違い、折り返しの見込み（組むときの警告、`d.card` の高さ、lint の行数）がずれる。見本のページの画像と、組んだ資料の画像で見る。
-- コードの等幅の書体は、既定は Cascadia Mono。テーマの `mono` で変えられる（テーマのファイルと `[docs.themes.<名前>]`）。等幅は和文を載せないので `JP_FONTS` には限らないが、リガチャのある書体（`slides.py` の `LIGATURE_MONO`: JetBrains Mono・Fira Code・Cascadia Code）は止める（`visual.md` の 2）。Google Fonts にない名前は、API が受け付けて、黙って別の書体（Arial）で描かれる。書いたら `template.py <名前>` で見本のページを組み直し、`gslides.py check` の画像で、コードが等幅で描けているか、`->` が矢印 1 字になっていないかを見る。
+- コードの等幅の書体は、既定は Cascadia Mono。テーマの `mono` で変えられる（スライドとドキュメントのテーマのファイル。`themes/slides/<名前>.json`・`themes/docs/<名前>.json`）。等幅は和文を載せないので `JP_FONTS` には限らないが、リガチャのある書体（`slides.py` の `LIGATURE_MONO`: JetBrains Mono・Fira Code・Cascadia Code）は止める（`visual.md` の 2）。Google Fonts にない名前は、API が受け付けて、黙って別の書体（Arial）で描かれる。書いたら `template.py <名前>` で見本のページを組み直し、`gslides.py check` の画像で、コードが等幅で描けているか、`->` が矢印 1 字になっていないかを見る。
 - 確かめた書体の一覧は、リポジトリの README の「書体」。
 
 ## できないこと
 
 - 13.33 × 7.5 in 以外のページには組めない（上の 2）。
-- テーマのファイルの書体はスライドだけに効く。ドキュメント（Google Docs）の書体は `[docs.themes.<名前>]` の `font`・`mono`（`../doc-build/SKILL.md`）。ドキュメントのフッターの著作権表示は `[brand]` のまま。
+- テーマのファイルの書体はスライドだけに効く。ドキュメント（Google Docs）の書体は、同じ形のドキュメントのテーマのファイル（`themes/docs/<名前>.json`）の `font`・`mono`（`../doc-build/SKILL.md` の doc-build-010）。ドキュメントのフッターの著作権表示は `[brand]` のまま。
 - `font` に書けるのは `JP_FONTS` の書体と DM Sans だけ（`slides.py lint` と `template.py` が止める）。ほかの欧文の書体を使うなら、英数字の幅を測って `FONT_EM` に足す（Google Slides がどの版で描くかを、描いた画像で確かめる）。ほかの和文の Google Fonts を使うなら、試しのデッキで描けるかを画像で確かめてから `slides.py` の `JP_FONTS` に足す。
 - 会社のテンプレートの文字の大きさ・行間・レイアウトは、`slides.py` が組むページには効かない（`visual.md` の 1 の型で組む）。会社の大きさで組みたいときは、`slides.py` の部品を直す（`factory-kaizen`）。
 - 人が画面で使う会社のテンプレート（全部のレイアウト）を、日本語用に整えることはしない。

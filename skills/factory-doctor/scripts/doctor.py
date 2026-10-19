@@ -23,6 +23,8 @@ def check(ws, local=False):
 
     (ok if sys.version_info >= (3, 11) else ng)("Python 3.11 以上", sys.version.split()[0])
     (ok if shutil.which("uv") else ng)("uv", shutil.which("uv") or "ない。画像での測り（box_pad.py・doc_layout.py・sheet.py）が動かない。https://docs.astral.sh/uv/ で入れる")
+    npx = shutil.which("npx")  # docs.py の mermaid_png が mermaid-cli を取ってくる
+    (ok if npx else warn)("mermaid の図", npx or "Node.js（npx）がない。doc.md の ```mermaid を組めない（ほかは組める）。https://nodejs.org/ で入れる")
     root = find_ws(ws)
     if not root:
         ng("factory.toml", f"{ws} から上にない。factory-init で作る")
@@ -67,11 +69,13 @@ def check(ws, local=False):
         except SystemExit as e:
             ng(f"themes/slides/{f.name}", str(e).replace(f"{f}: ", ""))
     marks += [(f"themes/slides/{n}.json の copyright", t["copyright"]) for n, t in mine.items() if "copyright" in t]
-    for n, t in cfg.get("docs", {}).get("themes", {}).items():  # ドキュメントのテーマ（docs.py と同じ関数で見る）
+    import docs as docs_py  # ドキュメントのテーマのファイル（themes/docs/<名前>.json）も、docs.py と同じ read_theme で見る
+    doc_themes = {}
+    for f in sorted(root.joinpath(*docs_py.WS_THEMES).glob("*.json")):
         try:
-            slides.theme_font(t), slides.theme_mono(t)
+            doc_themes[f.stem] = docs_py.read_theme(f)
         except SystemExit as e:
-            ng(f"docs.themes.{n}", str(e))
+            ng(f"themes/docs/{f.name}", str(e).replace(f"{f}: ", ""))
     for key, c in marks:
         if not (c := str(c).strip()):
             ng(key, "空。スライドもドキュメントも組めない（全ページの左下に書く著作権表示がない）。自分の会社の著作権表示を書く")
@@ -99,10 +103,13 @@ def check(ws, local=False):
         ng("slides.default_theme", f"{theme} のテーマのファイルがない（themes/slides/{theme}.json）。テーマを書かない資料が組めない")
     if no_desc := [n for n in temps if n in files and not files[n].get("description")]:
         warn("テーマの説明", f"{', '.join(no_desc)} に description がない。エージェントが資料ごとにテーマを選べない（themes/slides/<名前>.json の description に、どの資料・聞き手に使うかを書く）")
-    if bad := [n for n, t in docs.get("themes", {}).items() if not t.get("description")]:
-        warn("docs.themes の説明", f"{', '.join(bad)} に description がない。エージェントが資料ごとにテーマを選べない")
-    if (d := docs.get("default_theme")) and d not in docs.get("themes", {}) and d != "standard":  # standard は組み込み（docs.py の STANDARD）
-        ng("docs.default_theme", f"{d} が [docs.themes] にない。theme を書かない doc.md が組めない")
+    if old := docs.get("themes"):  # 2026-10-19 までの書き方
+        ng("docs.themes", f"{', '.join(old)} はプラグインが読まない。ワークスペースの themes/docs/<名前>.json（kind theme。見出しの大きさは styles、色は colors）に移して消す"
+                          "（../../doc-build/SKILL.md の doc-build-010）")
+    if bad := [n for n, t in doc_themes.items() if not t.get("description")]:
+        warn("ドキュメントのテーマの説明", f"{', '.join(bad)} に description がない。エージェントが資料ごとにテーマを選べない（themes/docs/<名前>.json の description に書く）")
+    if (d := docs.get("default_theme")) and d not in doc_themes and d != "standard":  # standard は組み込み（docs.py の STANDARD）
+        ng("docs.default_theme", f"{d} のテーマのファイルがない（themes/docs/{d}.json）。theme を書かない doc.md が組めない")
     review = cfg.get("review", {})  # 書いていなければ既定。読むのはエージェント（deck-practices の 5 と 9）
     if (p := review.get("plan_reviewer", "ai")) not in ("ai", "human"):
         ng("review.plan_reviewer", f"{p!r} は使えない。\"ai\" か \"human\" にする")
@@ -203,10 +210,13 @@ def selftest():
         put("mine", {"copyright": "© Me 2026"})
         assert kinds()["themes/slides/mine.json の copyright"] == "要修正"  # テーマの copyright にも同じ確かめ
         put("mine", {"copyright": "© 2026 Me. All rights reserved.", "colors": {"TEXT": "red"}})
-        toml.write_text(toml.read_text() + '\n[docs.themes.us2]\nmono = "Fira Code"\n')
-        assert kinds()["themes/slides/mine.json"] == "要修正" and kinds()["docs.themes.us2"] == "要修正"  # 6 桁でない色、リガチャの出る等幅
+        dthemes = Path(tmp, "themes", "docs")
+        dthemes.mkdir(parents=True)
+        dput = lambda n, o: (dthemes / f"{n}.json").write_text(json.dumps({"apiVersion": "docs/v1", "kind": "theme", **o}))
+        dput("us2", {"mono": "Fira Code"})
+        assert kinds()["themes/slides/mine.json"] == "要修正" and kinds()["themes/docs/us2.json"] == "要修正"  # 6 桁でない色、リガチャの出る等幅
+        (dthemes / "us2.json").unlink()
         assert "themes/slides/mine.json の copyright" not in kinds()
-        toml.write_text(toml.read_text().replace('\n[docs.themes.us2]\nmono = "Fira Code"\n', ""))
         put("mine", {"copyright": 2026})
         assert kinds()["themes/slides/mine.json"] == "要修正" and "themes/slides/mine.json の copyright" not in kinds()  # 文字列でない copyright は 1 回だけ出す
         put("mine", {})
@@ -226,11 +236,15 @@ def selftest():
         assert kinds()["slides の base"] == "要修正" and kinds()["slides.default_theme"] == "要修正"  # 2026-10-14 までの書き方（空でも消す）、ファイルのない既定のテーマ
         toml.write_text(toml.read_text().replace('default_theme = "nope"\nbase_template = ""', 'default_theme = "visual"', 1))
         toml.write_text(toml.read_text() + '\n[docs]\ndefault_theme = "acme"\n\n[docs.themes.us]\npage = [215.9, 279.4]\n')
-        assert kinds()["docs.default_theme"] == "要修正" and kinds()["docs.themes の説明"] == "要確認"  # 既定のテーマがない、説明がない
+        dput("us", {"page": [215.9, 279.4]})
+        k = kinds()
+        assert k["docs.default_theme"] == "要修正" and k["ドキュメントのテーマの説明"] == "要確認" and k["docs.themes"] == "要修正"  # 既定のテーマがない、説明がない、前の書き方
+        toml.write_text(toml.read_text().replace("\n[docs.themes.us]\npage = [215.9, 279.4]\n", ""))
         toml.write_text(toml.read_text().replace('default_theme = "acme"', 'default_theme = "standard"'))
         assert "docs.default_theme" not in kinds()  # 組み込みの standard
-        toml.write_text(toml.read_text().replace('default_theme = "standard"', 'default_theme = "us"').replace("[docs.themes.us]\n", '[docs.themes.us]\ndescription = "米国向け"\n'))
-        assert "docs.default_theme" not in kinds() and "docs.themes の説明" not in kinds()
+        toml.write_text(toml.read_text().replace('default_theme = "standard"', 'default_theme = "us"'))
+        dput("us", {"description": "米国向け", "page": [215.9, 279.4]})
+        assert "docs.default_theme" not in kinds() and "ドキュメントのテーマの説明" not in kinds() and "docs.themes" not in kinds()
         assert "review.plan_reviewer" not in kinds() and "review.deck_review_max_rounds" not in kinds()  # 雛形の既定
         toml.write_text(toml.read_text().replace('plan_reviewer = "ai"', 'plan_reviewer = "AI"').replace("deck_review_max_rounds = 3", "deck_review_max_rounds = 5"))
         assert kinds()["review.plan_reviewer"] == "要修正" and kinds()["review.deck_review_max_rounds"] == "要修正"

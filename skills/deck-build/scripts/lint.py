@@ -800,13 +800,18 @@ def gdoc_paras(doc):
 
 
 def theme_pages():
-    """factory.toml の [docs.themes] の用紙（pt の幅・高さ）。会社のテンプレートに合わせた版面なので、A4 でなくても、1 行の字数が多くても通す。"""
-    import gapi, tomllib
-    try:
-        cfg = tomllib.loads(p.read_text()) if (p := gapi.locate()) else {}
-    except tomllib.TOMLDecodeError:
-        return []
-    return [tuple(x * 72 / 25.4 for x in t["page"]) for t in cfg.get("docs", {}).get("themes", {}).values() if "page" in t]
+    """ドキュメントのテーマのファイル（ワークスペースの themes/docs/<名前>.json）の用紙（pt の幅・高さ）。会社のテンプレートに合わせた版面なので、
+    A4 でなくても、1 行の字数が多くても通す。読めないファイルは飛ばす（形の誤りは docs.py と factory-doctor が止める）。"""
+    import gapi
+    out = []
+    for f in sorted(p.parent.joinpath("themes", "docs").glob("*.json")) if (p := gapi.locate()) else []:
+        try:
+            page = json.loads(f.read_text()).get("page")
+        except (OSError, ValueError, AttributeError):
+            continue
+        if isinstance(page, list) and len(page) == 2 and all(isinstance(x, (int, float)) for x in page):
+            out.append(tuple(x * 72 / 25.4 for x in page))
+    return out
 
 
 def lint_gdoc(doc, r, template=False, font=FONT, mono=MONO_DEFAULT):
@@ -826,7 +831,7 @@ def lint_gdoc(doc, r, template=False, font=FONT, mono=MONO_DEFAULT):
     a4 = abs(pw - 595.28) <= 1 and abs(ph - 841.89) <= 1
     themed = not a4 and any(abs(pw - w) <= 1 and abs(ph - h) <= 1 for w, h in theme_pages())  # 会社のテンプレートに合わせた、A4 でないテーマの用紙（docs.py の theme）。A4 は例外にしない
     if not a4 and not themed:
-        r.hits[A4_NG].append(f"用紙 {pw:.0f} × {ph:.0f}pt（A4 は 595 × 842。テーマの用紙は factory.toml の [docs.themes]）。docs.py build で入れ直す")
+        r.hits[A4_NG].append(f"用紙 {pw:.0f} × {ph:.0f}pt（A4 は 595 × 842。テーマの用紙は themes/docs/<名前>.json の page）。docs.py build で入れ直す")
     per_line = width / base.get("fontSize", {}).get("magnitude", 11)
     if per_line > LINE_MAX + 1 and not themed:  # [lint-019] テーマの版面は会社のテンプレートに合わせたもので、1 行の字数が多くなることがある
         r.hits["1 行の字数が多い"].append(f"本文の 1 行が約 {per_line:.0f} 字（{LINE_MAX} 字まで）。余白か本文の大きさを docs.py の値に戻す")
@@ -1350,7 +1355,7 @@ def selftest():
     with contextlib.redirect_stdout(io.StringIO()):
         lint_gdoc(gdoc, g := Report())
     assert g.hits["用紙が A4 でない"]  # Letter（612 × 792）も、テーマに書いていなければ A4 でない
-    globals()["theme_pages"] = lambda: [(612, 792)]  # factory.toml の [docs.themes] に Letter のテーマがあるとき
+    globals()["theme_pages"] = lambda: [(612, 792)]  # themes/docs/ に Letter のテーマがあるとき
     with contextlib.redirect_stdout(io.StringIO()):
         lint_gdoc(gdoc, g := Report())
     globals()["theme_pages"] = lambda: []
