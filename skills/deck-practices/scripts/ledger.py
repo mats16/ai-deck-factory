@@ -14,7 +14,9 @@ usage:
   ledger.py rules                                  決まりごとの数（指摘・再発・資料・顧客・レビューの結果）と、週ごとの取りこぼしと構成の見逃し
   ledger.py candidates                             決まりごとの次の一手（下ろす・書き直す・条件を足す・上げる・写しを消す・上書きを見直す）と、その決まりへの前の提案
   ledger.py next <接頭辞>                          次の決まりの ID（ワークスペースの決まりは ws-visual のように ws- を付ける）
-  ledger.py propose --file <ワークスペースのファイル> --new <新しい文> [--old <今の文>] [--rule <ID>] --why <要点> [--src c-1,c-2] [--kind <種類>] [--plugin] [--replaces ws-x-001,…]
+  ledger.py propose --file <ワークスペースのファイル> --new <新しい文> [--old <今の文>] [--rule <ID>] --why <要点> [--src c-1,c-2] [--kind <種類>] [--plugin] [--replaces ws-x-001,…] [--rec 適用|様子見|却下 [--rec-why <理由>]] [--auto]
+                                                   --rec は出した側の推奨（ユーザーは「推奨どおり」と例外だけを返せる）
+                                                   --auto は会話を出典にしない片付け（重なり・古い記述）で、ID の付いた決まりを丸ごと消すだけのものを、出してすぐ当てる。当ててよいかはここで見る
                                                    --plugin は変更先がプラグイン（--file は skills/ からのパス）。当てず、factory-kaizen で Issue にする
                                                    --replaces は、その Issue の直しが届いたら要らなくなるワークスペースの決まり（上書きなど。出典の指摘の決まりは書かなくてよい）
   ledger.py pending [--status 却下|適用済み|戻した|取り下げ|Issue にした|all]   提案と差分（既定は未適用。却下は理由も）
@@ -24,7 +26,7 @@ usage:
   ledger.py withdraw <P-ID か Q-ID> --reason <理由>   出した側が取り下げる（書き間違いの出し直しなど。却下には数えない）
   ledger.py undo <P-ID>                            当てた提案を逆向きに当てて戻す
   ledger.py drift                                  当てたあとに手で直された・消えた決まり（ユーザーが直したものとして扱う）
-  ledger.py ask --q <ユーザーに聞くこと> [--rule <ID>] [--src c-1,c-2]   判断待ち
+  ledger.py ask --q <ユーザーに聞くこと> [--rule <ID>] [--src c-1,c-2] [--rec <推奨の答え>]   判断待ち
   ledger.py answer <Q-ID> --a <ユーザーの言葉>      判断待ちへの答え
   ledger.py questions [--all]                      判断待ち（--all は答えたものと取り下げたものも）
   ledger.py review --deck <資料のフォルダ> --table <指摘の表のファイル>   deck-review の指摘の表から、決まりの列のある行の結果を取り込む（同じ行は 2 度数えず、ラウンドをまたぐ同じ行はあとのラウンドの結果）
@@ -48,6 +50,8 @@ CITE = re.compile(rf"\[?({ID})\]?\s*「([^」]*)」")  # 決まりの列の ID �
 RESULTS = ("直した", "残した（誤り）", "残した", "聞く")
 NO_RULE = ("未", "戻さない")  # 決まりにつないでいない戻し先
 TWICE = 2  # 2 本以上の資料・2 社以上の顧客に出たら、たまたまでないとみなす（dreaming の 4c・4i・5）
+AUTO = ("重なり", "古い記述")  # 会話を出典にしない片付け。--auto で、出してすぐ当てる（dreaming の 3d）
+RECS = ("適用", "様子見", "却下")
 PLAN_RULE = "deck-practices-004"  # 構成案の AI レビューの頼み方。これを見直すかの判断待ちに答えたら、構成の見逃しをその答えのあとから数え直す
 OVERRIDE = re.compile(rf"\[(ws-[\w-]+?-\d{{3}})\][^\n\[]*?[（(]([^（）()\n]*?)\s*より優先")  # [ws-visual-003] …（visual-012 より優先）。括弧の中の ID を全部取る
 PLUGIN_ID = re.compile(r"(?<![\w-])(?!ws-)[a-z][\w-]*?-\d{3}")
@@ -371,10 +375,72 @@ def propose(ws, a):
         (PLUGIN / a.file).resolve().is_relative_to(PLUGIN) or sys.exit(f"--plugin の --file は skills/ からのパス（deck-practices/visual.md など）: {a.file}")
     else:
         target(ws, a.file)
+    a.rec_why and not a.rec and sys.exit("--rec-why は --rec と一緒に付ける")
+    auto = a.auto and auto_ok(ws, a)
     rec = write(ws, {"kind": "proposal", "file": a.file, "old": a.old or "", "new": a.new, "rule": a.rule or "", "why": a.why,
                      "src": [x for x in (a.src or "").split(",") if x], "type": a.kind or "", **({"plugin": True} if a.plugin else {}),
-                     **({"replaces": a.replaces} if a.replaces else {})}, ("proposal", "P", 4))
-    print(rec["id"])
+                     **({"replaces": a.replaces} if a.replaces else {}), **({"rec": a.rec, "rec_why": a.rec_why or ""} if a.rec else {}),
+                     **({"auto": True} if a.auto else {})}, ("proposal", "P", 4))
+    if not auto:
+        print(rec["id"])
+        return
+    f, text, out = auto
+    try:
+        print(rec["id"])
+        apply(ws, [rec["id"]])
+    except BaseException:  # 確かめたあとでファイルが変わった・書けなかった。人の見ていない提案を、未適用のまま残さない
+        try:
+            if f.exists() and f.read_text(encoding="utf-8") == out:  # ファイルに書いたあとで止まったなら、消した行を戻す
+                f.write_text(text, encoding="utf-8")
+        finally:
+            write(ws, {"kind": "withdrawn", "ref": rec["id"], "reason": "--auto で当てられなかった"})
+        raise
+
+
+def auto_ok(ws, a):
+    """--auto で当ててよいか。会話の指摘を出典にせず、AGENTS.md・rules/ の .md で、ID の付いた決まりを丸ごと（続きの行も）消すだけで
+    （ほかの行は持ち主の決まりごと並びどおりに残り、ID のない見出し・前置き・空行は 1 行も消さない）、残る決まりの文が変わらず、
+    ユーザーが決めた・当てたあとに手で直した決まりに触れないもの。
+    人を通さずに新しい文が決まりに入らないようにする（dreaming-001）。--new には前か後ろの行を残す（undo の目印。空の --new は戻せない）。
+    よければ (ファイル, 前の文, 当てたあとの文) を返す。"""
+    def no(why):
+        sys.exit(f"--auto にできない（{why}）。--auto を外して提案にする")
+    a.kind in AUTO or no(f"種類が {'・'.join(AUTO)} でない")
+    a.src and no("出典が会話の指摘")
+    a.plugin and no("プラグインへの提案")
+    a.old or no("--old がない。足す提案は人が見る")
+    a.new.strip() or no("--new が空。戻せるように、前か後ろの行を --old と --new の両方に入れる")
+    "ユーザーが決めた" in a.old and no("ユーザーが決めたと書いた文")
+    f = target(ws, a.file)
+    f == ws / "AGENTS.md" or f.is_relative_to(ws / "rules") and f.suffix == ".md" or no("変更先が AGENTS.md・rules/ の .md でない")
+    text = f.read_text(encoding="utf-8") if f.exists() else ""
+    text.count(a.old) == 1 or no(f"今の文が {a.file} に 1 か所でない")
+    out = text.replace(a.old, a.new)
+    out != text or no("消す行がない")
+    out.count(a.new) == 1 or no(f"--new が当てたあとの {a.file} に 1 か所でない（undo の目印にならない）")
+    was, now = [], []
+    before, after = bodies(text, {}, was), bodies(out, {}, now)
+    left, plain = iter(zip(text.splitlines(), was)), iter(text.split("\n"))  # \n のほかの改行の字で行をつながせない
+    all(x in left for x in zip(out.splitlines(), now)) and all(x in plain for x in out.split("\n")) or no("行を消すだけでない（書き換える・行の途中で切る・行がつながる・決まりの続きの行だけが残る）。書き換える提案は人が見る")
+    def fixed(s, own):  # 消してはいけない行の数。消してよいのは、[ID] のある行と、決まりの字下げした続きの行だけ
+        return sum(not (o and (RULE_ID.search(x) or x.startswith((" ", "\t")))) for x, o in zip(s.splitlines(), own))
+    fixed(text, was) == fixed(out, now) or no("ID のない行（見出し・前置き・空行）を消す。下の決まりの効く範囲が変わるので人が見る")
+    lines = lambda own, r: sum(r in o for o in own)  # 決まりの持つ行の数。flat() は記号だけの行（``` など）を消すので、文の比べだけでは見落とす
+    changed = sorted(r for r in after if after[r] != before[r] or lines(now, r) != lines(was, r))
+    changed and no(f"残る決まり {','.join(changed)} の文が変わる")  # 決まりの頭の行だけを消し、続きの行が上の決まりに付くときも
+    cs, ps, qs, _ = state(ws)
+    decided = [c["to"] for c in cs.values() if c.get("decided")]  # 戻し先は「<ファイル> <ID>」のようにも書かれる
+    keep = {r for to in decided for r in re.findall(rf"(?<![\w-]){ID}", to)}
+    for q in ps.values():  # ユーザーが戻した・却下した提案が消そうとした決まりは、残すと決めたものとみなす
+        if q["status"] in ("戻した", "却下"):
+            keep |= {q["rule"]} | set(RULE_ID.findall(q["old"])) - set(RULE_ID.findall(q["new"]))
+    keep |= {q["rule"] for q in qs.values() if q["status"] == "回答済み"}  # 答えた判断待ちの決まり
+    mine = sorted(keep & (before.keys() - after.keys()))
+    mine and no(f"ユーザーが決めた・戻した・却下した決まり {','.join(mine)}")
+    same = lambda x: (ws / x).resolve() == f  # ./rules/a.md と rules/a.md を同じファイルにする
+    any(not re.search(ID, to) and any(map(same, filter(None, re.split(r"[\s（）()#、,]+", to)))) for to in decided) and no(f"ユーザーが決めた指摘が、ID なしで {a.file} を戻し先にしている")
+    any(same(ps[k]["file"]) for k in drift(ws, quiet=True)) and no(f"{a.file} は当てたあとに手で直された")
+    return f, text, out
 
 
 def diff(p):
@@ -387,7 +453,9 @@ def pending(ws, status="未適用"):
         why = f"、理由: {p['reason']}" if p.get("reason") else ""
         where = f"プラグインの skills/{p['file']}" if p.get("plugin") else p["file"]
         pr = f"、{p['pr']}" if p.get("pr") else ""
-        print(f"### {p['id']} {p['why']}（{p['status']}、{p['type'] or '-'}、{where}{'、' + p['rule'] if p['rule'] else ''}、出典 {','.join(p['src']) or '-'}{why}{pr}）\n{diff(p)}")
+        rec = (f"、推奨: {p['rec']}" + (f"（{p['rec_why']}）" if p.get("rec_why") else "")) if p.get("rec") else ""
+        rec += "、出してすぐ当てた" if p.get("auto") else ""
+        print(f"### {p['id']} {p['why']}（{p['status']}、{p['type'] or '-'}、{where}{'、' + p['rule'] if p['rule'] else ''}、出典 {','.join(p['src']) or '-'}{why}{pr}{rec}）\n{diff(p)}")
     return out
 
 
@@ -456,13 +524,13 @@ def effective(p, done):
     return text
 
 
-def drift(ws):
+def drift(ws, quiet=False):
     out, done = [], [p for p in state(ws)[1].values() if p["status"] == "適用済み"]
     for p in done:
         f, want = ws / p["file"], effective(p, done)
         if want and (not f.exists() or want not in f.read_text(encoding="utf-8")):
             out.append(p["id"])
-            print(f"{p['id']} {p['file']}{' ' + p['rule'] if p['rule'] else ''}: 当てた文がない（手で直されたか消えた。ユーザーが直したものとして扱い、覆さない）")
+            quiet or print(f"{p['id']} {p['file']}{' ' + p['rule'] if p['rule'] else ''}: 当てた文がない（手で直されたか消えた。ユーザーが直したものとして扱い、覆さない）")
     return out
 
 
@@ -474,6 +542,8 @@ def questions(ws, everything=False):
             tail = f" → 「{q['a']}」（{q['answered']}）"
         elif q.get("reason"):
             tail = f"（{q['reason']}）"
+        elif q.get("rec"):
+            tail = f" 推奨: {q['rec']}"
         print(f"{q['id']} [{q['status']}] {q['q']}（{q['rule'] or '-'}、出典 {','.join(q['src']) or '-'}）{tail}")
     return out
 
@@ -494,22 +564,32 @@ def rule_texts(ws):
     プラグインとワークスペースの決まりと顧客の memory から。[ID] は決まりを書いたところにだけ付け、ほかから指すときは角括弧を付けない（rules.md の決まりの ID）。"""
     out = {}
     for t in texts([PLUGIN, ws / "AGENTS.md", ws / "rules", *(ws / "Customers").glob("*/memory.md")], {Path(__file__).resolve()}):
-        lines = t.splitlines()
-        for i, l in enumerate(lines):
-            ms = list(RULE_ID.finditer(l))
-            for j, (m, n) in enumerate(zip(ms, ms[1:] + [None])):
-                body = l[m.end() if j else 0:n.start() if n else None]  # 行の頭から: 1. 話の筋: [ID] …・MID = "…"  # [ID]
-                if not n:
-                    group = l.lstrip().startswith("[")
-                    for x in lines[i + 1:]:
-                        if RULE_ID.search(x):
-                            if group and not x.lstrip().startswith("["):  # まとまりの中の箇条書きの決まりは飛ばす。次に行の頭に立つ決まりで終わる
-                                continue
-                            break
-                        if not (x.startswith((" ", "\t")) or group and x.strip()):
-                            break
-                        body += x
-                out[m.group(1)] = out.get(m.group(1), "") + "\n" + flat(body)
+        bodies(t, out)
+    return out
+
+
+def bodies(t, out, own=None):
+    """1 つのファイルの文 t から、rule_texts の決まりの ID → 文を out に足す。own に list を渡すと、行ごとの持ち主の決まりの ID の集合も入れる。"""
+    lines = t.splitlines()
+    own = [] if own is None else own
+    own[:] = [set() for _ in lines]
+    for i, l in enumerate(lines):
+        ms = list(RULE_ID.finditer(l))
+        for j, (m, n) in enumerate(zip(ms, ms[1:] + [None])):
+            body = l[m.end() if j else 0:n.start() if n else None]  # 行の頭から: 1. 話の筋: [ID] …・MID = "…"  # [ID]
+            own[i].add(m.group(1))
+            if not n:
+                group = l.lstrip().startswith("[")
+                for k, x in enumerate(lines[i + 1:], i + 1):
+                    if RULE_ID.search(x):
+                        if group and not x.lstrip().startswith("["):  # まとまりの中の箇条書きの決まりは飛ばす。次に行の頭に立つ決まりで終わる
+                            continue
+                        break
+                    if not (x.startswith((" ", "\t")) or group and x.strip()):
+                        break
+                    body += x
+                    own[k].add(m.group(1))
+            out[m.group(1)] = out.get(m.group(1), "") + "\n" + flat(body)
     return out
 
 
@@ -571,6 +651,7 @@ def main(argv):
     s = sub.add_parser("propose")
     s.add_argument("--file", required=True); s.add_argument("--new", required=True); s.add_argument("--old"); s.add_argument("--rule", type=rule_arg)
     s.add_argument("--why", required=True); s.add_argument("--src"); s.add_argument("--kind"); s.add_argument("--plugin", action="store_true"); s.add_argument("--replaces", type=ws_rules_arg)
+    s.add_argument("--rec", choices=RECS); s.add_argument("--rec-why"); s.add_argument("--auto", action="store_true")
     s = sub.add_parser("pending"); s.add_argument("--status", default="未適用")
     s = sub.add_parser("apply"); s.add_argument("ids", nargs="+")
     s = sub.add_parser("reject"); s.add_argument("id"); s.add_argument("--reason", required=True)
@@ -578,7 +659,7 @@ def main(argv):
     s = sub.add_parser("undo"); s.add_argument("id")
     sub.add_parser("drift")
     s = sub.add_parser("sent"); s.add_argument("id"); s.add_argument("--issue", dest="pr", required=True); s.add_argument("--rule", type=rule_arg)
-    s = sub.add_parser("ask"); s.add_argument("--q", required=True); s.add_argument("--rule", type=rule_arg); s.add_argument("--src")
+    s = sub.add_parser("ask"); s.add_argument("--q", required=True); s.add_argument("--rule", type=rule_arg); s.add_argument("--src"); s.add_argument("--rec")
     s = sub.add_parser("answer"); s.add_argument("id"); s.add_argument("--a", required=True)
     s = sub.add_parser("questions"); s.add_argument("--all", action="store_true")
     s = sub.add_parser("review"); s.add_argument("--deck", required=True); s.add_argument("--table", required=True)
@@ -625,7 +706,7 @@ def main(argv):
             if sent:
                 reopen(ws, p)
     elif a.cmd == "ask":
-        print(write(ws, {"kind": "question", "q": a.q, "rule": a.rule or "", "src": [x for x in (a.src or "").split(",") if x]}, ("question", "Q", 4))["id"])
+        print(write(ws, {"kind": "question", "q": a.q, "rule": a.rule or "", "src": [x for x in (a.src or "").split(",") if x], **({"rec": a.rec} if a.rec else {})}, ("question", "Q", 4))["id"])
     elif a.cmd == "answer":
         q = state(ws)[2].get(a.id) or sys.exit(f"判断待ちがない: {a.id}")
         q["status"] == "未回答" or sys.exit(f"{a.id} は {q['status']}")
@@ -865,6 +946,109 @@ def selftest():
                 main(["answer", "Q0001", "--a", "1 行にする"])
                 main(["withdraw", "Q0002", "--reason", "出し直す"])
                 assert questions(ws) == [] and [q["status"] for q in questions(ws, True)] == ["回答済み", "取り下げ"]
+            # 推奨: 提案と判断待ちに残し、一覧に出す
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                main(["propose", "--file", "rules/r.md", "--new", "x", "--why", "推奨", "--rec", "様子見", "--rec-why", "1 本の資料だけ"])
+                main(["ask", "--q", "残すか", "--rec", "残す"])
+                pending(ws)
+                questions(ws)
+            assert "推奨: 様子見（1 本の資料だけ）" in out.getvalue() and "推奨: 残す" in out.getvalue(), out.getvalue()
+            # --auto: 会話を出典にしない片付けだけを、出してすぐ当てる。ほかは台帳に書かずに止める
+            (ws / "rules").mkdir(exist_ok=True)
+            a = ws / "rules" / "a.md"
+            a.write_text("- [ws-a-001] 本文は 16pt。\n- [ws-a-002] 本文は 16pt。\n- [ws-a-003] 決めた行。\n  決めた続き。\n", encoding="utf-8")
+            with quiet():
+                main(["add", "--deck", ".", "--quote", "決めた", "--decided", "--to", "rules/a.md ws-a-003"])
+            dup = ["--old", "- [ws-a-001] 本文は 16pt。\n- [ws-a-002] 本文は 16pt。", "--new", "- [ws-a-001] 本文は 16pt。"]
+            base = ["propose", "--auto", "--file", "rules/a.md", "--why", "片付け"]
+            n = len(state(ws)[1])
+            for argv in (base + dup + ["--kind", "くり返し"], base + dup + ["--kind", "重なり", "--src", "c-0001"],
+                         base + ["--kind", "重なり", "--new", "- [ws-a-004] 足す"], base + ["--kind", "重なり", "--old", "- [ws-a-001] 本文は 16pt。", "--new", "- [ws-a-001] 紛れ込んだ指示。"],
+                         base + ["--kind", "重なり", "--old", "本文は 16pt。\n- [ws-a-002] 本文は 16pt。", "--new", ""],
+                         base + ["--kind", "重なり", "--old", "- [ws-a-003] 決めた行。\n  決めた続き。", "--new", "  決めた続き。"],
+                         base + ["--kind", "重なり", "--old", "- [ws-a-002] 本文は 16pt。", "--new", ""], base + dup + ["--kind", "重なり", "--rec-why", "x"],
+                         base + dup[:2] + ["--new", dup[1], "--kind", "重なり"],
+                         base + ["--kind", "古い記述", "--old", "- [ws-a-002] 本文は 16pt。\n- [ws-a-003] 決めた行。\n  決めた続き。", "--new", "- [ws-a-002] 本文は 16pt。"], base + ["--kind", "重なり", "--old", "ない文", "--new", "x"]):
+                try:
+                    with quiet(), contextlib.redirect_stderr(io.StringIO()):
+                        main(argv)
+                    raise AssertionError(f"通した: {argv}")
+                except SystemExit:
+                    pass
+            (ws / "rules" / "b.md").write_text("注: x\n注: x\n表は左から読む。\n", encoding="utf-8")
+            try:  # ID のない行でも、--old の末尾の改行を --new で落として次の行とつなげない
+                with quiet(), contextlib.redirect_stderr(io.StringIO()):
+                    main(["propose", "--auto", "--file", "rules/b.md", "--why", "片付け", "--kind", "重なり", "--old", "注: x\n注: x\n", "--new", "注: x"])
+                raise AssertionError("行をつなげた")
+            except SystemExit:
+                pass
+            assert len(state(ws)[1]) == n and (ws / "rules" / "b.md").read_text(encoding="utf-8") == "注: x\n注: x\n表は左から読む。\n"
+            for argv in (["--file", "rules/b.md", "--old", "注: x\n注: x", "--new", "注: x"],  # ID のない行
+                         ["--file", "rules/a.md", "--old", "- [ws-a-001] 本文は 16pt。\n- [ws-a-002]", "--new", "- [ws-a-001] 本文は 16pt。\x1e- [ws-a-002]"]):  # \n でない改行の字でつなぐ
+                try:
+                    with quiet(), contextlib.redirect_stderr(io.StringIO()):
+                        main(["propose", "--auto", "--why", "片付け", "--kind", "重なり"] + argv)
+                    raise AssertionError(f"通した: {argv}")
+                except SystemExit:
+                    pass
+            (ws / "rules" / "f.md").write_text("- [ws-f-001] 例:\n  ```\n  コマンド\n  ```\n- [ws-f-002] 残す。\n", encoding="utf-8")
+            try:  # 記号だけの続きの行（コードの囲みの閉じ）も、決まりの一部だけを消さない
+                with quiet(), contextlib.redirect_stderr(io.StringIO()):
+                    main(["propose", "--auto", "--why", "片付け", "--kind", "重なり", "--file", "rules/f.md", "--old", "  ```\n- [ws-f-002] 残す。", "--new", "- [ws-f-002] 残す。"])
+                raise AssertionError("決まりの一部を消した")
+            except SystemExit:
+                pass
+            (ws / "rules" / "e.md").write_text("## 色\n[ws-e-001] 赤を使う。\n## 表\n表は左から読む。\n\n[ws-e-002] 表は 3 列まで。\n", encoding="utf-8")
+            try:  # 行の頭の決まりが持つ、字下げしていない見出し・前置きも消さない
+                with quiet(), contextlib.redirect_stderr(io.StringIO()):
+                    main(["propose", "--auto", "--why", "片付け", "--kind", "重なり", "--file", "rules/e.md", "--old", "## 色\n[ws-e-001] 赤を使う。\n## 表\n表は左から読む。\n", "--new", "## 色\n"])
+                raise AssertionError("見出しを消した")
+            except SystemExit:
+                pass
+            (ws / "rules" / "c.md").write_text("## 見出し\n- [ws-c-001] 次は使わない:\n  - 赤い文字\n- [ws-c-002] 本文は 16pt。\n", encoding="utf-8")
+            for argv in (["--file", "rules/c.md", "--old", "## 見出し\n- [ws-c-001] 次は使わない:", "--new", "## 見出し"],  # 続きの行だけが残る
+                         ["--file", ".factory/ledger.jsonl", "--old", path(ws).read_text(encoding="utf-8").splitlines()[0] + "\n", "--new", "x"]):  # 決まりのファイルでない
+                try:
+                    with quiet(), contextlib.redirect_stderr(io.StringIO()):
+                        main(["propose", "--auto", "--why", "片付け", "--kind", "重なり"] + argv)
+                    raise AssertionError(f"通した: {argv}")
+                except SystemExit:
+                    pass
+            assert len(state(ws)[1]) == n
+            def stop(*x, **k):  # ファイルに書いたあとで、台帳に書けずに止まる
+                raise OSError("書けない")
+            g, real = globals(), close
+            g["close"] = stop
+            try:
+                with quiet():
+                    main(base + dup + ["--kind", "重なり"])
+                raise AssertionError("止まらなかった")
+            except OSError:
+                pass
+            finally:
+                g["close"] = real
+            assert "ws-a-002" in a.read_text(encoding="utf-8") and list(state(ws)[1].values())[-1]["status"] == "取り下げ"
+            with quiet():
+                main(base + dup + ["--kind", "重なり"])
+            pid = list(state(ws)[1])[-1]
+            assert state(ws)[1][pid]["status"] == "適用済み" and a.read_text(encoding="utf-8") == "- [ws-a-001] 本文は 16pt。\n- [ws-a-003] 決めた行。\n  決めた続き。\n"
+            with quiet():
+                main(["undo", pid])
+            assert "ws-a-002" in a.read_text(encoding="utf-8")
+            try:  # ユーザーが戻した片付けは、次の回にもう一度当てない
+                with quiet(), contextlib.redirect_stderr(io.StringIO()):
+                    main(base + dup + ["--kind", "重なり"])
+                raise AssertionError("戻した片付けをまた当てた")
+            except SystemExit:
+                pass
+            with quiet():  # ID なしでこのファイルに戻した、ユーザーが決めた指摘があれば、どこに触れるか分からないので止める
+                main(["add", "--deck", ".", "--quote", "ファイルで決めた", "--decided", "--to", "rules/a.md（見出しの下）"])
+            try:
+                with quiet(), contextlib.redirect_stderr(io.StringIO()):
+                    main(["propose", "--auto", "--file", "./rules/a.md", "--why", "片付け", "--kind", "重なり", "--old", dup[1], "--new", "- [ws-a-002] 本文は 16pt。"])  # 戻した ws-a-002 でなく ws-a-001 を消す
+                raise AssertionError("ID なしで決めたファイルに、パスの書き方を変えて当てた")
+            except SystemExit:
+                pass
             # レビューの表: 決まりの列のある行だけ。2 度取り込んでも数えず、ラウンドをまたぐ同じ行はあとのラウンドの結果
             t = ws / "review.md"
             t.write_text("p<ページ> | 出所 | 観点 | 重さ | 何 | 案 | 結果 | 決まり\n"
