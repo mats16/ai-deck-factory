@@ -3,7 +3,7 @@
 usage:
   kaizen.py start   <名前>                          元のリポジトリ（plugin.json の repository）を clone して kaizen/<名前> のブランチを作る。前の版（main）も写す
   kaizen.py lint    <名前> <資料の URL ...>          いまの資料の JSON に、前の版と変えた版の lint をかけて比べる
-  kaizen.py rebuild <名前> <資料のフォルダ ...> [--pages 2,5] [--keep]   build/ の正本（pages.py・doc.md）を前の版と変えた版で仮に組み、ページの画像を並べて比べる
+  kaizen.py rebuild <名前> <資料のフォルダ ...> [--pages 2,5] [--keep]   build/ の正本（deck.json・pages.py・doc.md）を前の版と変えた版で仮に組み、ページの画像を並べて比べる
   kaizen.py open    <名前> --title <題> --body <本文.md>   本文と検証の記録と変更案の差分をまとめて、プラグインのリポジトリに Issue を作る（commit は先に済ませる。Issue があれば本文を書き換える）
   kaizen.py clean   <名前>                          clone と検証の記録を消す（Issue が閉じられたあと）
   kaizen.py --selftest
@@ -126,6 +126,15 @@ def lint_cmd(w, urls):
         print(detail)
 
 
+def is_slides(build):
+    """build/ の正本がスライド（deck.json か pages.py）なら True、ドキュメント（doc.md）なら False。両方のスライドがあるときは slides.py が止める。"""
+    if any((build / f).is_file() for f in ("deck.json", "pages.py")):
+        return True
+    if (build / "doc.md").is_file():
+        return False
+    sys.exit(f"{build} に deck.json も pages.py も doc.md もない")
+
+
 def rebuild(w, folders, pages=None, keep=False):
     w.need()
     out_dir = gapi.factory().get("drive", {}).get("factory") or sys.exit("factory.toml の drive.factory（仮に組む Drive のフォルダ）がない")
@@ -133,9 +142,7 @@ def rebuild(w, folders, pages=None, keep=False):
     img.mkdir(parents=True, exist_ok=True)
     for folder in map(Path, folders):
         build = folder.resolve() / "build"
-        slides = (build / "pages.py").is_file()
-        if not slides and not (build / "doc.md").is_file():
-            sys.exit(f"{build} に pages.py も doc.md もない")
+        slides = is_slides(build)
         label = w.label(str(folder.resolve().relative_to(w.ws)))
         made, outs, shots = [], [], {}
         try:
@@ -343,6 +350,16 @@ def selftest():
         (w.repo / ".git").unlink()
         (w.repo / ".git").mkdir()
         w.need()  # start が clone したもの（.git がフォルダ）は通す
+    with tempfile.TemporaryDirectory() as d:  # rebuild の正本: JSON のデッキ（deck.json だけ）もスライド
+        b = Path(d)
+        assert stops(lambda: is_slides(b), "deck.json も pages.py も doc.md もない")
+        (b / "doc.md").touch()
+        assert is_slides(b) is False
+        (b / "deck.json").touch()
+        assert is_slides(b) is True
+        (b / "deck.json").unlink()
+        (b / "pages.py").touch()
+        assert is_slides(b) is True
     with tempfile.TemporaryDirectory() as d:  # 顧客と資料のフォルダの名前、[factory] private の語が Issue に入ったら止める
         for x in ("Customers/Acme/sample_briefing_202610", "Customers/Acme/review_2026q3", "Customers/Acme/assets", "Internal/grok_study_202610", "Internal/drafts"):
             (Path(d) / x).mkdir(parents=True)
