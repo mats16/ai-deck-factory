@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 sys.dont_write_bytecode = True  # scripts/ に __pycache__ を残さない
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gapi, lint
-from slides import STAMP, page_numbers
+from slides import STAMP, page_numbers, revision
 from gapi import DRIVE, PPTX, SLIDES, batch, file_id, folder_id, request, run, slide_ids, thumbnail, trash
 
 THREADS = 6  # サムネイルを並べて取る数。12 枚で約 5 秒（2026-10-07 に測った。PDF に書き出して画像にするのと同じ）
@@ -78,6 +78,14 @@ def by_page(lines):
     return out
 
 
+def built(pid):
+    """今の版（slides.revision）。版の一覧は編集できる人しか読めないので、読めなければ None（組んだ版と比べて違うことにし、全ページを取る）。"""
+    try:
+        return revision(pid)
+    except gapi.ApiError:
+        return None
+
+
 def cmd_check(src, *opts):
     """[gslides-001] 画像は、前に取ったときから変わったページだけを取る（テストの e2e。ページの objectId で見る。build が中身の変わったページだけを新しい ID で作る）。
     前に組んだあとに画面で直されていたら（組んだときの版と今の版が違う）、全ページを取る。--all で全ページ、--pages 3,5 でそのページだけ。
@@ -118,7 +126,7 @@ def cmd_check(src, *opts):
                 why = "--all"
             elif not prev:
                 why = "前に取った画像の記録がない"
-            elif p.get("revisionId") != request("GET", f"{DRIVE}/files/{pid}?supportsAllDrives=true&fields=appProperties").get("appProperties", {}).get(STAMP):
+            elif (now := built(pid)) is None or now != request("GET", f"{DRIVE}/files/{pid}?supportsAllDrives=true&fields=appProperties").get("appProperties", {}).get(STAMP):
                 why = "slides.py build で組んだ版でない（画面で直されたか、ほかの道具で変えた）"
         if why:
             want = list(range(1, len(ids) + 1))
@@ -232,7 +240,7 @@ def check_selftest():
     import contextlib, io, shutil
     pid, deck, fail = "zzselftest", {"ids": ["a", "b", "c"]}, set()
     d = f"/tmp/slides_{pid[:8]}"
-    real = {k: globals()[k] for k in ("request", "save_thumb")}, lint.lint_slides, subprocess.run
+    real = {k: globals()[k] for k in ("request", "save_thumb", "revision")}, lint.lint_slides, subprocess.run
 
     def thumb(_, obj, out):
         if obj in fail:
@@ -240,7 +248,7 @@ def check_selftest():
         open(out, "w").write(obj)
 
     globals().update(request=lambda m, u, *a, **k: {"appProperties": {STAMP: "rev"}} if "/files/" in u else
-                     {"title": "tmp", "revisionId": "rev", "slides": [{"objectId": o} for o in deck["ids"]]}, save_thumb=thumb)
+                     {"title": "tmp", "slides": [{"objectId": o} for o in deck["ids"]]}, save_thumb=thumb, revision=lambda pid: "rev")
     lint.lint_slides, subprocess.run = lambda *a, **k: 0, lambda *a, **k: subprocess.CompletedProcess(a, 0, "", "")
     shutil.rmtree(d, ignore_errors=True)
     page = lambda n: open(f"{d}/p-{n:02d}.png").read()
@@ -263,6 +271,13 @@ def check_selftest():
             deck["ids"] = ["c", "x"]
             cmd_check(pid, "--pages", "1")  # ページの数が変わったら、--pages でも全ページ
             assert [x["page"] for x in json.load(open(f"{d}/changed.json"))["pages"]] == [1, 2]
+            cmd_check(pid)
+            assert json.load(open(f"{d}/changed.json"))["pages"] == []
+            stamped = request
+            for req in (stamped, lambda m, u, *a, **k: {} if "/files/" in u else stamped(m, u)):  # 版の一覧を読めない（編集できない人）なら、組んだ版を残していなくても、止まらず全ページを取る
+                globals().update(revision=lambda pid: (_ for _ in ()).throw(gapi.ApiError("403")), request=req)
+                cmd_check(pid)
+                assert len(json.load(open(f"{d}/changed.json"))["pages"]) == 2
     finally:
         globals().update(real[0])
         lint.lint_slides, subprocess.run = real[1], real[2]
