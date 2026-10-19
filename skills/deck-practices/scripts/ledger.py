@@ -425,7 +425,8 @@ def auto_ok(ws, a):
     def fixed(s, own):  # 消してはいけない行の数。消してよいのは、[ID] のある行と、決まりの字下げした続きの行だけ
         return sum(not (o and (RULE_ID.search(x) or x.startswith((" ", "\t")))) for x, o in zip(s.splitlines(), own))
     fixed(text, was) == fixed(out, now) or no("ID のない行（見出し・前置き・空行）を消す。下の決まりの効く範囲が変わるので人が見る")
-    changed = sorted(r for r in after if after[r] != before[r])
+    lines = lambda own, r: sum(r in o for o in own)  # 決まりの持つ行の数。flat() は記号だけの行（``` など）を消すので、文の比べだけでは見落とす
+    changed = sorted(r for r in after if after[r] != before[r] or lines(now, r) != lines(was, r))
     changed and no(f"残る決まり {','.join(changed)} の文が変わる")  # 決まりの頭の行だけを消し、続きの行が上の決まりに付くときも
     cs, ps, qs, _ = state(ws)
     decided = [c["to"] for c in cs.values() if c.get("decided")]  # 戻し先は「<ファイル> <ID>」のようにも書かれる
@@ -990,6 +991,13 @@ def selftest():
                     raise AssertionError(f"通した: {argv}")
                 except SystemExit:
                     pass
+            (ws / "rules" / "f.md").write_text("- [ws-f-001] 例:\n  ```\n  コマンド\n  ```\n- [ws-f-002] 残す。\n", encoding="utf-8")
+            try:  # 記号だけの続きの行（コードの囲みの閉じ）も、決まりの一部だけを消さない
+                with quiet(), contextlib.redirect_stderr(io.StringIO()):
+                    main(["propose", "--auto", "--why", "片付け", "--kind", "重なり", "--file", "rules/f.md", "--old", "  ```\n- [ws-f-002] 残す。", "--new", "- [ws-f-002] 残す。"])
+                raise AssertionError("決まりの一部を消した")
+            except SystemExit:
+                pass
             (ws / "rules" / "e.md").write_text("## 色\n[ws-e-001] 赤を使う。\n## 表\n表は左から読む。\n\n[ws-e-002] 表は 3 列まで。\n", encoding="utf-8")
             try:  # 行の頭の決まりが持つ、字下げしていない見出し・前置きも消さない
                 with quiet(), contextlib.redirect_stderr(io.StringIO()):
