@@ -29,7 +29,7 @@ enabled = true
 
 ```sh
 python3 -c 'import os,pathlib; p=pathlib.Path(os.environ.get("CODEX_HOME","~/.codex")).expanduser()/"config.toml"; k="[plugins.\"ai-deck-factory@ai-deck-factory\"]\nenabled = true"; s=p.read_text(); assert k in s, "見つからない"; p.write_text(s.replace(k, k[:-4]+"false"))'
-mkdir -p .codex && { grep -qs 'ai-deck-factory@ai-deck-factory' .codex/config.toml || printf '[plugins."ai-deck-factory@ai-deck-factory"]\nenabled = true\n' >> .codex/config.toml; }
+mkdir -p .codex && { grep -qs 'ai-deck-factory@ai-deck-factory' .codex/config.toml || printf '\n[plugins."ai-deck-factory@ai-deck-factory"]\nenabled = true\n' >> .codex/config.toml; }
 ```
 
 - ワークスペースの `.codex/config.toml` は、そのフォルダを信頼したときだけ読まれる。初めて Codex を開くと聞かれ、決めたことは `~/.codex/config.toml` の `[projects."<ワークスペース>"] trust_level = "trusted"` に残る。信頼しないと、スキルも hook も出ない。

@@ -57,7 +57,7 @@ codex plugin marketplace list --json | python3 -c "import json,sys; [print(m) fo
 codex plugin marketplace add mats16/ai-deck-factory
 codex plugin add ai-deck-factory@ai-deck-factory --json | python3 -c "import json,sys; print(json.load(sys.stdin)['installedPath'])"
 python3 -c 'import os,pathlib; p=pathlib.Path(os.environ.get("CODEX_HOME","~/.codex")).expanduser()/"config.toml"; k="[plugins.\"ai-deck-factory@ai-deck-factory\"]\nenabled = true"; s=p.read_text(); assert k in s, "見つからない"; p.write_text(s.replace(k, k[:-4]+"false"))'
-mkdir -p .codex && { grep -qs 'ai-deck-factory@ai-deck-factory' .codex/config.toml || printf '[plugins."ai-deck-factory@ai-deck-factory"]\nenabled = true\n' >> .codex/config.toml; }
+mkdir -p .codex && { grep -qs 'ai-deck-factory@ai-deck-factory' .codex/config.toml || printf '\n[plugins."ai-deck-factory@ai-deck-factory"]\nenabled = true\n' >> .codex/config.toml; }
 ```
 
 - 1 つめで出たときは、Claude Code と同じく `marketplace add` を飛ばし、入れ元（`marketplaceSource`）が違えばユーザーに聞く。
