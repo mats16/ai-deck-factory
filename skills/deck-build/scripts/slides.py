@@ -2098,8 +2098,9 @@ class SpecPage:
             hs = [self.measure(c, cw[j], f"{loc}.items[{k + j}]") for j, c in enumerate(row)]
             rh = max(hs)
             grow = ["h" not in c and (c["type"] in STRETCH or c["type"] == "text" and (c.get("fill") or c.get("line"))) for c in row]
-            cards = [j for j, c in enumerate(row) if grow[j] and c["type"] == "card"]
-            if any(hs[j] < rh - 0.01 for j in cards):  # 伸ばすカードがあれば、行のカードの印を 1 行目にそろえる（ほかの部品が伸びるだけなら、カードの文字は中央のまま）
+            cards = [j for j, c in enumerate(row) if c["type"] == "card"]
+            # 伸ばすカードがあれば、行のカードの印を 1 行目にそろえる（h を書いたカードも。ほかの部品が伸びるだけなら、カードの文字は中央のまま）
+            if any(grow[j] and hs[j] < rh - 0.01 for j in cards):
                 self.first_line.update(f"{loc}.items[{k + j}]" for j in cards)
             cx = x
             for j, c in enumerate(row):
@@ -4436,6 +4437,11 @@ def selftest_spec():
     lc, nm = [e for e in lg if e["call"] == "card"], [e for e in lg if e["call"] == "num"]
     assert near(nm[0]["cy"] - lc[0]["y"], nm[1]["cy"] - lc[1]["y"])  # 短い文字どうしでも、そろえた行ではいちばん高いカードも 1 行目にそろえる（PR のレビュー）
     assert near(nm[2]["cy"] - lc[2]["y"], MARK_IN + MARK / 2)  # 印だけのカードは、1 行目にそろえず、印の上を MARK_IN のままにする（PR のレビュー）
+    two = {"type": "card", "num": 1, "head": "段", "text": "本文<br>2 行目"}
+    two["h"] = round(SpecPage(Path(".")).measure(two, 5, "c") + 0.005, 3)  # 中身の高さとほぼ同じ h（上寄せだが、h > need + 0.01 にならない）
+    _, lg = run({"title": "t", "body": [{"type": "row", "w": 10, "items": [two, {"type": "card", "num": 2, "head": "段"}]}]})
+    lc, nm = [e for e in lg if e["call"] == "card"], [e for e in lg if e["call"] == "num"]
+    assert near(nm[0]["cy"] - lc[0]["y"], nm[1]["cy"] - lc[1]["y"])  # h を書いたカードも、行の印を 1 行目にそろえる（PR #76 のレビュー）
     card = {"type": "card", "num": 1, "head": "段", "text": "1 行の本文"}
     _, lg = run({"title": "t", "body": [{"type": "row", "items": [card, card, {"type": "text", "text": "x", "fill": "PANEL"}]}]})
     lc, nm = [e for e in lg if e["call"] == "card"], [e for e in lg if e["call"] == "num"]
