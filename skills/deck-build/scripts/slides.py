@@ -1028,6 +1028,7 @@ VALIGN = {"top": "TOP", "middle": "MIDDLE", "bottom": "BOTTOM"}
 # 図形の形（Slides API の shapeType を小文字に）。過去の資料で使った形と、矢羽根の段の頭（home_plate）だけ。ほかは使われたら足す（slides-035）
 SHAPES = {k.lower(): k for k in ("RECTANGLE", "ROUND_RECTANGLE", "ELLIPSE", "CHEVRON", "HOME_PLATE", "FOLDED_CORNER", "CAN")}
 GAP_BODY, GAP, GAP_ARROW, ARROW_PAD = 0.3, 0.24, 0.6, 0.08  # 本文の部品の間、stack・row・grid の間、arrows の row の間、矢印と箱の間（in）
+BOX_IN, EDGED = 0.08, ("card", "box", "label", "code", "stat", "table")  # 囲み（box）の辺と中の部品の間の下限（in。visual-044）、縁の見える部品（塗りか枠線のある text も）
 LABEL_GAP = 0.04  # 矢印の札と線の間（in。縦の線の右は 2 倍。文字の上には行の高さの空きがあり、横の左にはない）
 # 印のあるカード（過去の資料の node・icard・ncard。2026-10-16）: 印の大きさ（アイコン・番号／画像）、カードの端から印、印から文字（in）
 MARK, MARK_IMG, MARK_IN, MARK_GAP = 0.36, 0.5, 0.18, 0.14
@@ -2092,6 +2093,14 @@ class SpecPage:
         if any({c["type"] for c in r} & {"num", "icon"} and any(c["type"] == "text" and not (c.get("fill") or c.get("line")) for c in r) for r in self.rows_of(e)):  # 塗りか枠線のある文字は行の高さまで伸びる  # 2026-10-20 の sandbox で、row の上端そろえで文字が円の中心より上に出た
             self.warns.append(f"{loc}（{kind}）: 番号かアイコンと文字を同じ行に並べた（{kind} は上端をそろえるので、文字が印の中心より上に出る）。印と文字の並びは list にする")
         ws, gap = self.widths(e, w, loc)
+        if kind == "row" and not e.get("arrows") and max(ws) - min(ws) < 0.01:  # 同じ形の列（visual-024）。grid は矢印を引けず、列を等分にするので、そのまま grid に移せる row にだけ勧める
+            cols = [[t for t in c["items"] if t["type"] != "arrow"] for c in e["items"] if c.get("type") == "stack"]
+            shapes = [[t["type"] for t in c] for c in cols]
+            if len(cols) == len(ws) > 1 and len(shapes[0]) > 1 and all(s == shapes[0] for s in shapes):
+                hs = [[self.measure(t, self.slot_w(t, cw), loc) for t in c] for c, cw in zip(cols, ws)]
+                if any(max(h[i] for h in hs) - min(h[i] for h in hs) > 0.03 for i in range(len(shapes[0]) - 1)):  # 最後の段は上端がそろえばよい
+                    self.warns.append(f"{loc}（row）: 同じ形の stack を並べたが、段の高さがそろわず、下の段の上端がずれる。段の順に grid（cols: {len(cols)}）に並べる"
+                                      "（grid は行ごとに高さをそろえる。visual.md の visual-024）")
         it, cy, k = iter(ws), y, 0
         for row in self.rows_of(e):
             cw = [next(it) for _ in row]
@@ -2196,6 +2205,12 @@ class SpecPage:
                 sys.exit(f"{loc}（arrow）.route: 折れ線（bent）の線に 0.01 in より短い区間ができる（箱の間が狭い）。箱を離すか、まっすぐの矢印にする")
             if across < 0.01:
                 bent = False  # 中央がそろった箱の折れ線は、まっすぐ引く
+        if bent and route == "bent":  # 辺を書いた矢印（下の段から上の段へ戻る線など）は、書き手が辺を決めたので見ない
+            def eid(v):  # split と同じ分け方。止めないので、ほかの矢印の辺の誤りは、その矢印を引くときに、その矢印の場所で止まる
+                return v if v in self.ids or "." not in v else v.rsplit(".", 1)[0]
+            ends = Counter((k, eid(a[k])) for a, *_ in self.arrows for k in ("from", "to") if isinstance(a[k], str))
+            if ends["from", fa] == 1 and ends["to", fb] == 1:  # fa から出る線も fb に入る線も 1 本だけ  # 2026-10-20、ワークスペースの決まりから（避けて回した 1 本の線は、どこからどこへの流れかが読みにくい）
+                self.warns.append(f"{loc}: 枝分かれでも合流でもない 1 本の流れを折れ線（bent）にした。つなぐ 2 つの箱を同じ行か同じ列に置き直し、まっすぐ引く（visual.md の visual-043）")
         if boxed and route == "straight" and not sided and abs(x1 - x2) > 0.01 and abs(y1 - y2) > 0.01:  # ずらした線（offset）も、両端の箱の中央からずらすので同じ  # 2026-10-16 の依頼文の試しで、枝の 1 本だけ直線にして斜めになった
             self.warns.append(f"{loc}: 矢印が斜めになる。枝分かれなら、どの枝も \"route\": \"bent\" にする（中央が同じ高さの枝はまっすぐ引かれる）か、両端の箱の高さをそろえる")
         self.emit("arrow", loc, e, x1=x1, y1=y1, x2=x2, y2=y2, color=spec_color(e.get("color", "SUB")), head=e.get("head", True), dash=e.get("dash", False), weight=e.get("weight", 1.25),
@@ -2239,6 +2254,12 @@ class SpecPage:
             for l2, k2, b in rs[i + 1:]:
                 if l1 not in rings and min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0]) > 0.03 and min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1]) > 0.03 and not rect_in(a, b) and not rect_in(b, a):
                     self.warns.append(f"{l1}（{k1}）と {l2}（{k2}）が一部だけ重なる。離すか、一方をもう一方の中に収める")
+        edged = [(loc, kind, r) for kind, loc, r, _, _, e in self.placed if kind in EDGED or kind == "text" and (e.get("fill") or e.get("line"))]
+        for kind, l1, a, _, _, e in self.placed:  # 囲みの中の縁のある部品は、4 辺から BOX_IN 以上内側に（visual-044。端が囲みの線に重なって 1 本に見える）
+            if kind == "box" and e.get("shape") != "ellipse":
+                for l2, k2, b in edged:
+                    if l2 != l1 and rect_in(b, a) and (gap := min(b[0] - a[0], a[0] + a[2] - b[0] - b[2], b[1] - a[1], a[1] + a[3] - b[1] - b[3])) < BOX_IN - 0.005:
+                        self.warns.append(f"{l2}（{k2}）が囲みの {l1} の辺から {max(gap, 0):.2f} in。中の部品を細くするか間を詰めて、4 辺から {BOX_IN} in 以上内側に置く（visual.md の visual-044）")
         for loc, pts, _, ends, lab in self.lines:
             for l2, k2, r in rs:
                 if l2 not in ends and not point_in(pts[0], r) and not point_in(pts[-1], r) and any(seg_hits(p, q, r) for p, q in zip(pts, pts[1:])):
@@ -4649,6 +4670,33 @@ def selftest_spec():
     assert "items[4]（num）と spec.body[0].items[6]（label）が一部だけ重なる" in w and "items[5]（list）と spec.body[0].items[6]（label）が一部だけ重なる" in w, w
     arr, lab = next(e for e in els if e["loc"] == "spec.body[0].items[8]"), next(e for e in els if e["loc"] == "spec.body[0].items[8].label")
     assert lab["call"] == "text" and lab["parts"] == "① 要求" and near(lab["x"] + lab["w"] / 2, (arr["x1"] + arr["x2"]) / 2) and near(lab["y"] + lab["h"] + LABEL_GAP, arr["y1"])  # 横の線の上の中央
+    d, _ = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [  # 囲みの辺に近い縁のある部品（visual-044）。塗りのない文字は数えない
+        {"type": "box", "x": 0, "y": 0, "w": 9, "h": 3, "line": "RULE"}, {"type": "card", "head": "端", "x": 0, "y": 1, "w": 3},
+        {"type": "label", "text": "内", "x": 4, "y": 1, "w": 2}, {"type": "text", "text": "見出し", "x": 0.05, "y": 0.05, "w": 3}]}]})
+    near_edge = [w for w in d.warnings if "囲みの" in w]
+    assert len(near_edge) == 1 and "items[1]（card）が囲みの spec.body[0].items[0] の辺から 0.00 in" in near_edge[0], d.warnings
+    col = lambda t: {"type": "stack", "items": [{"type": "card", "head": "見出し", "text": t}, {"type": "code", "text": "x = 1"}]}
+    d, _ = run({"title": "t", "body": [{"type": "row", "items": [col("短い"), col("長い。" * 30), col("短い")]}]})  # 同じ形の列の段がずれる（visual-024）
+    assert any("grid（cols: 3）" in w for w in d.warnings), d.warnings
+    for row_e in ({"type": "row", "items": [col("短い"), col("短い")]}, {"type": "row", "arrows": True, "items": [col("短い"), col("長い。" * 30)]},  # 段がそろう列、grid にすると矢印が消える列、
+                  {"type": "row", "widths": [2, 1], "items": [col("短い"), col("長い。" * 30)]}):  # 幅の比が消える列
+        d, _ = run({"title": "t", "body": [row_e]})
+        assert not any("grid" in w for w in d.warnings), (row_e, d.warnings)
+    lab = lambda i, x, y: {"type": "label", "id": i, "text": i, "x": x, "y": y, "w": 1.5, "h": 0.5}
+    d, _ = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [lab("a", 0, 0), lab("b", 4, 2), {"type": "arrow", "from": "a", "to": "b", "route": "bent"}]}]})  # 1 本の流れの折れ線（visual-043）
+    assert any("1 本の流れを折れ線" in w for w in d.warnings), d.warnings
+    d, _ = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [lab("a", 0, 1), lab("b", 4, 0), lab("c", 4, 2),  # 枝分かれは折る
+        {"type": "arrow", "from": "a", "to": "b", "route": "bent"}, {"type": "arrow", "from": "a", "to": "c", "route": "bent"}]}]})
+    assert not any("1 本の流れ" in w for w in d.warnings), d.warnings
+    d, _ = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [lab("a", 0, 0), lab("c", 0, 2), lab("b", 4, 1),  # 合流も折る
+        {"type": "arrow", "from": "a", "to": "b", "route": "bent"}, {"type": "arrow", "from": "c", "to": "b", "route": "bent"}]}]})
+    assert not any("1 本の流れ" in w for w in d.warnings), d.warnings
+    try:  # 枝分かれを数えるときは止めない。あとの矢印の辺の誤りは、その矢印の場所で止まる
+        run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [lab("a", 0, 0), lab("b", 4, 2), lab("c", 8, 0),
+            {"type": "arrow", "from": "a", "to": "b", "route": "bent"}, {"type": "arrow", "from": "a.rigth", "to": "c.left"}]}]})
+        raise AssertionError("辺の誤り")
+    except SystemExit as ex:
+        assert "items[4]（arrow）.from" in str(ex) and "辺「rigth」はない" in str(ex), ex
     d, _ = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [  # 輪（楕円）の上にカードを載せる図は、一部だけ重なっても知らせない
         {"type": "text", "text": "輪", "shape": "ellipse", "fill": "PANEL", "x": 1, "y": 0.4, "w": 8, "h": 2.4}, {"type": "card", "head": "載せる", "x": 0, "y": 1, "w": 2.5, "h": 0.8}]}]})
     assert not any("重なる" in w for w in d.warnings), d.warnings
