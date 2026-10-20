@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""仕上げたファイル（html・csv など）を Google Drive のフォルダに上げる（deck-build/SKILL.md の「Drive に置く」）。スライドは slides.py が Drive に直接作る。
+"""仕上げたファイル（html・csv など）を Google Drive のフォルダに上げる（deck-build/SKILL.md の「Placing files on Drive」）。スライドは slides.py が Drive に直接作る。
 同じ名前のファイルがフォルダにあれば中身だけ上書きする（ID・URL・共有の設定は変わらない）。なければ作る。Google Docs には変換しない。
 usage: drive_put.py <ファイル> <フォルダの URL か ID> <Drive 上の名前（YYYYMMDD_ で始める。拡張子は省くと付ける）>
 出力: 上書きか作ったかと、名前・URL（社内メモに書き、報告に付ける）。"""

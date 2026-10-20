@@ -1,35 +1,35 @@
-# 材料の集め方
+# Gathering materials
 
-社内の資料と顧客の情報を集めるときに読む（`SKILL.md` の「作業の始め方」の 3・4 と、AGENTS.md の「調べもの」）。社外秘の扱いは AGENTS.md の「社外秘と顧客の情報」に従う。読んだものは、資料のフォルダの `references.md` に書く（下の「台帳」）。
+Read this when gathering internal materials and customer information (`SKILL.md` "How to start" steps 3 and 4, and 「調べもの」 in AGENTS.md). Handle confidential information as 「社外秘と顧客の情報」 in AGENTS.md says. Record what you read in `references.md` in the material's folder (see "Ledger" below).
 
-- [materials-001] **遅い道具の結果を待って止まらない。** 待ち方の決まりは次の 2 つ。
-  - [materials-002] **コマンド 1 本は 5 分まで。** 道具の `timeout`（pi の bash、Claude Code の Bash の引数）で上限を付ける。macOS には `timeout` コマンドがない。上限に当たったら同じコマンドをやり直さず、範囲を絞る（期間・パス・`git clone --depth 1`・GitHub の API で要るファイルだけ）か、後回しにする。
-  - [materials-003] **サブエージェントは 20 分で知らせる。** `sleep` で待たずに、ほかの材料と構成案の骨組みを先に進め、届いたら足す（`SKILL.md` の「進め方」の deck-practices-013）。任せてから 20 分たっても結果がなければ、何を待っているか・いつからか・その間に何を進めているかをユーザーに知らせる（承認は待たない）。
+- [materials-001] **Do not stall waiting on slow tools.** Two rules for waiting:
+  - [materials-002] **One command runs at most 5 minutes.** Set the limit with the tool's `timeout` (the argument of pi's bash or Claude Code's Bash). macOS has no `timeout` command. When a command hits the limit, do not rerun the same command. Narrow the scope (period, path, `git clone --depth 1`, only the needed files through the GitHub API) or postpone it.
+  - [materials-003] **Report on a subagent at 20 minutes.** Do not wait with `sleep`. Move ahead with other materials and the skeleton of the outline, and add the result when it arrives (`SKILL.md` "Working practices", deck-practices-013). If there is no result 20 minutes after delegating, tell the user what you are waiting for, since when, and what you are doing meanwhile (do not wait for approval).
 
-## 社内の資料（流用とメッセージング）
+## Internal materials (reuse and messaging)
 
-道具は、ワークスペースの `factory.toml` の `[sources]` に役割ごとに書いてある（`search`・`chat`・`meetings`・`wiki`・`crm`・`usage`）。書いてない役割は、ユーザーに資料や URL を貼ってもらう。道具ごとの使い方とその会社の探し場所は、ワークスペースの `rules/deck-practices/materials.md` にある。
+The tools are listed by role in the workspace's `factory.toml` under `[sources]` (`search`, `chat`, `meetings`, `wiki`, `crm`, `usage`). For a role that is not listed, ask the user to paste the material or URL. How to use each tool and where to look in that company are in the workspace's `rules/deck-practices/materials.md`.
 
-- **社内の横断検索**（`search`）… 最初にここで同じテーマの資料を探す（「<製品名> pitch deck」「<テーマ> 日本語」「<顧客の業種> 事例」など）。
-- **ファイルの置き場所** … 見つけた Google Slides・Docs の中身を読む（Google Slides は `../deck-build/scripts/gslides.py` も使える）。
-- **社内のチャット**（`chat`）… 製品のチャンネルやフィールドのチャンネルに、最新の言い方と注意点、docs に書かれていない制約がある。docs にない制約を見つけたら、顧客向けの資料には docs で言える範囲で書く。不具合の詳細・回答・今後の予定は社内の情報なので、`社内メモ_*.md` に書く。
-- **社内の wiki**（`wiki`）… イネーブルメントの資料や、フィールド向けのガイド。日本語の資料の一覧があれば、日本語の公式のページを引用する。
-- **流用のしかた:** そのまま使う → 図などを切り取る → レイアウトを保ってこのフォルダの型で作り直す → 意図だけ汲んで新しく作る、の順に試す。決め方と作り方は [reuse.md](reuse.md)。
+- **Internal cross search** (`search`): search here first for materials on the same theme (「<製品名> pitch deck」「<テーマ> 日本語」「<顧客の業種> 事例」 and so on).
+- **File storage**: read the contents of the Google Slides and Docs you found (for Google Slides, `../deck-build/scripts/gslides.py` also works).
+- **Internal chat** (`chat`): product channels and field channels hold the latest wording, cautions, and constraints that the docs do not mention. When you find a constraint that is not in the docs, write it in customer-facing materials only as far as the docs support. Bug details, answers, and future plans are internal information, so write them in `社内メモ_*.md`.
+- **Internal wiki** (`wiki`): enablement materials and guides for the field. If there is a list of Japanese materials, cite the official Japanese pages.
+- **How to reuse:** try in this order: use as is → crop figures and similar parts → rebuild in this folder's style while keeping the layout → take only the intent and make it new. How to decide and how to do it are in [reuse.md](reuse.md).
 
-## 顧客の情報
+## Customer information
 
-- **会議の記録**（`meetings`）… 顧客との会議と、営業との社内の打ち合わせの両方を読む。まず要約を読み、裏付けが必要なときだけ文字起こしを見る。
-- **社内のチャット**（`chat`）… 顧客名で検索し、社内のアカウントのチャンネルと、顧客との共有チャンネルを見る。会議の記録に残らない日々のやりとりはこちらにある。
-  - [materials-004] 同僚が貼った他社や顧客のコメント（「いただいた問い合わせの内容もシェアします」のような転記）は、誰の言葉かを確かめてから解釈する。転記を同僚の発言として読み、「聞き違い」のような見立てを足さない。言葉の意味が分からないもの（「ブロック ID」など）は、分からないと書き、確かめることに入れる。
-  - [materials-005] 道具で読めないリンク（顧客との共有用の別のワークスペースなど）が依頼の背景として渡されたら、最初の返事で本文を貼ってもらう。届くまで構成案の聞き手と問いを確定せず、届いたら、顧客が書いてきたプロジェクト・チーム・領域を構成案の冒頭に写す（本文を読まずに進めると、検討中のプロジェクトの情報が抜ける）。
-- **顧客の台帳**（`crm`）… 商談と担当、顧客の基本の情報。
-- **利用額・消費**（`usage`）… 数字は出典（どの表・どの期間・どの単位）と一緒に控える。利用額は社内の情報なので、顧客向けの資料には書かない（AGENTS.md の「社外秘と顧客の情報」）。
+- **Meeting records** (`meetings`): read both meetings with the customer and internal meetings with sales. Read the summary first, and look at the transcript only when you need evidence.
+- **Internal chat** (`chat`): search by customer name, and look at the internal account channel and the channel shared with the customer. Day-to-day exchanges that meeting records miss are here.
+  - [materials-004] When a colleague pastes comments from another company or the customer (a transcription such as 「いただいた問い合わせの内容もシェアします」), confirm whose words they are before interpreting them. Do not read a transcription as the colleague's own remark, and do not add your own reading such as 「聞き違い」. For words whose meaning you do not know (such as 「ブロック ID」), write that you do not know, and add them to what needs checking.
+  - [materials-005] When a link the tools cannot read (such as a separate workspace shared with the customer) is given as background for the request, ask the user to paste its text in your first reply. Until it arrives, do not fix the audience and the questions in the outline. When it arrives, copy the projects, teams, and areas the customer wrote into the top of the outline (if you proceed without reading the text, information about the project under consideration is lost).
+- **Customer ledger** (`crm`): deals, owners, and basic customer information.
+- **Usage and consumption** (`usage`): note each number with its source (which table, which period, which unit). Usage amounts are internal information, so do not write them in customer-facing materials (「社外秘と顧客の情報」 in AGENTS.md).
 
-## 台帳（references.md）
+## Ledger (references.md)
 
-参考にした資料は、資料のフォルダの `references.md` で URL を管理する。同じ資料を何度も探し直さないため。写しは置かず、読み返すときは URL から読む（Google Slides は `../deck-build/scripts/gslides.py` も使える）。
+Manage the URLs of materials you referred to in `references.md` in the material's folder, so that you do not search for the same material again and again. Do not keep copies. When you reread, read from the URL (for Google Slides, `../deck-build/scripts/gslides.py` also works).
 
-- 1 行に 1 つ: 元（資料名と URL、会議 ID、チャットのリンク）、見るページや箇所、元の更新日、確かめた日、社外に出せるか、何に使うか（使わないと決めたものも、その理由と一緒に残す）。
-- 探す前に `references.md` を見る。元の更新日が確かめた日より新しくなっていたら、読み直す。
-- 社内の URL と社外に出せない資料が入るので、納品物には書かない（reuse.md の 2）。
-- 資料を仕上げたら、使った資料を直下の `references_index.md`（全体の索引）に足す。
+- One item per line: the source (material name and URL, meeting ID, chat link), the pages or parts to look at, the source's last updated date, the date you checked it, whether it can go outside the company, and what it is used for (keep items you decided not to use, with the reason).
+- Look at `references.md` before searching. If the source's last updated date is newer than the date you checked it, reread it.
+- It contains internal URLs and materials that cannot go outside the company, so do not put it in the deliverables (reuse.md §2).
+- When the material is finished, add the materials you used to `references_index.md` (the overall index) at the top level.

@@ -19,7 +19,7 @@ usage（資料の build/ で。deck.json か pages.py は今いるフォルダ�
   slides.py schema [--brief]   JSON のページの書く形の JSON Schema を出す（--brief は型・キー・色の早見表）
   slides.py stats   JSON のページの形の外の書き方（raw）を、キーごとに使った資料の数で出す（ワークスペースの .factory/spec_raw.jsonl。形に足す候補）
   slides.py upgrade <ファイル>...   JSON のページの raw のうち、形のキーで書けるものを書き換える
-  slides.py themes   テーマの名前・説明・テンプレートがあるか・既定か。資料ごとに選ぶ（../../deck-practices/SKILL.md の「作業の始め方」の 5）。
+  slides.py themes   テーマの名前・説明・テンプレートがあるか・既定か。資料ごとに選ぶ（../../deck-practices/SKILL.md の「How to start」の 5）。
                      [drive] shared_themes と [drive] factory の下の Themes の、[slides.templates] にないテンプレートも候補に出す
   slides.py theme <URL か ID> [<名前>] [--force]   テンプレートかデッキが持つテーマ（マスターの配色・書体・目印）を、ワークスペースの themes/slides/<名前>.json に書く。
                      テンプレートなら [slides.templates] にも書く（共有テーマを使い始めるとき、画面で直した色を戻すとき）
@@ -42,13 +42,13 @@ BLANK = "Content E - Blank"  # テンプレートに残した、置き物のな�
 
 # ---- 版面（visual.md の 1。上端は in） ----
 FONT = "Noto Sans JP"  # Google Fonts の名前。Noto Sans CJK JP と字形・文字幅は同じ（Google Fonts にない書体は黙って別の書体になる）
-# Google Slides で描けることを確かめた、和文のある Google Fonts（2026-10-07。../../deck-template/SKILL.md の「書体」）。会社のテーマの書体はここから選ぶ
+# Google Slides で描けることを確かめた、和文のある Google Fonts（2026-10-07。../../deck-template/SKILL.md の「Fonts」）。会社のテーマの書体はここから選ぶ
 JP_FONTS = {FONT, "Noto Serif JP", "BIZ UDPGothic", "BIZ UDGothic", "BIZ UDPMincho", "M PLUS 1p", "M PLUS 2", "M PLUS Rounded 1c", "Zen Kaku Gothic New",
             "Zen Maru Gothic", "Sawarabi Gothic", "Kosugi Maru", "IBM Plex Sans JP", "LINE Seed JP", "Murecho", "Shippori Mincho", "Zen Old Mincho", "Klee One"}
 MONO_DEFAULT = "Cascadia Mono"  # コードの箱・コマンドの等幅の書体の既定（Google Fonts。Windows Terminal の既定でリガチャがない。visual.md の 2）。和文の字形がないので、ASCII の続きにだけ付ける（mono_reqs）
 LIGATURE_MONO = {"JetBrains Mono", "Fira Code", "Cascadia Code"}  # Google Fonts の版にリガチャがあり、Google Slides が描く（2026-10-09。visual.md の 2）。テーマの mono に書けない
 MONO = MONO_DEFAULT  # 組むデッキの等幅の書体。テーマの mono があればそれ（use_theme）
-MONO_EM = 0.586  # Cascadia Mono の英数字の幅（em。hmtx で測った。2026-10-09）。テーマで等幅の書体を替えても、この幅で見込む（ずれる。deck-template の「書体」）
+MONO_EM = 0.586  # Cascadia Mono の英数字の幅（em。hmtx で測った。2026-10-09）。テーマで等幅の書体を替えても、この幅で見込む（ずれる。deck-template の「Fonts」）
 EMU = 914400
 INSET = 0.1  # 文字の枠の内側の余白（API で変えられない）。枠をこの分だけ外に出し、文字の端を箱の端にそろえる
 PAD = 0.08   # 箱と、その上に重ねる文字の枠の間（INSET と合わせて、枠と文字の間が 1 字分ほどになる）
@@ -1987,7 +1987,7 @@ class SpecPage:
                 y = bottom + gap
         if frame and arrows and len(spans) >= 3 and max(a for a, _ in spans) < min(b for _, b in spans):  # どの部品も同じ高さの帯にかかる = 横 1 列
             self.warns.append(f"{loc}: 横 1 列に並べて矢印でつないだ図は、row の \"arrows\": true に印のあるカードか label を並べて書ける（幅を本文いっぱいに使い、"
-                              "高さと矢印の位置がそろう。slides.md の slides-034 の「自由に置く図」）")
+                              "高さと矢印の位置がそろう。slides.md の slides-034 の「Free-form diagrams」）")
         return bottom
 
     def lone_text(self):
@@ -2972,7 +2972,7 @@ def theme_font(t):
     """テーマの表 t（スライドのテーマ・[docs.themes]）の本文の書体。書いていなければ FONT。和文を描けると確かめた書体（JP_FONTS）か、英数字の幅を測った
     欧文の書体（FONT_EM の DM Sans。和文は Google が別のゴシックで描く）でなければ止める（ほかの書体は、和文が別の書体になるか、描けない。deck_font も FONT に戻す）。"""
     if not isinstance(f := t.get("font", FONT), str) or f not in JP_FONTS | set(FONT_EM):
-        sys.exit(f"テーマの font {f!r} は、和文を描けると確かめた書体（slides.py の JP_FONTS）にも、字幅を測った欧文の書体（FONT_EM）にもない。deck-template の SKILL.md の「書体」から選ぶ")
+        sys.exit(f"テーマの font {f!r} は、和文を描けると確かめた書体（slides.py の JP_FONTS）にも、字幅を測った欧文の書体（FONT_EM）にもない。deck-template の SKILL.md の「Fonts」から選ぶ")
     return f
 
 
@@ -3420,7 +3420,7 @@ def cmd_themes():
 
 def need_theme(theme):
     """new で、テンプレートのあるテーマが 2 つ以上あるのに --theme がなければ、一覧を出して止める。資料ごとに description でテーマを選ばせる
-    （Agent Skills でスキルの一覧が毎回出るのと同じ役目。deck-practices の「作業の始め方」の 5）。factory-kaizen の検証で組む仮の資料は止めない。"""
+    （Agent Skills でスキルの一覧が毎回出るのと同じ役目。deck-practices の「How to start」の 5）。factory-kaizen の検証で組む仮の資料は止めない。"""
     if theme is None and len(templates()) >= 2 and not os.environ.get("FACTORY_VERIFY"):
         cmd_themes()
         sys.exit("テーマを選んでから組む。上の description と、資料の種類・聞き手を突き合わせて、slides.py new <フォルダ> <名前> --theme <名前> で渡す"

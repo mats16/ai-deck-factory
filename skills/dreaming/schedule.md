@@ -1,71 +1,71 @@
-# 定期の整理の登録のしかた
+# Registering the scheduled cleanup
 
-どのスケジューラーでも、渡すのは `prompt.txt` の 1 行だけ。手順は SKILL.md にあり、AI Deck Factory のプラグインを入れた Claude Code・Codex・pi から読める。作業フォルダはワークスペース（`factory.toml` のあるフォルダ）にする。スケジューラーを替えるときは、前のものを止めてから登録する（重なっても、SKILL.md の 0 で 12 時間以内の 2 回目は止まる）。会話で入れるとき（`../../INSTALL.md` の 5）は、エージェントが自分の道具にあるスケジューラーを使い、なければ 5 を手で入れてもらう。下にないスケジューラーでも、INSTALL.md の 5 の条件を満たせば使える。
+Every scheduler gets only the one line in `prompt.txt`. The steps are in SKILL.md, readable from Claude Code, Codex, and pi with the AI Deck Factory plugin installed. Set the working folder to the workspace (the folder with `factory.toml`). When switching schedulers, stop the old one before registering the new one (even if they overlap, step 0 of SKILL.md stops a second run within 12 hours). When installing through a conversation (step 5 of `../../INSTALL.md`), the agent uses a scheduler among its own tools; if it has none, ask the user to set up option 5 by hand. A scheduler not listed below also works if it meets the conditions in step 5 of INSTALL.md.
 
-回すときに直すのは索引などの危なくないものだけで、決まりの変更は提案になる（SKILL.md の冒頭）。提案は、回したスレッドか会話で「適用」と返すと入る。launchd のように会話の残らない回し方では、ワークスペースの `.factory/dreaming/log/<YYYYMMDD>.md` を見て、別の会話で「dreaming の P0001 を適用して」と頼む（提案の中身と状態は決まりの台帳。`ledger.py pending`）。
+A run fixes only safe things such as the index; rule changes become proposals (top of SKILL.md). Proposals are applied when the user replies 「適用」 in the thread or conversation that ran it. With setups that leave no conversation, such as launchd, look at the workspace's `.factory/dreaming/log/<YYYYMMDD>.md` and ask in another conversation, e.g. 「dreaming の P0001 を適用して」 (proposal contents and status are in the rule ledger; `ledger.py pending`).
 
-時刻の既定は毎日 5:00（夜にも資料を作ることがあるので、前の日の会話がそろった朝方にする。2026-10-07 にユーザーが 18:00 から変えた）。何もなければすぐ終わる。下の例の 5:00 は、決めた時刻に替える。
+The default time is 5:00 every day (materials are sometimes made at night, so run in the early morning once the previous day's conversations are complete. On 2026-10-07 the user changed it from 18:00). If there is nothing to do, it finishes immediately. Replace 5:00 in the examples below with the chosen time.
 
-| | 動くとき | 寝ていて逃した回 | 提案への返事 | Claude Code のメモリ |
+| | When it runs | Runs missed while asleep | Where to reply to proposals | Claude Code memory |
 |---|---|---|---|---|
-| 1. T3 Code（作者が使っている） | T3 Code が動いているとき | 未確認 | 整理専用のスレッド | 読める |
-| 2. Claude Code Desktop | アプリが開いていて、Mac が起きているとき | 7 日以内の最後の 1 回だけ、起きたときに回す | サイドバーの Scheduled の会話 | 読める |
-| 3. Codex app | アプリが動いているとき | 未確認 | 回ごとの新しいチャット | 読める（書くのは適用のときだけ） |
-| 4. Omnigent | つないだ PC がオンラインのとき | 回さない | 回ごとの新しい会話 | 未確認 |
-| 5. launchd + CLI | ログインしているとき | 起きたときに 1 回にまとめて回す | 別の会話で頼む | 読める |
+| 1. T3 Code (the author uses this) | While T3 Code is running | Unconfirmed | A thread dedicated to the cleanup | Readable |
+| 2. Claude Code Desktop | While the app is open and the Mac is awake | Only the last run within 7 days, on wake | The Scheduled conversation in the sidebar | Readable |
+| 3. Codex app | While the app is running | Unconfirmed | A new chat per run | Readable (written only when applying) |
+| 4. Omnigent | While the connected PC is online | Not run | A new conversation per run | Unconfirmed |
+| 5. launchd + CLI | While logged in | Run once on wake, combined | Ask in another conversation | Readable |
 
 ## 1. T3 Code
 
-**整理専用のスレッドを作り、そのスレッドから `schedule_task` を `bindToCurrentThread: true` で登録する**（毎回の結果がそのスレッドに出る。提案への「適用」もそこで返す）。
+**Create a thread dedicated to the cleanup, and register `schedule_task` from that thread with `bindToCurrentThread: true`** (each run's result appears in that thread. Reply 「適用」 to proposals there too).
 
-- 回ごとに新しいスレッドを作る方式（`bindToCurrentThread: false`）は使えない。新しいスレッドは git の worktree を用意しようとして、git で管理していないこのフォルダでは「Workspace preparation failed … Failed to resolve the VCS driver」で止まる。プロジェクトの既定を `local` にしても変わらなかった（2026-10-06、T3 Code 0.0.46-nightly で確かめた）。
-- スレッドは `t3_thread_launch` で作業フォルダの直下（`workspaceStrategy: {"type":"root"}`）に作る。ワークスペースが T3 Code のプロジェクトになっていなければ、先に `t3_project_list` で探し、なければ `t3_project_create` で作る。提供元は、ふだん資料を作るものにする（作者は Claude。2026-10-06 に Codex から切り替えた）。`runtimeMode` は `auto`（承認をエージェントに任せるので、人がいなくても止まらない）。
-- `t3_thread_launch` は、呼ぶスレッドが full-access（default）でないと「capability_denied」で止まる（2026-10-07、auto のスレッドから呼んで止まった）。呼ぶスレッドを full-access にしてから作る。
-- `schedule_task` の中身: `prompt` は `prompt.txt` の 1 行、`schedule` は `{"type":"fixed_time","timeOfDay":"05:00"}`、`clientRequestId` は `dreaming-daily`（ID の末尾になる）。
-- ほかのスレッド（会話で入れているスレッドなど）から登録するときは、`t3_thread_launch` の `message` で、作ったスレッドに「この中身で `schedule_task` を `bindToCurrentThread: true` で登録し、ID と次に回る時刻を返して」と頼む。`t3_thread_wait` で待ち、`list_scheduled_tasks` の `boundThreadId` がそのスレッドかを見る。
-- 作者の登録（2026-10-07 に作り直した）: ID は `scheduled-task:command:mcp:91ea5ee6-38a0-49ff-ba0e-6afcd3cc5921:schedule-task:dreaming-daily`。結びついているのは、整理専用のスレッド「dreaming（指示とスキルの定期の整理）」（`mcp:d9cb28f9-831a-4767-a164-1da9b0b63a53`）。
-- 別のスレッドに移すときは、移す先のスレッドから `update_scheduled_task` を `bindToCurrentThread: true` で呼ぶ。ID は変わらない（2026-10-07 に確かめた）。スレッドが消えると、タスクは消えたスレッドに結びついたまま残るので、そのときも同じように移す。
-- 確かめる・止める: `list_scheduled_tasks`（`boundThreadId` がつながっているスレッド）、`update_scheduled_task`（`enabled: false`）、`delete_scheduled_task`。すぐ回すのは `run_scheduled_task_now`。
-- Claude の `auto` は、安全チェックが操作を止めることがある（2026-10-06、この手順を書いたときに、無人で動く指示を書く操作が「Create Unsafe Agents」で止まった）。止まった操作は飛ばして報告に書く（SKILL.md の「回すときの決まり」）。
-- 最初は Codex の `gpt-6.1-sol` で登録し、初回の整理（`log/20261006.md`）と提案の適用はそれで回した。
+- The mode that creates a new thread per run (`bindToCurrentThread: false`) does not work. A new thread tries to prepare a git worktree and, in this folder that is not under git, stops with "Workspace preparation failed … Failed to resolve the VCS driver". Setting the project default to `local` did not change this (confirmed 2026-10-06 on T3 Code 0.0.46-nightly).
+- Create the thread with `t3_thread_launch` directly in the working folder (`workspaceStrategy: {"type":"root"}`). If the workspace is not a T3 Code project yet, first look for it with `t3_project_list`, and create it with `t3_project_create` if missing. Use the provider normally used for making materials (the author uses Claude; switched from Codex on 2026-10-06). Set `runtimeMode` to `auto` (approval is left to the agent, so it does not stall with no one around).
+- `t3_thread_launch` stops with "capability_denied" unless the calling thread is full-access (default) (2026-10-07, it stopped when called from an auto thread). Make the calling thread full-access before creating.
+- `schedule_task` contents: `prompt` is the one line in `prompt.txt`, `schedule` is `{"type":"fixed_time","timeOfDay":"05:00"}`, `clientRequestId` is `dreaming-daily` (it becomes the end of the ID).
+- When registering from another thread (such as the thread doing the install through conversation), use the `message` of `t3_thread_launch` to ask the new thread: 「この中身で `schedule_task` を `bindToCurrentThread: true` で登録し、ID と次に回る時刻を返して」. Wait with `t3_thread_wait`, and check that `boundThreadId` in `list_scheduled_tasks` is that thread.
+- The author's registration (recreated 2026-10-07): the ID is `scheduled-task:command:mcp:91ea5ee6-38a0-49ff-ba0e-6afcd3cc5921:schedule-task:dreaming-daily`. It is bound to the dedicated cleanup thread 「dreaming（指示とスキルの定期の整理）」 (`mcp:d9cb28f9-831a-4767-a164-1da9b0b63a53`).
+- To move it to another thread, call `update_scheduled_task` with `bindToCurrentThread: true` from the destination thread. The ID does not change (confirmed 2026-10-07). If the thread is deleted, the task stays bound to the deleted thread, so move it the same way.
+- Check and stop: `list_scheduled_tasks` (`boundThreadId` is the bound thread), `update_scheduled_task` (`enabled: false`), `delete_scheduled_task`. To run now, `run_scheduled_task_now`.
+- Claude's `auto` safety checks can stop operations (2026-10-06, while writing these steps, an operation writing instructions that run unattended was stopped as "Create Unsafe Agents"). Skip stopped operations and note them in the report (SKILL.md "Rules for running").
+- It was first registered with Codex `gpt-6.1-sol`, which ran the first cleanup (`log/20261006.md`) and applied its proposals.
 
 ## 2. Claude Code Desktop
 
-Desktop の会話の中なら、頼めば作れる（値は下と同じ）。手で作るときは、Code タブの **Routines** → **New routine** → **Local**（Desktop 1.1.5368 以降）。CLI の `/loop` は会話を閉じると止まり、クラウドの routine は手元のファイルを読めないので、どちらも使わない。
+Inside a Desktop conversation, you can just ask for it (values as below). To create it by hand: Code tab, **Routines** → **New routine** → **Local** (Desktop 1.1.5368 or later). Do not use the CLI `/loop` (it stops when the conversation closes) or cloud routines (they cannot read local files).
 
-- Name: `dreaming`。Instructions: `prompt.txt` の 1 行。権限モードは Auto（なければ Accept edits）。作業フォルダ: ワークスペース（作者は `~/Documents`）。worktree は使わない（git で管理していない）。
-- Schedule: Daily、5:00
-- 作ったら **Run now** で 1 回回し、出た権限の確認に「always allow」を選ぶ。次からは聞かれない。
-- プロンプトは `~/.claude/scheduled-tasks/dreaming/SKILL.md` に置かれる。時刻・フォルダ・モデルはアプリの側にある。
-- 出典: https://code.claude.com/docs/en/desktop-scheduled-tasks（2026-10-06 に確認）
+- Name: `dreaming`. Instructions: the one line in `prompt.txt`. Permission mode: Auto (Accept edits if Auto is unavailable). Working folder: the workspace (the author's is `~/Documents`). Do not use a worktree (it is not under git).
+- Schedule: Daily, 5:00
+- After creating it, run it once with **Run now**, and choose "always allow" for the permission prompts that appear. They are not asked again.
+- The prompt is stored at `~/.claude/scheduled-tasks/dreaming/SKILL.md`. Time, folder, and model are kept on the app side.
+- Source: https://code.claude.com/docs/en/desktop-scheduled-tasks (checked 2026-10-06)
 
 ## 3. Codex app
 
-このフォルダを開いた Codex の会話で頼む。
+Ask in a Codex conversation opened on this folder.
 
 ```text
 毎日 5:00 に、このプロジェクトで新しいチャットを開いて、次を実行する scheduled task を作ってください: <prompt.txt の 1 行>
 ```
 
-- RRULE は `FREQ=DAILY;BYHOUR=5;BYMINUTE=0`。git で管理していないフォルダでは、そのフォルダで直接動く。
-- 既定のサンドボックスで、人の確認なしに動く。`workspace-write` では web が使えない（SKILL.md の 7 の調べ直しは報告だけになる）。
-- 定義は `~/.codex/automations/<id>/automation.toml` に置かれる（形式は公開されていないので、手で書かない）。
-- 出典: https://learn.chatgpt.com/docs/automations?surface=app（2026-10-06 に確認）
+- The RRULE is `FREQ=DAILY;BYHOUR=5;BYMINUTE=0`. In a folder not under git, it runs directly in that folder.
+- It runs in the default sandbox without human confirmation. `workspace-write` has no web access (the resurvey in step 7 of SKILL.md becomes a report only).
+- The definition is stored at `~/.codex/automations/<id>/automation.toml` (the format is not public, so do not write it by hand).
+- Source: https://learn.chatgpt.com/docs/automations?surface=app (checked 2026-10-06)
 
 ## 4. Omnigent
 
-道具の `sys_scheduled_task_create` で作る（どのエージェントにも入っている。Web UI では Automations）。
+Create it with the `sys_scheduled_task_create` tool (every agent has it. In the Web UI it is Automations).
 
-- `name` は `dreaming`、`prompt` は `prompt.txt` の 1 行、`rrule` は `FREQ=DAILY;BYHOUR=5;BYMINUTE=0`。`timezone` は手元の IANA の時間帯（`Asia/Tokyo` など）。既定が UTC なので、必ず書く。
-- `agent_id` は今の会話のエージェント（`sys_agent_list`）。`execution_target` は `connected_host`（`managed_sandbox` はワークスペースを読めない）。`host_id` にこの PC、`workspace` にワークスペースの絶対パス（`workspace` は `host_id` がないと通らない。書かないとホームのフォルダで回る）。
-- `permission_mode` は、Claude Code のエージェント（`claude-native`）なら `auto`。ほかのハーネスでは書けないので、エージェントの既定が人の確認なしで動くかを見る。
-- 逃した回はやり直さず、失敗した回もくり返さない（次の回を待つ）。すぐ回すのは Web UI か `POST /v1/scheduled-tasks/{id}/run`。確かめる・止める: `sys_scheduled_task_list`、`sys_scheduled_task_update`（`state: paused`）、`sys_scheduled_task_delete`。
-- 未確認: Omnigent が起こした会話の記録を、`scripts/sessions.py` が読めるか（読むのは Claude Code・Codex・pi のもの）。登録したら、このことをユーザーに伝える。
-- 出典: https://omnigent.ai/docs/build/scheduled-tasks と https://github.com/omnigent-ai/omnigent/blob/main/docs/AUTOMATIONS.md（2026-10-15 に確認）
+- `name` is `dreaming`, `prompt` is the one line in `prompt.txt`, `rrule` is `FREQ=DAILY;BYHOUR=5;BYMINUTE=0`. `timezone` is the local IANA time zone (`Asia/Tokyo`, etc.). The default is UTC, so always set it.
+- `agent_id` is the agent of the current conversation (`sys_agent_list`). `execution_target` is `connected_host` (`managed_sandbox` cannot read the workspace). Set `host_id` to this PC and `workspace` to the absolute path of the workspace (`workspace` is rejected without `host_id`. Without it, it runs in the home folder).
+- `permission_mode` is `auto` for a Claude Code agent (`claude-native`). Other harnesses cannot set it, so check whether the agent's default runs without human confirmation.
+- Missed runs are not retried, and failed runs are not repeated (it waits for the next run). To run now, use the Web UI or `POST /v1/scheduled-tasks/{id}/run`. Check and stop: `sys_scheduled_task_list`, `sys_scheduled_task_update` (`state: paused`), `sys_scheduled_task_delete`.
+- Unconfirmed: whether `scripts/sessions.py` can read the logs of conversations Omnigent starts (it reads those of Claude Code, Codex, and pi). After registering, tell the user this.
+- Sources: https://omnigent.ai/docs/build/scheduled-tasks and https://github.com/omnigent-ai/omnigent/blob/main/docs/AUTOMATIONS.md (checked 2026-10-15)
 
-## 5. launchd + CLI（アプリなしで回すとき）
+## 5. launchd + CLI (running without an app)
 
-ワークスペースで `scripts/run.sh claude`（`claude -p --permission-mode auto`）か `scripts/run.sh codex`（`codex exec -s workspace-write`）、`scripts/run.sh pi`（`pi -p`）を回す。pi のパッケージをワークスペースだけに入れた（`pi install -l`）なら、先に対話の pi でワークスペースの trust を `/trust` で保存しておく（`-p` は trust を聞けず、保存していないとパッケージが読まれない。`../../docs/pi.md`）。`<run.sh>` は、版ごとに変わらないパスで指す（Claude Code のプラグインのキャッシュは版ごとに変わる）。Claude Code は `claude plugin marketplace list --json` の `ai-deck-factory` の `installLocation`（GitHub から入れたなら `~/.claude/plugins/marketplaces/ai-deck-factory`、手元から入れたならその checkout）、pi の `pi install -l` なら `<ワークスペース>/.pi/git/github.com/mats16/ai-deck-factory`。その下の `skills/dreaming/scripts/run.sh`。`~/Library/LaunchAgents/local.dreaming.plist` に置く。パスは `/Users/...` から書く（plist では `~` が展開されない）。
+In the workspace, run `scripts/run.sh claude` (`claude -p --permission-mode auto`), `scripts/run.sh codex` (`codex exec -s workspace-write`), or `scripts/run.sh pi` (`pi -p`). If the pi package was installed only in the workspace (`pi install -l`), first save the workspace trust with `/trust` in an interactive pi (`-p` cannot ask for trust, and without saved trust the package is not loaded. `../../docs/pi.md`). Point `<run.sh>` at a path that does not change between versions (Claude Code's plugin cache changes per version). For Claude Code, use the `installLocation` of `ai-deck-factory` in `claude plugin marketplace list --json` (`~/.claude/plugins/marketplaces/ai-deck-factory` if installed from GitHub, or that checkout if installed from a local path); for pi with `pi install -l`, `<workspace>/.pi/git/github.com/mats16/ai-deck-factory`. Under that, `skills/dreaming/scripts/run.sh`. Put the plist at `~/Library/LaunchAgents/local.dreaming.plist`. Write paths starting from `/Users/...` (plist does not expand `~`).
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -77,13 +77,13 @@ Desktop の会話の中なら、頼めば作れる（値は下と同じ）。手
     <string><run.sh></string>
     <string>claude</string>
   </array>
-  <key>WorkingDirectory</key><string><ワークスペース></string>
+  <key>WorkingDirectory</key><string><workspace></string>
   <key>StartCalendarInterval</key><dict><key>Hour</key><integer>5</integer><key>Minute</key><integer>0</integer></dict>
   <key>StandardOutPath</key><string>/tmp/dreaming.log</string>
   <key>StandardErrorPath</key><string>/tmp/dreaming.log</string>
 </dict></plist>
 ```
 
-- 入れる: `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.dreaming.plist`。止める: `launchctl bootout gui/$(id -u)/local.dreaming`。すぐ回す: `launchctl kickstart gui/$(id -u)/local.dreaming`。
-- cron（Linux など）なら、`crontab -e` に 1 行足す: `0 5 * * * cd <ワークスペース> && /bin/sh <run.sh> claude >> /tmp/dreaming.log 2>&1`。
-- 未確認: launchd から `~/Documents` などを読むときの macOS のアクセス許可。入れたら一度 `kickstart` して `/tmp/dreaming.log` を見る。
+- Install: `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.dreaming.plist`. Stop: `launchctl bootout gui/$(id -u)/local.dreaming`. Run now: `launchctl kickstart gui/$(id -u)/local.dreaming`.
+- With cron (Linux, etc.), add one line via `crontab -e`: `0 5 * * * cd <workspace> && /bin/sh <run.sh> claude >> /tmp/dreaming.log 2>&1`.
+- Unconfirmed: macOS access permissions when launchd reads `~/Documents` and similar folders. After installing, run `kickstart` once and look at `/tmp/dreaming.log`.

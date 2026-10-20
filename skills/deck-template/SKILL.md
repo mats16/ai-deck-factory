@@ -1,65 +1,65 @@
 ---
 name: deck-template
-description: 会社のスライドのテンプレート（Google Slides）から、AI Deck Factory のテンプレート（テーマ）を作る・整える。日本語のテンプレートがある、英語のテンプレートしかない（外資系の日本支社など）、テンプレートがない（新しく作る）の 3 つに分け、書体・文字の大きさ・大枠の色を残したまま、和文の描ける書体とコントラストの基準に合わせる。template.py の audit・--from-base と slides.py lint <テーマのファイル> を使う。既定のテーマ（[slides] default_theme）を、テンプレートの一覧から選んで切り替える。「会社のテンプレートを使いたい」「テンプレートを作って」「テンプレートを整えて」「既定のテンプレートを変えたい」と頼まれたときと、何をするか言わずに呼ばれたときに使う。
+description: Create or adjust an AI Deck Factory template (theme) from a company's slide template (Google Slides). Splits into three cases (a Japanese template exists; only an English template exists, e.g. the Japan branch of a foreign company; no template exists, so make a new one), and keeps the fonts, text sizes, and overall colors while meeting the standards for fonts that render Japanese and for contrast. Uses template.py audit / --from-base and slides.py lint <theme file>. Also switches the default theme ([slides] default_theme) by choosing from the list of templates. Use when asked 「会社のテンプレートを使いたい」「テンプレートを作って」「テンプレートを整えて」「既定のテンプレートを変えたい」, and when invoked without saying what to do.
 ---
 
-# 会社のテンプレートから AI Deck Factory のテンプレートを作る
+# Create an AI Deck Factory template from a company template
 
-AI Deck Factory のテンプレートは、`slides.py new` が複製する Google Slides。テンプレートが決めるのは、テーマの色（マスターの配色の 12 の枠）、書体（マスターのプレースホルダーの書体。`slides.py build` がデッキの文字をこの書体にする）、ページの大きさ、ページ番号の位置と、表紙・扉の置き物（会社のレイアウトの図形・ロゴ。テーマの `cover`・`section`）だけ。字の大きさと配置はページ（deck.json か pages.py）が書く（`../deck-practices/visual.md` の 1）。
+An AI Deck Factory template is the Google Slides file that `slides.py new` copies. The template decides only these: the theme colors (the 12 slots of the master's color scheme), the font (the font of the master's placeholders; `slides.py build` sets the deck's text in this font), the page size, the position of the page number, and the decorations of the cover and section dividers (the shapes and logos of the company's layouts; the theme's `cover` and `section`). Text sizes and placement are written by the pages (deck.json or pages.py) (`../deck-practices/visual.md` §1).
 
-- **元の会社のテンプレートは変えない。** 複製から、いちばん多くのページが使うマスターと、ページ番号の枠を持つ Blank のレイアウトだけを残し、ほかのレイアウト、見本のページ、マスターのロゴや著作権の行を消す（`template.py` の `pick`・`strip`）。人が画面で使う会社のテンプレートは、そのまま使い続ける。
-- [template-001] **会社のテンプレートの表紙・扉のレイアウト（図形・ロゴ・写真入り）は、用意されているパターンを全部残す。** テーマの `cover`・`section` にレイアウトの名前を並べる（audit の表のとおり。並びの順がパターンの番号、同じ名前が 2 つあれば両方。それぞれのレイアウトにページ番号の枠が要る。目印をこの枠に書くので、なければテーマビルダーで足す。同じレイアウトを cover と section の両方に書かない。パターンを減らすときは --from-base で作り直す）と、`template.py` がそれぞれの文字の枠と著作権の行だけを消し、図形・画像・ロゴを残す。元のタイトルの枠と左端がそろっていたロゴや線は、文字の左端（0.6 in）に寄せる。目印には番号・文字の幅（元のタイトルの枠の右端まで。図形や写真に重ねない）・地の明るさ（`dark`・`accent`・`light`。白の文字が 4.5:1 に届く・3:1 だけ届く・届かない）を書き、JSON の `cover`・`divider` のページに `"variant": n` を書くと、`slides.py` はそのレイアウトの地と絵のまま、地の明るさに合う色（`TONES`）で文字を組む。見本のページに全パターンを 1 枚ずつ組むので、資料では見本を見て番号を選ぶ。章ごとに地の違う扉を使い分けてよい。表紙の 1 番は元の見本の 1 枚目の表紙にする（2026-10-13、ユーザー「テンプレートを作る際に、元の図形が入ったタイトルスライドなどを、維持して欲しいです」「表紙、中表紙は何パターンか用意されている元のものを維持してください」「セクション区切りで異なる背景の区切りページを使い分けることはよくします」）。
-- **会社の値はワークスペースに書く。** テーマのファイル `themes/slides/<名前>.json`（使い分けの `description`、書体、役割ごとの色、テーマに入れない色、テーマごとの著作権表示、表紙・扉のパターン）と、`factory.toml` の `[brand]`（表紙の社名と著作権表示）。作ったテンプレートの URL は `template.py` が `factory.toml` の `[slides.templates]` に書く。元のテンプレートの URL は書かず、作るときに `--from-base` に渡す。プラグインの組み込みのテーマ（`../deck-build/themes/`）には足さない（visual・company は Databricks のテーマ）。
-- コマンドは `K=<deck-build のフォルダ>/scripts`（このスキルのフォルダの `../deck-build/scripts`）で書く。
-- **何をするか言わずに呼ばれたら**（`/ai-deck-factory:deck-template` だけ）、下の「既定のテーマを選ぶ」から始め、選択肢に「新しく作る（会社のテンプレートから）」を足す。それを選ばれたら「流れ」に進む。
+- **Do not change the original company template.** From a copy, keep only the master that the most pages use and the Blank layout that has the page-number placeholder; delete the other layouts, the sample pages, and the master's logo and copyright line (`pick` and `strip` in `template.py`). People keep using the company template on screen as it is.
+- [template-001] **Keep every cover and section-divider layout pattern (with shapes, logos, or photos) that the company template provides.** List the layout names in the theme's `cover` and `section` (as in the audit table. The order is the pattern number; if the same name appears twice, list both. Each layout needs a page-number placeholder: the marker is written into this placeholder, so add one in the theme builder if it is missing. Do not list the same layout in both cover and section. To reduce the patterns, recreate with --from-base), and `template.py` deletes only each layout's text boxes and copyright line, keeping the shapes, images, and logos. Logos and lines that were aligned with the left edge of the original title box are moved to the text's left edge (0.6 in). The marker holds the number, the text width (up to the right edge of the original title box; do not overlap shapes or photos), and the background brightness (`dark`, `accent`, `light`: white text reaches 4.5:1, reaches only 3:1, reaches neither). When a JSON `cover` or `divider` page has `"variant": n`, `slides.py` keeps that layout's background and artwork and sets the text in colors that match the background brightness (`TONES`). The sample pages build every pattern once each, so when making a material, pick the number by looking at the samples. Dividers with different backgrounds may be used for different chapters. Cover pattern 1 is the first cover in the original samples (2026-10-13, ユーザー「テンプレートを作る際に、元の図形が入ったタイトルスライドなどを、維持して欲しいです」「表紙、中表紙は何パターンか用意されている元のものを維持してください」「セクション区切りで異なる背景の区切りページを使い分けることはよくします」).
+- **Write the company's values in the workspace.** The theme file `themes/slides/<name>.json` (the `description` for choosing between themes, the font, colors per role, colors not in the theme, the per-theme copyright notice, the cover and divider patterns) and `[brand]` in `factory.toml` (the company name on the cover and the copyright notice). `template.py` writes the URL of the created template to `[slides.templates]` in `factory.toml`. Do not write the original template's URL anywhere; pass it to `--from-base` when creating. Do not add to the plugin's built-in themes (`../deck-build/themes/`) (visual and company are Databricks themes).
+- Commands are written with `K=<deck-build folder>/scripts` (`../deck-build/scripts` from this skill's folder).
+- **When invoked without saying what to do** (just `/ai-deck-factory:deck-template`), start from "Choosing the default theme" below and add the option 「新しく作る（会社のテンプレートから）」. If that is chosen, go to "Flow".
 
-## 決まりの在りか
+## Where the rules live
 
-テンプレートを整えるときに合わせる決まり。値を変えるときは正本を直す（ワークスペースで変えるなら `rules/` の同じパス）。
+The rules a template must meet when you adjust it. To change a value, edit the source of truth (to change it in the workspace, use the same path under `rules/`).
 
-| 決まり | 正本 | 測るもの |
+| Rule | Source of truth | What measures it |
 |---|---|---|
-| 色の役割（11 の枠と固定の 6 色）と、組ごとのコントラスト（18pt 未満の細字と 11pt 未満の太字は 4.5:1、18pt 以上と 11pt 以上の太字は 3:1） | `../deck-practices/visual.md` の 1（表と注）・3 | `slides.py lint <テーマのファイル>`（`template.py` の役割の組 `PAIRS`）、`gslides.py check` の「コントラストが基準に届かない色の組」 |
-| 書体（既定は Noto Sans JP、コードだけ Cascadia Mono。テーマで変えられる。Google Fonts にない書体は描けない） | `visual.md` の 2、`../deck-build/SKILL.md` の「納品物」、下の「書体」 | lint の「書体が … でない」（テンプレートの書体と比べる） |
-| 文字の大きさ（11pt 以上。著作権表示とページ番号だけ 9pt）と版面（13.33 × 7.5 in、左右の余白 0.6 in、要素の上端） | `visual.md` の 1 | lint、`slides.py` の定数 |
-| visual・company のテーマの値 | `../deck-build/themes/visual.json`・`company.json` | `slides.py lint ../deck-build/themes/visual.json` |
-| テンプレートの作り方と、テンプレートが決めるもの | `../deck-build/slides.md` の 3 と、このファイル | `template.py` |
-| 調べた経緯（文字の大きさの下限、コントラスト、色の数） | ワークスペースの `Research/deck_research/log/20261006_jp_visual.md` の 1-1・1-5・1-6、`Research/deck_research/state.md` の「採用したもの」 | |
+| Color roles (11 slots and 6 fixed colors) and the contrast of each pair (4.5:1 for non-bold text under 18pt and bold text under 11pt; 3:1 for text 18pt and above and bold text 11pt and above) | `../deck-practices/visual.md` §1 (table and notes) and §3 | `slides.py lint <theme file>` (the role pairs `PAIRS` in `template.py`), 「コントラストが基準に届かない色の組」 in `gslides.py check` |
+| Font (default Noto Sans JP, Cascadia Mono for code only; the theme can change it; fonts not in Google Fonts cannot render) | `visual.md` §2, "Deliverables" in `../deck-build/SKILL.md`, "Fonts" below | lint's 「書体が … でない」 (compared with the template's font) |
+| Text size (11pt or more; only the copyright notice and page number at 9pt) and page area (13.33 × 7.5 in, 0.6 in left and right margins, top edges of elements) | `visual.md` §1 | lint, constants in `slides.py` |
+| Values of the visual and company themes | `../deck-build/themes/visual.json`, `company.json` | `slides.py lint ../deck-build/themes/visual.json` |
+| How to create a template, and what the template decides | `../deck-build/slides.md` §3 and this file | `template.py` |
+| Research history (minimum text size, contrast, number of colors) | 1-1, 1-5, and 1-6 of the workspace's `Research/deck_research/log/20261006_jp_visual.md`, and 「採用したもの」 in `Research/deck_research/state.md` | |
 
-## 既定のテーマを選ぶ
+## Choosing the default theme
 
-`[slides] default_theme`（資料の `description` で決まらないときに組むテーマ）を、今あるテンプレートから選んで切り替える。factory-init（会話で入れるときも）からも使う。
+Switch `[slides] default_theme` (the theme to build with when the material's `description` does not decide it) by choosing from the existing templates. factory-init also uses this (including when it is installed through conversation).
 
-1. `python3 $K/slides.py themes` を回す。選べるのは「テンプレートあり」のテーマと、「（共有。…）」「（個人。…）」と出たテンプレート（`[drive] shared_themes` と `[drive] factory` の下の Themes にあって、`factory.toml` の `[slides.templates]` が指していないもの）。「テンプレートなし」のテーマは選べない（作るなら下の「流れ」か `template.py <名前> --from-base`）。
-2. 選択式で聞く（Claude Code なら AskUserQuestion）。選択肢には名前と `description` を書き、今の既定に「（今の既定）」を付ける。選択肢は 4 つまで（何をするか言わずに呼ばれたときの「新しく作る」も 1 つに数える）なので、多ければ一覧を見せ、今の既定と `description` の合いそうなものを出し、ほかは名前で答えてもらう。選べるものが 1 つだけなら聞かずにそれを選び、3 に進む。
-3. `factory.toml` の `[slides] default_theme` を選んだ名前に書き替える。共有・個人のものを選んだら、`slides.py theme <出た URL>` も回す（テーマのファイルを写し、`[slides.templates]` に書く。`slides.py themes` の最後の行のとおり）。
-4. もう一度 `slides.py themes` を回し、選んだテーマに「（既定）」が付いたことを見せる。
+1. Run `python3 $K/slides.py themes`. You can choose themes marked 「テンプレートあり」 and templates shown as 「（共有。…）」 or 「（個人。…）」 (those in `[drive] shared_themes` or in the Themes folder under `[drive] factory` that `[slides.templates]` in `factory.toml` does not point to). Themes marked 「テンプレートなし」 cannot be chosen (to create one, use "Flow" below or `template.py <name> --from-base`).
+2. Ask with a choice question (AskUserQuestion in Claude Code). Give each option its name and `description`, and mark the current default with 「（今の既定）」. There can be at most 4 options (the 「新しく作る」 option, when invoked without saying what to do, counts as one), so if there are more, show the list, offer the current default and those whose `description` seems to fit, and let the user name any other. If only one can be chosen, choose it without asking and go to 3.
+3. Rewrite `[slides] default_theme` in `factory.toml` to the chosen name. If a shared or personal one was chosen, also run `slides.py theme <the URL shown>` (it copies the theme file and writes it to `[slides.templates]`, as the last line of `slides.py themes` says).
+4. Run `slides.py themes` again and show that the chosen theme now has 「（既定）」.
 
-## 流れ
+## Flow
 
-1. **聞く。** 下の 3 つのどれか、元のテンプレートの URL、表紙の社名（日本法人の名前）、著作権表示、ブランドの色の決まり（ブランドガイドがあれば）、テーマの名前（英小文字。例: `acme`）。
-2. **読む。** `python3 $K/template.py audit <元の URL>`。ページの大きさ、マスター（使っている枚数）の配色とコントラスト、レイアウトとプレースホルダー、書体（和文が描けるか）、プレースホルダーの文字の大きさ、和文の有無を出す（変えない）。
-   - ページが 13.33 × 7.5 in でなければ、`slides.py` は組めない（位置を in で固定している）。元を複製し、複製の画面の「ファイル → ページ設定 → カスタム」で 13.33 × 7.5 インチにして、マスターとレイアウトが崩れていないかを画面で見てから、その URL で読み直す。
-   - `slides.py` が使えるのは、プレースホルダーがページ番号の枠だけのレイアウト（audit の「slides.py が使える Blank」）。なければ `--from-base` が止まる。複製の画面のテーマビルダーで、Blank のレイアウトを作るか、Blank のレイアウトにスライド番号のプレースホルダーを足す。
-3. **役割に色を当てる。** audit の配色から、`visual.md` の 1 の表の役割に会社の色を当てる。役割の名前は Databricks の色から付けたが、意味は役割（RED は会社の強調の色なら青でもよい）。
+1. **Ask.** Which of the three cases below applies, the original template's URL, the company name on the cover (the name of the Japanese entity), the copyright notice, the brand's color rules (if there is a brand guide), and the theme name (lowercase English letters; e.g. `acme`).
+2. **Read.** `python3 $K/template.py audit <original URL>`. It reports, without changing anything, the page size, the masters (with the number of pages using each) with their color schemes and contrast, the layouts and placeholders, the fonts (whether they render Japanese), the placeholder text sizes, and whether there is Japanese text.
+   - If the page is not 13.33 × 7.5 in, `slides.py` cannot build (positions are fixed in inches). Copy the original, set the copy to 13.33 × 7.5 inches in its 「ファイル → ページ設定 → カスタム」, check on screen that the master and layouts are not broken, and read again with that URL.
+   - `slides.py` can use only a layout whose only placeholder is the page number (audit's 「slides.py が使える Blank」). If there is none, `--from-base` stops. In the copy's theme builder, create a Blank layout or add a slide-number placeholder to the Blank layout.
+3. **Assign colors to roles.** From the audit's color scheme, assign the company's colors to the roles in the table in `visual.md` §1. The role names come from Databricks colors, but what counts is the role (RED may be blue if that is the company's emphasis color).
 
-   | 役割 | 当てる色の目安 |
+   | Role | Color to assign (guide) |
    |---|---|
-   | `NAVY` | 表紙・扉の地、結論バンド・表の見出しの行・コードの箱の地。本文のページの見出しの文字（`HEAD`）も、書かなければこの色。会社のいちばん濃い主色（DARK1 か ACCENT1 にあることが多い） |
-   | `BG`・`PANEL` | 本文の地と、パネル・表の 1 行おきの地。会社の LIGHT1・LIGHT2（白、ごく淡い灰色） |
-   | `RED` | 強調の色（図形の塗り、番号の丸、18pt 以上の文字） |
-   | `RED_TEXT`・`RED_ON_NAVY` | `RED` と同じ色相で、18pt 未満の文字用と、`NAVY` の上の文字用。`RED` をそのまま書き、lint の直す案で明るさを合わせる |
-   | `NAVY_BLOCK` | 扉の中のブロック。`NAVY` を少し明るくした色 |
-   | `SUB` | 補助の文字とフッター。会社の灰色 |
-   | `GA`・`PREVIEW`・`OSS` | 提供ステージの札。意味で決まる色なので、ふつうは書かない（visual の値） |
+   | `NAVY` | Background of the cover and section dividers, the conclusion band, table header rows, and code boxes. Also the color of body-page heading text (`HEAD`) unless that is written. The company's darkest main color (often in DARK1 or ACCENT1) |
+   | `BG`, `PANEL` | Body background, and the background of panels and of every other table row. The company's LIGHT1 and LIGHT2 (white, a very light gray) |
+   | `RED` | Emphasis color (shape fills, number circles, text 18pt and above) |
+   | `RED_TEXT`, `RED_ON_NAVY` | Same hue as `RED`, for text under 18pt and for text on `NAVY`. Write `RED` as is and match the brightness with lint's suggested fix |
+   | `NAVY_BLOCK` | Blocks inside the section divider. `NAVY` made slightly lighter |
+   | `SUB` | Secondary text and the footer. The company's gray |
+   | `GA`, `PREVIEW`, `OSS` | Release-stage tags. Their colors are set by meaning, so normally do not write them (visual's values) |
 
-   `GA`・`PREVIEW`・`OSS` のほかは全部書く（本文の地が明るいテーマ。暗いテーマは下の「暗い本文のテーマ」）。書かない役割は visual（Databricks）の値になり、会社の色の中で浮く（2026-10-12 に試したとき、青の `NAVY` の扉に visual の `NAVY_BLOCK` の灰色が残った）。1 枚に使う色は 4 色まで（`visual.md` の 3）なので、会社の配色をすべて使おうとしない。
-4. **書体を決める。** 下の「書体」。
-5. **書く。** 社名と著作権表示は `factory.toml` の `[brand]` に、テーマはワークスペースの `themes/slides/acme.json`（ファイルの名前がテーマの名前。`../deck-build/slides.md` の slides-036）に書く。
+   Write every role except `GA`, `PREVIEW`, and `OSS` (for themes with a light body background; for dark themes, see "Dark body themes" below). Roles not written take visual (Databricks) values and stand out among the company's colors (in a trial on 2026-10-12, visual's gray `NAVY_BLOCK` remained on a divider with a blue `NAVY`). Use at most 4 colors on one page (`visual.md` §3), so do not try to use all of the company's colors.
+4. **Decide the font.** See "Fonts" below.
+5. **Write.** Write the company name and copyright notice in `[brand]` in `factory.toml`, and the theme in the workspace's `themes/slides/acme.json` (the file name is the theme name; slides-036 in `../deck-build/slides.md`).
    ```toml
-   [brand]  # 表紙の左下と、全ページの左下の著作権表示（ドキュメントのフッターも）。copyright は要る（factory-doctor が見る）
+   [brand]  # copyright notice at the lower left of the cover and of every page (also the document footer). copyright is required (factory-doctor checks it)
    company = "アクメ・ジャパン株式会社"
-   copyright = "© 2026 Acme, Inc. All rights reserved."  # lint が 9pt を通すのは「© <年> <社名> All rights reserved.」の形だけ（factory-doctor が確かめる）
+   copyright = "© 2026 Acme, Inc. All rights reserved."  # lint passes 9pt only for the form 「© <年> <社名> All rights reserved.」 (factory-doctor checks it)
    ```
    ```json
    {"apiVersion": "slides/v1", "kind": "theme",
@@ -69,96 +69,96 @@ AI Deck Factory のテンプレートは、`slides.py new` が複製する Googl
     "cover": ["Title Slide 1", "Title Slide 2"],
     "section": ["Section Break 1", "Section Break 2"]}
    ```
-   - `description` は、何のテーマで、どの資料・聞き手に使うか、使わない場面（`../deck-build/slides.md` の 3）。
-   - `colors` は役割の名前で、`#` を付けない 6 桁。テーマに入れない色（`TEXT`・`RULE`・`RED_SOFT`・`STAGE_TEXT`・`DECOR`）も同じ所に書く。主色に合わない灰色と淡い赤を替える（lint が測る）。名前で書く役割（`HEAD`・`CARD`・`SUB_ON_NAVY`・`ON_RED`）は、書かなければ NAVY・白・RULE・白。暗い本文のテーマで書く（下の「暗い本文のテーマ」）。
-   - 書かなければ既定のもの: `font`（下の「書体」）、`mono`（コードの等幅）、`copyright`（このテーマのデッキだけ `[brand]` の代わりに使う。形は `[brand]` と同じ。factory-doctor が見る）。
-   - `cover`・`section` は図形・ロゴを残す表紙と章の扉のパターン（template-001。並びの順が variant の番号）。書かなければ表紙・扉も Blank に組む。名前だけを書けば、7 の `template.py` が文字の幅（`w`）と地の明るさ（`tone`）を測って書き込む。
-6. **測る。** `python3 $K/slides.py lint themes/slides/acme.json`（Google を読まない）。形と書体を確かめ、役割の組ごとの比と、届かない組の直す案（色相と彩度を保ち、明るさだけを変えた色）を出す。直す案は会社のブランドの色を変えるので、前と後の色をユーザーに見せて決めてもらう（黙って写さない）。直す案を使わないなら、当てる色を替える。NG が 0 になるまで繰り返す。
-7. **作る。** `python3 $K/template.py acme --from-base <元の URL>`（C は URL を渡さない）。元を `[drive] factory` の下の Themes フォルダ（なければ作る）に複製し、マスターと Blank だけを残し、配色・書体・ページ番号を合わせ、見本のページ（表紙、章の扉、テーマの枠の早見表、テーマに入れない色の早見表、部品の 2 枚）を組む。URL は `factory.toml` の `[slides.templates]` に書き込まれ（手で写さない）、表紙・扉の文字の幅と地の明るさはテーマのファイルに書き込まれる。マスターにはテーマの値をすべて書く（`slides.py theme <URL>` でテーマのファイルに戻せる）。
-8. **確かめる。** `python3 $K/gslides.py check <テンプレートの URL>`。要修正は 0。コントラストの一覧に出てよいのは、早見表の色見本の細字だけ（色見本の地の色によっては、白も札の文字も 4.5:1 に届かない。既定の DECOR `6B8089` は白で 4.14:1。2026-10-16 にユーザーが今の並べ方のままにした）。全ページの画像を開き、書体が描けているか（明朝や別のゴシックになっていないか）、社名と著作権表示、会社の資料と並べて色に違和感がないかを見る。URL をユーザーに渡して見てもらう。
-9. **使い始める。** 既定にするなら `[slides] default_theme` を書き換える。デッキごとに選ぶなら `slides.py new <フォルダ> <名前> --theme acme`。全社に配るなら、作ったテンプレートを全社の共有テーマのフォルダ（`[drive] shared_themes`）に置く（Themes フォルダをそのまま共有テーマのフォルダにしてもよい）。2026-10-14 より前の `template.py` で作ったテンプレートには、Drive のプロパティにテーマの名前（`adf.theme`）がなく、置いても `slides.py themes` に出ない。先に持ち主が `template.py acme` で合わせ直す（配色・書体・見本のページも今のテーマのファイルで組み直す。factory-doctor の「共有テーマ」に出る）。2026-10-16 より前に作ったテンプレートも、合わせ直すまでマスターにテーマの値（テーマに入れない色・`copyright`・`mono`・`description`）がなく、写すとそれらが抜ける。ほかの人は `slides.py theme <テンプレートの URL>` を回すだけで、同じ値で組める（`../deck-build/slides.md` の 3 の slides-032）。
+   - `description` says what the theme is, which materials and audiences it is for, and when not to use it (`../deck-build/slides.md` §3).
+   - `colors` uses role names and 6-digit hex without `#`. Colors not in the theme (`TEXT`, `RULE`, `RED_SOFT`, `STAGE_TEXT`, `DECOR`) go in the same place. Replace the grays and the light red that do not match the main color (lint measures them). Roles written by name (`HEAD`, `CARD`, `SUB_ON_NAVY`, `ON_RED`) default to NAVY, white, RULE, and white if not written. Write them for dark body themes ("Dark body themes" below).
+   - Defaults if not written: `font` ("Fonts" below), `mono` (the monospace font for code), `copyright` (used instead of `[brand]` only for decks with this theme; same form as `[brand]`; factory-doctor checks it).
+   - `cover` and `section` are the cover and chapter-divider patterns that keep shapes and logos (template-001; the order is the variant number). If not written, covers and dividers are also built on Blank. If you write only the names, `template.py` in step 7 measures the text width (`w`) and background brightness (`tone`) and writes them in.
+6. **Measure.** `python3 $K/slides.py lint themes/slides/acme.json` (it does not read Google). It checks the format and the font, and prints the ratio of each role pair and suggested fixes for the pairs that fail (colors that keep the hue and saturation and change only the brightness). A suggested fix changes the company's brand colors, so show the user the colors before and after and let them decide (do not copy it silently). If you do not use a suggested fix, assign a different color. Repeat until NG is 0.
+7. **Create.** `python3 $K/template.py acme --from-base <original URL>` (for case C, pass no URL). It copies the original into the Themes folder under `[drive] factory` (creating the folder if missing), keeps only the master and Blank, matches the color scheme, font, and page number, and builds the sample pages (cover, chapter divider, a quick reference of the theme's slots, a quick reference of the colors not in the theme, and 2 pages of components). The URL is written into `[slides.templates]` in `factory.toml` (do not copy it by hand), and the text width and background brightness of the covers and dividers are written into the theme file. Every theme value is written to the master (`slides.py theme <URL>` can restore them to a theme file).
+8. **Check.** `python3 $K/gslides.py check <template URL>`. `要修正` must be 0. The only entries allowed in the contrast list are the thin text on the color swatches of the quick references (depending on a swatch's background color, neither white nor the tag text reaches 4.5:1; the default DECOR `6B8089` is 4.14:1 with white; on 2026-10-16 the user kept the current arrangement). Open every page image and check that the font renders (not Mincho or a different Gothic), check the company name and copyright notice, and check that the colors look natural next to the company's materials. Give the URL to the user to look at.
+9. **Start using it.** To make it the default, rewrite `[slides] default_theme`. To choose it per deck, use `slides.py new <folder> <name> --theme acme`. To distribute it company-wide, place the template in the company-wide shared theme folder (`[drive] shared_themes`) (the Themes folder itself may serve as the shared theme folder). Templates made with `template.py` before 2026-10-14 have no theme name (`adf.theme`) in their Drive properties, so they do not appear in `slides.py themes` even when placed there. First, the owner re-syncs them with `template.py acme` (this also rebuilds the color scheme, font, and sample pages from the current theme file; they appear under 「共有テーマ」 in factory-doctor). Templates made before 2026-10-16 also have no theme values on the master (colors not in the theme, `copyright`, `mono`, `description`) until re-synced, and copying them drops those values. Other people only need to run `slides.py theme <template URL>` to build with the same values (slides-032 in `../deck-build/slides.md` §3).
 
-## 3 つの場合の違い
+## Differences among the three cases
 
-### A. 日本語のテンプレートがある
+### A. A Japanese template exists
 
-- **書体:** audit の「和文」が「和文あり（Google Fonts）」なら、その書体を `font` に書いて残す。メイリオ・游ゴシック・ヒラギノなど Google Fonts にない書体は、Google Slides で描けないか、別の書体になる。下の表で近い書体に替え、替える前と後をユーザーに伝える。
-- **文字の大きさ:** マスターとレイアウトのプレースホルダーの大きさは変えない。`slides.py` が組むページの文字の大きさは、`visual.md` の 1 に従う（タイトル 24pt、本文 11pt 以上など）。
-- **色:** 会社の配色を役割に当て、届かない色だけ明るさを変える。
+- **Font:** If audit's 「和文」 shows 「和文あり（Google Fonts）」, write that font in `font` and keep it. Fonts not in Google Fonts, such as メイリオ, 游ゴシック, and ヒラギノ, either cannot be rendered in Google Slides or turn into a different font. Replace them with a similar font from the table below, and tell the user the font before and after.
+- **Text size:** Do not change the placeholder sizes of the master and layouts. The text sizes on pages that `slides.py` builds follow `visual.md` §1 (title 24pt, body 11pt or more, and so on).
+- **Color:** Assign the company's color scheme to the roles, and change the brightness only of the colors that fail.
 
-### B. 英語のテンプレートしかない（外資系の日本支社など）
+### B. Only an English template exists (e.g. the Japan branch of a foreign company)
 
-Databricks の社内テンプレート（DM Sans、英語だけ）がこの場合で、visual・company のテーマはここから作った（`../deck-build/slides.md` の 3）。
+Databricks's internal template (DM Sans, English only) is this case, and the visual and company themes were made from it (`../deck-build/slides.md` §3).
 
-- **書体:** 欧文の書体（DM Sans・Arial・Montserrat など）には和文の字がない。Google Slides は和文を別のゴシックで描き、どの書体になるかは選べない。和文のある Google Fonts の書体から、欧文の書体の印象に近いものを選ぶ（下の表）。英数字もその書体で描かれる。DM Sans だけは、そのまま `font` に書ける（英数字の幅を測ってある。和文は Google が選ぶゴシックになる）。英数字を元の会社の見た目にそろえたいか、和文の書体をそろえたいかを、ユーザーに聞いて決める。
-- **社名と著作権表示:** 表紙の社名は日本法人の名前（例: アクメ・ジャパン株式会社）。著作権表示は本社の英語の表記のままでよい。
-- **行間:** 英語のテンプレートは行間が詰まっている（タイトル 90% など）。`slides.py` は文字ごとに行間を書くので、テンプレートの行間は使わない。和文の行間は `visual.md` の 2。
-- 英語の見本のページとレイアウトは、作ったテンプレートには残らない。
+- **Font:** Latin fonts (DM Sans, Arial, Montserrat, and so on) have no Japanese glyphs. Google Slides renders Japanese in another Gothic, and you cannot choose which one. Choose a Google Fonts font with Japanese whose impression is close to the Latin font (table below). Latin letters and digits are also rendered in that font. Only DM Sans can be written in `font` as is (its alphanumeric widths are measured; Japanese becomes the Gothic that Google chooses). Ask the user whether to match the alphanumerics to the original company look or to unify the Japanese font, and decide.
+- **Company name and copyright notice:** The company name on the cover is the Japanese entity's name (e.g. アクメ・ジャパン株式会社). The copyright notice may stay in the head office's English form.
+- **Line spacing:** English templates have tight line spacing (title at 90%, and so on). `slides.py` writes the line spacing for each text, so the template's line spacing is not used. Line spacing for Japanese is in `visual.md` §2.
+- The English sample pages and layouts are not kept in the created template.
 
-### C. テンプレートがない（新しく作る）
+### C. No template exists (make a new one)
 
-- **元:** `--from-base` に URL を渡さない。白紙の pptx（`../deck-build/assets/blank.pptx`。13.33 × 7.5 in、レイアウトは Blank〔ページ番号の枠だけ〕、スライド番号オン、ページ番号の枠のパディング 0）を Google Slides に変換して上げ、そこから作る。
-- **自分で元を作るとき**（白紙に会社のロゴや図形を入れておくなど）: `blank.pptx` を Drive に上げ、開いて「ファイル → Google スライドとして保存」で変換したものに足す（変換しないと Office のファイルのままで、Slides API が使えない）。新しいプレゼンから作るなら、次の 3 つをそろえ、名前に「元」と付けて Themes フォルダに置き、その URL で audit してから `--from-base` に渡す。
-  - ページの大きさ: 新規は 10 × 5.625 in。「ファイル → ページ設定 → カスタム」で 13.33 × 7.5 インチにする（API では変えられない）。
-  - スライド番号: 「挿入 → スライド番号」でオンにする。オフだと足したページにページ番号の枠ができず、`--from-base` が止まる。
-  - ページ番号の枠のパディング: 新規は 0.34 cm あり、ページ番号が約 0.13 in 下・0.1 in 左にずれる（`template.py` は内側の余白を 0 と見込む）。API では読めず変えられないので、画面のテーマの編集で、マスターと Blank のページ番号の枠を 0 にする。使わないレイアウトは消してよい。
-- **色:** 会社のロゴ・Web サイト・ブランドガイドから、主色（`NAVY`）と強調の色（`RED`）を決め、ほかの役割をそこから作る（3 の表）。決まった色がなければ、2〜3 の組の案を `slides.py lint` で測ってから見せる。visual の色は Databricks のブランドの色なので、ほかの会社のテーマにはそのまま使わない。
-- **書体:** Noto Sans JP（既定。字幅の見積もりがこの書体で測ってある）。
+- **Base:** Pass no URL to `--from-base`. It uploads a blank pptx (`../deck-build/assets/blank.pptx`: 13.33 × 7.5 in, layout Blank [only the page-number placeholder], slide numbers on, page-number placeholder padding 0), converts it to Google Slides, and builds from it.
+- **When you make your own base** (for example, putting the company logo or shapes on the blank): upload `blank.pptx` to Drive, open it, convert it with 「ファイル → Google スライドとして保存」, and add to the converted file (without conversion it stays an Office file and the Slides API cannot be used). To start from a new presentation instead, set the following 3 things, add 「元」 to its name, place it in the Themes folder, audit it with that URL, and then pass it to `--from-base`.
+  - Page size: a new presentation is 10 × 5.625 in. Set it to 13.33 × 7.5 inches in 「ファイル → ページ設定 → カスタム」 (the API cannot change it).
+  - Slide numbers: turn them on with 「挿入 → スライド番号」. If they are off, added pages get no page-number placeholder and `--from-base` stops.
+  - Page-number placeholder padding: a new presentation has 0.34 cm, which shifts the page number about 0.13 in down and 0.1 in left (`template.py` assumes an inner margin of 0). The API can neither read nor change it, so set the page-number placeholders of the master and Blank to 0 in the on-screen theme editor. Unused layouts may be deleted.
+- **Color:** From the company's logo, website, or brand guide, decide the main color (`NAVY`) and the emphasis color (`RED`), and derive the other roles from them (the table in step 3). If there are no set colors, measure 2–3 candidate sets with `slides.py lint` before showing them. The visual colors are Databricks brand colors, so do not use them as is for another company's theme.
+- **Font:** Noto Sans JP (the default; the character-width estimates are measured with this font).
 
-## 暗い本文のテーマ
+## Dark body themes
 
-本文のページの地（`BG`）まで暗くするテーマ（黒の地に明るい文字。宇宙・AI の会社の Web サイトのような見た目）。役割は明るいテーマと同じで、当てる色が逆になる。明るいテーマでは 1 つの色で兼ねていた役割を、名前で書く役割（`HEAD`・`CARD`・`SUB_ON_NAVY`・`ON_RED`）で分ける。
+A theme that makes even the body-page background (`BG`) dark (light text on a black background, like the website of a space or AI company). The roles are the same as in a light theme, but the colors assigned are reversed. Roles that a light theme covers with one color are split using the roles written by name (`HEAD`, `CARD`, `SUB_ON_NAVY`, `ON_RED`).
 
-| 役割 | 当てる色の目安 |
+| Role | Color to assign (guide) |
 |---|---|
-| `BG` | 本文の地。黒かごく暗い灰色 |
-| `NAVY` | 表紙・扉の地と、結論バンド・表の見出しの行・コードの箱の地。`BG` と同じにすると結論バンドが見えないので、`BG` より一段明るい灰色（`BG` が `000000` なら `1A1A1A` ほど）。表紙・扉もこの色になる |
-| `PANEL`・`NAVY_BLOCK` | パネルと扉の中のブロック。`PANEL` は `NAVY` と同じでよい。`NAVY_BLOCK` は扉の地（`NAVY`）の上に載るので、`NAVY` より明るくする |
-| `CARD` | カードと表のセルの地。`BG` とほぼ同じ暗さ（枠線の `RULE` で囲む） |
-| `HEAD`・`TEXT`・`SUB` | 見出し、本文、補助の文字。白に近い色から、順に暗い灰色 |
-| `RULE` | カードの枠線と罫線。暗い灰色（明るいと枠が目立つ） |
-| `SUB_ON_NAVY` | 濃紺の上の補足と、表紙・扉のフッター。`RULE` を暗くしたので、明るい灰色を分けて書く |
-| `RED`・`RED_TEXT`・`RED_ON_NAVY` | 強調の色。暗い地の上なので、3 つとも同じ明るい色でよいことが多い |
-| `ON_RED` | `RED` の塗りの上の文字（番号の丸）。明るい強調の色に白が届かなければ（オレンジの `FF6308` に白は 2.98:1）、黒 |
-| `RED_SOFT`・`STAGE_TEXT`・`DECOR` | 小さな赤の札の地は、強調の色をごく暗くした色。札の文字は黒。章番号は、扉の地（`NAVY`。白の地の扉があれば `BG` も）に 3:1 で届く灰色（visual-038） |
+| `BG` | Body background. Black or a very dark gray |
+| `NAVY` | Background of the cover and dividers, and of the conclusion band, table header rows, and code boxes. If it equals `BG`, the conclusion band cannot be seen, so use a gray one step lighter than `BG` (about `1A1A1A` if `BG` is `000000`). The cover and dividers also take this color |
+| `PANEL`, `NAVY_BLOCK` | Panels and the blocks inside the divider. `PANEL` may equal `NAVY`. `NAVY_BLOCK` sits on the divider background (`NAVY`), so make it lighter than `NAVY` |
+| `CARD` | Background of cards and table cells. About as dark as `BG` (enclosed by the `RULE` border) |
+| `HEAD`, `TEXT`, `SUB` | Headings, body text, and secondary text. From a near-white color, progressively darker grays |
+| `RULE` | Card borders and rules. A dark gray (a light one makes the borders stand out) |
+| `SUB_ON_NAVY` | Notes on navy, and the footer of the cover and dividers. Because `RULE` is dark, write a light gray separately |
+| `RED`, `RED_TEXT`, `RED_ON_NAVY` | Emphasis color. On a dark background, all three can often be the same light color |
+| `ON_RED` | Text on a `RED` fill (number circles). If white does not reach the standard on a light emphasis color (white on orange `FF6308` is 2.98:1), black |
+| `RED_SOFT`, `STAGE_TEXT`, `DECOR` | Background of small red tags: the emphasis color made very dark. Tag text: black. Chapter number: a gray that reaches 3:1 against the divider background (`NAVY`; also `BG` if there is a divider with a white background) (visual-038) |
 
-- 色を書く場所、測り方、作り方は明るいテーマと同じ（流れの 5〜8）。`slides.py lint` は同じ役割の組を測る（本文・パネル・カードの上の `HEAD`・`TEXT`・`SUB`・`RED_TEXT`、濃紺の上の `WHITE`・`SUB_ON_NAVY`、`RED` の上の `ON_RED` など）。
-- 地とパネル・結論バンドの差は文字の基準の外で、lint は測らない。暗い色どうしは差が小さく見えるので（`000000` と `1A1A1A` で 1.2:1）、見本の画像で面の境が見えるかを見る。
-- lint と `box_pad.py` は、表紙・扉を地の色でなく、`slides.py` が `NAVY` の地で作ったページかで見分ける。カードはテーマの `CARD` の色で見分ける。`PANEL` を `NAVY` と同じ値にすると、本文の幅いっぱいでページの下端（6.60 in）まであるパネルを結論バンドと数え、パネルの中のコードらしい行に等幅を求める。
-- ページの JSON（pages.py）で、見出しの文字を `NAVY`、カードの地を `WHITE` と書いた資料は、暗いテーマで読めなくなる（`HEAD`・`CARD` と書く。`visual.md` の 1）。lint のコントラストの一覧に出る。
+- Where to write the colors, how to measure them, and how to create the template are the same as for light themes (steps 5–8 of the flow). `slides.py lint` measures the same role pairs (`HEAD`, `TEXT`, `SUB`, and `RED_TEXT` on the body, panels, and cards; `WHITE` and `SUB_ON_NAVY` on navy; `ON_RED` on `RED`; and so on).
+- The difference between the background and the panels or conclusion band is outside the text standard, and lint does not measure it. Dark colors look close to each other (`000000` and `1A1A1A` are 1.2:1), so check in the sample images whether the boundaries between surfaces can be seen.
+- lint and `box_pad.py` tell covers and dividers apart not by background color but by whether `slides.py` built the page with a `NAVY` background. They tell cards apart by the theme's `CARD` color. If `PANEL` has the same value as `NAVY`, a panel that spans the full body width down to the bottom of the page (6.60 in) is counted as a conclusion band, and code-like lines inside the panel are required to be monospace.
+- Materials whose page JSON (pages.py) writes heading text as `NAVY` and card backgrounds as `WHITE` become unreadable in a dark theme (write `HEAD` and `CARD`; `visual.md` §1). They appear in lint's contrast list.
 
-## 書体
+## Fonts
 
-Google Slides で描けるのは Google Fonts の書体だけ。描けると確かめた和文の書体は `slides.py` の `JP_FONTS`（2026-10-07 に、テンプレートを複製した試しのデッキで同じ文を書体ごとに描いて見た）。
+Google Slides renders only Google Fonts. The Japanese fonts confirmed to render are `JP_FONTS` in `slides.py` (on 2026-10-07, the same text was rendered in each font in a trial deck copied from the template).
 
-| 元の書体の印象 | 和文のある Google Fonts の候補 |
+| Impression of the original font | Google Fonts candidates with Japanese |
 |---|---|
-| ふつうのゴシック（Arial、Helvetica、Roboto、DM Sans、Inter、メイリオ、游ゴシック、ヒラギノ角ゴ） | Noto Sans JP（既定）、IBM Plex Sans JP（IBM Plex を使う会社）、BIZ UDPGothic（読みやすさを優先する会社） |
-| 幾何学的なゴシック（Montserrat、Poppins、Futura） | Zen Kaku Gothic New、M PLUS 2、LINE Seed JP |
-| 丸ゴシック | M PLUS Rounded 1c、Zen Maru Gothic |
-| 明朝・セリフ（Times、Georgia、Garamond） | Noto Serif JP、Shippori Mincho、Zen Old Mincho、BIZ UDPMincho |
+| Ordinary Gothic (Arial, Helvetica, Roboto, DM Sans, Inter, メイリオ, 游ゴシック, ヒラギノ角ゴ) | Noto Sans JP (default), IBM Plex Sans JP (companies that use IBM Plex), BIZ UDPGothic (companies that put readability first) |
+| Geometric Gothic (Montserrat, Poppins, Futura) | Zen Kaku Gothic New, M PLUS 2, LINE Seed JP |
+| Rounded Gothic | M PLUS Rounded 1c, Zen Maru Gothic |
+| Mincho / serif (Times, Georgia, Garamond) | Noto Serif JP, Shippori Mincho, Zen Old Mincho, BIZ UDPMincho |
 
-- `Noto Sans CJK JP`・`Hiragino Sans`・`Yu Gothic` は、API が受け付けても、描くと明朝と欧文のセリフ体になる（`template.py` の `NO_RENDER`）。`Meiryo` はゴシックで描かれたが、メイリオそのものかは見分けきれていない（使わない）。
-- `BIZ UDGothic`・`Kosugi Maru` は英数字が等幅で、字の間が広く見える。
-- 描けたかどうかは API の値では分からない（指定した名前をそのまま返す）。見本のページの画像で見る。
-- 欧文の書体で `font` に書けるのは DM Sans だけ（`slides.py` の `FONT_EM`）。和文の字がないので、Google Slides は和文を別のゴシックで描く（2026-10-15 に描いて見た。1 字 0.92 em ほどで、見込みの 1 em より少し狭い）。`template.py audit` は「欧文（和文は別のゴシック。字幅を測ってあり、font に書ける）」と出す。
-- `slides.py` の字幅の見積もり（`em_width`）は、本文の英数字を `FONT_EM` の幅（Noto Sans JP の `ASCII_EM`、DM Sans の `DM_SANS_EM`。太字はそれぞれの Bold の `ASCII_BOLD_EM`・`DM_SANS_BOLD_EM`）で、コードを `MONO_EM`（Cascadia Mono）で見込む。ほかの書体を `font`・`mono` に書くと、Noto Sans JP と Cascadia Mono の幅で見込むので、英数字の幅が違い、折り返しの見込み（組むときの警告、`d.card` の高さ、lint の行数）がずれる。見本のページの画像と、組んだ資料の画像で見る。
-- コードの等幅の書体は、既定は Cascadia Mono。テーマの `mono` で変えられる（スライドとドキュメントのテーマのファイル。`themes/slides/<名前>.json`・`themes/docs/<名前>.json`）。等幅は和文を載せないので `JP_FONTS` には限らないが、リガチャのある書体（`slides.py` の `LIGATURE_MONO`: JetBrains Mono・Fira Code・Cascadia Code）は止める（`visual.md` の 2）。Google Fonts にない名前は、API が受け付けて、黙って別の書体（Arial）で描かれる。書いたら `template.py <名前>` で見本のページを組み直し、`gslides.py check` の画像で、コードが等幅で描けているか、`->` が矢印 1 字になっていないかを見る。
-- 確かめた書体の一覧は、リポジトリの README の「書体」。
+- `Noto Sans CJK JP`, `Hiragino Sans`, and `Yu Gothic` are accepted by the API but render as Mincho and a Latin serif (`NO_RENDER` in `template.py`). `Meiryo` rendered as a Gothic, but it could not be confirmed to be Meiryo itself (do not use it).
+- `BIZ UDGothic` and `Kosugi Maru` have monospaced alphanumerics, so the spacing between letters looks wide.
+- Whether a font rendered cannot be told from the API's values (it returns the specified name as is). Check the images of the sample pages.
+- The only Latin font that can be written in `font` is DM Sans (`FONT_EM` in `slides.py`). It has no Japanese glyphs, so Google Slides renders Japanese in another Gothic (rendered and checked on 2026-10-15: about 0.92 em per character, a little narrower than the assumed 1 em). `template.py audit` prints 「欧文（和文は別のゴシック。字幅を測ってあり、font に書ける）」.
+- The width estimate in `slides.py` (`em_width`) assumes body alphanumerics at the `FONT_EM` width (Noto Sans JP's `ASCII_EM`, DM Sans's `DM_SANS_EM`; for bold, each Bold's `ASCII_BOLD_EM` and `DM_SANS_BOLD_EM`) and code at `MONO_EM` (Cascadia Mono). If another font is written in `font` or `mono`, it still estimates with the Noto Sans JP and Cascadia Mono widths, so the alphanumeric widths differ and the wrap estimates (build-time warnings, `d.card` height, lint's line counts) drift. Check the images of the sample pages and of the built material.
+- The default monospace font for code is Cascadia Mono. The theme's `mono` changes it (in the slide and document theme files: `themes/slides/<name>.json` and `themes/docs/<name>.json`). Monospace text carries no Japanese, so it is not limited to `JP_FONTS`, but fonts with ligatures (`LIGATURE_MONO` in `slides.py`: JetBrains Mono, Fira Code, Cascadia Code) are rejected (`visual.md` §2). A name not in Google Fonts is accepted by the API and silently rendered in another font (Arial). After writing it, rebuild the sample pages with `template.py <name>` and check in the `gslides.py check` images that code renders monospaced and that `->` has not turned into a single arrow glyph.
+- The list of checked fonts is in 「書体」 of the repository README.
 
-## できないこと
+## Limitations
 
-- 13.33 × 7.5 in 以外のページには組めない（上の 2）。
-- テーマのファイルの書体はスライドだけに効く。ドキュメント（Google Docs）の書体は、同じ形のドキュメントのテーマのファイル（`themes/docs/<名前>.json`）の `font`・`mono`（`../doc-build/SKILL.md` の doc-build-010）。ドキュメントのフッターの著作権表示は `[brand]` のまま。
-- `font` に書けるのは `JP_FONTS` の書体と DM Sans だけ（`slides.py lint` と `template.py` が止める）。ほかの欧文の書体を使うなら、英数字の幅を測って `FONT_EM` に足す（Google Slides がどの版で描くかを、描いた画像で確かめる）。ほかの和文の Google Fonts を使うなら、試しのデッキで描けるかを画像で確かめてから `slides.py` の `JP_FONTS` に足す。
-- 会社のテンプレートの文字の大きさ・行間・レイアウトは、`slides.py` が組むページには効かない（`visual.md` の 1 の型で組む）。会社の大きさで組みたいときは、`slides.py` の部品を直す（`factory-kaizen`）。
-- 人が画面で使う会社のテンプレート（全部のレイアウト）を、日本語用に整えることはしない。
-- テーマに入れない色（`TEXT`・`RULE`・`RED_SOFT`・`STAGE_TEXT`・`DECOR`）と名前で書く役割（`HEAD`・`CARD`・`SUB_ON_NAVY`・`ON_RED`）は、マスターの配色に枠が残っていない（12 の枠をすべて使う）。テーマのファイルに書くと、`template.py` がマスターのページ番号の枠の代替テキスト（テーマの目印）に書き、`slides.py build` はテーマのファイルの値で組む。書かなければ、どのテーマでも同じ灰色と淡い赤。章の扉の章番号（`DECOR`、飾り）は、会社の `NAVY` と合わないことがあるので、合わなければ書く。
-- マスターのロゴは消える。ロゴを置くならページに画像として置く（JSON の `image`・`icon`。`../deck-build/slides.md` の 6）。表紙・扉のレイアウトのロゴは、`cover`・`section` で残せる（template-001）。
+- Pages other than 13.33 × 7.5 in cannot be built (step 2 above).
+- The font in the theme file applies only to slides. The font of documents (Google Docs) is `font` and `mono` in the document theme file of the same form (`themes/docs/<name>.json`) (doc-build-010 in `../doc-build/SKILL.md`). The copyright notice in the document footer stays `[brand]`.
+- Only the `JP_FONTS` fonts and DM Sans can be written in `font` (`slides.py lint` and `template.py` reject others). To use another Latin font, measure its alphanumeric widths and add it to `FONT_EM` (check in rendered images which version Google Slides renders). To use another Japanese Google Font, check in a trial deck's images that it renders, then add it to `JP_FONTS` in `slides.py`.
+- The company template's text sizes, line spacing, and layouts do not apply to the pages `slides.py` builds (they are built in the style of `visual.md` §1). To build at the company's sizes, change the `slides.py` components (`factory-kaizen`).
+- Do not adapt for Japanese the company template that people use on screen (with all its layouts).
+- Colors not in the theme (`TEXT`, `RULE`, `RED_SOFT`, `STAGE_TEXT`, `DECOR`) and roles written by name (`HEAD`, `CARD`, `SUB_ON_NAVY`, `ON_RED`) have no slot left in the master's color scheme (all 12 slots are used). When they are written in the theme file, `template.py` writes them into the alt text (the theme marker) of the master's page-number placeholder, and `slides.py build` builds with the theme file's values. If not written, every theme gets the same grays and light red. The chapter number on section dividers (`DECOR`, a decoration) may not match the company's `NAVY`, so write it if it does not.
+- The master's logo is deleted. To place a logo, put it on the page as an image (JSON `image` or `icon`; `../deck-build/slides.md` §6). Logos on the cover and divider layouts can be kept with `cover` and `section` (template-001).
 
-## 直すとき
+## When editing
 
-- 色や書体を変えたら、テーマのファイルを直して `slides.py lint <ファイル>` を回し、`template.py <名前>` で合わせ直す（ID は変わらない）。作ったデッキは、`slides.py build` で組み直すと、マスターの配色・書体・目印がテーマのファイルの値にそろう（`../deck-build/slides.md` の 3）。役割の色を変えたなら、テンプレートの見本だけでなく、組み直したデッキの画像も見る。
-- 画面のテーマビルダーでテンプレートの色や書体を直したら、`slides.py theme <テンプレートの URL> --force` でテーマのファイルに戻す（戻さずに組むと、テーマのファイルの値に戻る）。
-- テンプレートにテーマの名前が入っていない（`template.py` で合わせ直す前のもの）か、別のテーマの名前が入っていると、`slides.py new` が止まる。
-- 会社のテンプレートが新しくなったら、新しい URL を `--from-base` に渡して作り直す。前のテンプレートは消すか、名前に「旧」を付ける。共有テーマのフォルダにあるなら、フォルダから外す（同じ名前のテーマが 2 つ出る）。作り直すと URL が変わるので、使う人にも新しい URL を書いてもらう（合わせ直し〔`--from-base` なし〕なら URL は変わらず、そのまま届く）。
+- After changing colors or fonts, edit the theme file, run `slides.py lint <file>`, and re-sync with `template.py <name>` (the ID does not change). For decks already made, rebuilding with `slides.py build` aligns the master's color scheme, font, and marker with the theme file's values (`../deck-build/slides.md` §3). If you changed role colors, look at the images of the rebuilt decks too, not only the template's samples.
+- If you changed the template's colors or fonts in the on-screen theme builder, bring them back into the theme file with `slides.py theme <template URL> --force` (if you build without doing so, they revert to the theme file's values).
+- If the template has no theme name (one not yet re-synced with `template.py`) or has another theme's name, `slides.py new` stops.
+- When the company template is updated, pass the new URL to `--from-base` and recreate. Delete the old template or add 「旧」 to its name. If it is in the shared theme folder, remove it from the folder (otherwise two themes with the same name appear). Recreating changes the URL, so have users write the new URL too (re-syncing [without `--from-base`] keeps the URL, so it reaches them as is).

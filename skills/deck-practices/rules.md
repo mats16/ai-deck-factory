@@ -1,78 +1,78 @@
-# 決まりの直し方（修正の指示の戻し方と、決まりの確かめ方）
+# Editing rules (routing corrections and verifying rules)
 
-ユーザーから修正の指示を受けたときと、決まりを足す・直すときに開く。書き留め方と、その場で戻すことは、どの会話でも要るので AGENTS.md の「修正の指示」に置いてある。ここは、どこへ戻すかと、どう確かめるか。取りこぼしは、定期の整理（`../dreaming/`）が毎日、会話の記録から拾い、決まりの変更を、推奨を付けて提案する（ユーザーが返したら入る。重なり・古い記述の片付けのうち、決まりを丸ごと消すだけのものは当ててから知らせる）。
+Open this when you receive a correction from the user and when you add or change a rule. How to record a correction and routing it on the spot are needed in every conversation, so they are in 「修正の指示」 in AGENTS.md. This file covers where to route it and how to verify it. Misses are picked up every day by the periodic cleanup (`../dreaming/`) from the conversation logs, which proposes rule changes with a recommendation (they go in when the user replies; among cleanups of overlaps and stale text, those that only delete a whole rule are applied first and then reported).
 
-## 決まりの層
+## Rule layers
 
-[rules-001] 決まりは 2 層に分かれ、ワークスペースが優先する。顧客向けの資料では、その上に顧客の memory（下の「顧客の memory」）が乗る。ワークスペースは、やり取りの積み重ねで決まりと点検を育てていく 1 つのプロダクトとして扱い、大元（プラグイン）を直すべきものだけを Issue にする（持ち主が Issue から直す）。
+[rules-001] Rules come in two layers, and the workspace takes precedence. For customer-facing materials, the customer's memory ("Customer memory" below) sits on top. Treat the workspace as one product whose rules and checks grow through accumulated exchanges, and file as Issues only what should be fixed upstream (the plugin) (the owner fixes it from the Issue).
 
-| 層 | 置き場所 | 中身 | 誰が変えるか |
+| Layer | Location | Content | Who changes it |
 |---|---|---|---|
-| ワークスペース | `AGENTS.md`（どの会話でも要ること）、`rules/<スキル>/<ファイル>`（資料を作る場面だけで要ること。プラグインの同じパスのファイルに足す・上書きする）、`rules/deck-build/checks.py`（lint に足す点検） | その人・その組織の決まりと点検、修正の指示で育つもの | 作る会話がその場で戻す。dreaming は推奨を付けて提案する（`ledger.py propose`。ユーザーの返事で `apply`。重なり・古い記述の片付けのうち、決まりを丸ごと消すだけのものは `propose --auto` で当ててから知らせる）。経緯は決まりの台帳（`.factory/ledger.jsonl`）に残す。ワークスペースを git で管理していれば commit もする |
-| プラグイン | `skills/`（このフォルダなど。入った場所は読むだけ） | 誰が使っても同じ決まり、点検、スクリプト、テンプレート | スキル `factory-kaizen` で、過去の資料で確かめてから Issue を出す（持ち主も同じ）。持ち主が Issue から直し、`update` で届く |
+| Workspace | `AGENTS.md` (what every conversation needs), `rules/<skill>/<file>` (what only material-making needs; adds to or overrides the plugin file at the same path), `rules/deck-build/checks.py` (checks added to lint) | That person's or organization's rules and checks; what grows from corrections | The making conversation routes them on the spot. dreaming proposes with a recommendation (`ledger.py propose`; `apply` on the user's reply; among cleanups of overlaps and stale text, those that only delete a whole rule are applied with `propose --auto` and then reported). The history is kept in the rule ledger (`.factory/ledger.jsonl`). If the workspace is under git, also commit |
+| Plugin | `skills/` (this folder, etc.; the installed location is read-only) | Rules, checks, scripts, and templates that are the same for everyone | Verify on past materials with the `factory-kaizen` skill, then file an Issue (the owner does the same). The owner fixes it from the Issue, and it arrives via `update` |
 
-- **プラグインの入った場所（`~/.claude/plugins/cache/…` など）は書き換えない。** 入れ直すと消える。
-- **`rules/` は読み忘れない仕組みがある。** プラグインのファイルを開くと（Claude Code は Read・Bash・Skill、pi は read・bash）、プラグインの hook（`hooks/rules_overlay.py`）が、同じパスの `rules/` のファイルを続けて出す。出てこない環境（hook のない器）では、自分で `rules/` を開く。
-- **点検もワークスペースで育てる。** 機械で見られる決まりは、まず `rules/deck-build/checks.py` に足す（lint が毎回読み込む。書き方は `rules/README.md`）。ほかの人にも効くと分かったら、`lint.py` に移す Issue にする。
-- **プラグインに上げる。** ワークスペースの決まりと点検のうち、ほかの人にも効くもの（その人の好みや顧客の事情でないもの）は、dreaming が「プラグインに上げる」提案にする。適用はスキル `factory-kaizen`（元のリポジトリを clone して直し、過去の資料で前後を比べ、理由・背景・検証の結果・見た目なら画像・変更案の差分を入れた Issue を出す）。持ち主の直しが届いたら、ワークスペースの `rules/` の写しは消す。
-- `deck-research/` の調べ直しの結果（`sources.md` と、反映するスキルの直し）は、プラグインの知見なので、`factory-kaizen` で Issue にする。ログと `state.md` はワークスペースの `Research/deck_research/` に残す。
+- **Do not rewrite the plugin's installed location (`~/.claude/plugins/cache/…` etc.).** Reinstalling erases the changes.
+- **There is a mechanism so that `rules/` is not forgotten.** When you open a plugin file (Claude Code: Read, Bash, Skill; pi: read, bash), the plugin hook (`hooks/rules_overlay.py`) then shows the `rules/` file at the same path. In environments where it does not appear (a host without hooks), open `rules/` yourself.
+- **Grow checks in the workspace too.** Rules a machine can check go first into `rules/deck-build/checks.py` (lint loads it every time; how to write it: `rules/README.md`). Once it is clear that they help other people too, file an Issue to move them into `lint.py`.
+- **Promoting to the plugin.** Workspace rules and checks that help other people too (not that person's taste or a customer's circumstances) become a 「プラグインに上げる」 proposal from dreaming. Apply it with the `factory-kaizen` skill (clone the original repository, fix it, compare before and after on past materials, and file an Issue with the reason, the background, the verification results, images if it is visual, and the diff of the proposed change). When the owner's fix arrives, delete the copy in the workspace's `rules/`.
+- The results of re-researching `deck-research/` (`sources.md` and the fixes to the skills that reflect it) are plugin knowledge, so file them as Issues with `factory-kaizen`. The logs and `state.md` stay in the workspace's `Research/deck_research/`.
 
-## 顧客の memory
+## Customer memory
 
-[rules-005] 顧客ごとの好みは、決まりではなく memory として `Customers/<顧客>/memory.md` に持つ。決まり（`AGENTS.md`・`rules/`）は「〜のときは〜する」の形で、どの資料にも効き、lint かレビューで確かめる。memory は、その顧客の聞き手について資料をまたいで効くこと（敬称、言葉の調子、聞き手の立場と関心、前に決めたこと・断られた案）で、作るときの前提にし、レビューで照らす。相手が何者か（事業、組織、使っている製品と構成、エンジニアの好み）は、memory ではなく顧客の `profile.md` に出典と日付つきで持つ（スキル `customer-profile`）。迷ったら文の形で分ける。「〜である」（事実。「エンジニアは Terraform で全部管理している」）は profile、「〜にする・しない」（指示。「Terraform のコード例を入れる」）は memory。事実から決めた指示は、事実を profile に、指示を memory に分けて書く。
+[rules-005] Preferences per customer are kept not as rules but as memory in `Customers/<customer>/memory.md`. Rules (`AGENTS.md`, `rules/`) take the form 「〜のときは〜する」, apply to every material, and are verified by lint or review. Memory is what applies across materials about that customer's audience (honorifics, the tone of the language, the audience's position and interests, past decisions and rejected proposals); use it as a premise when making a material and check against it in review. Who the customer is (business, organization, products in use and their setup, engineers' preferences) goes not in memory but in the customer's `profile.md`, with sources and dates (the `customer-profile` skill). When unsure, separate by the form of the sentence. 「〜である」 (a fact: 「エンジニアは Terraform で全部管理している」) goes in the profile; 「〜にする・しない」 (an instruction: 「Terraform のコード例を入れる」) goes in memory. For an instruction decided from a fact, write the fact in the profile and the instruction in memory.
 
-- **書き方:** 1 項目 1 行で、行の頭に `[ws-memory-<番号>]`（`ledger.py next ws-memory`）。決まりと同じく、日付と原文は台帳に置く（`ledger.py add --to ws-memory-<番号>`。再発も数える）。毎回読まれるので短く保つ。
-- **出るとき:** その顧客の資料の `構成案*.md`・`社内メモ_*.md`・`references.md` を開くと、プラグインの hook が続けて出す（Claude Code・Codex・pi）。出ない環境では自分で開く。ワークスペースの決まりとプラグインより優先する。
-- **入れないもの:** 個人名、利用額、社内だけの見立て。顧客向けの資料に紛れないよう、`社内メモ_*.md` に書く。その資料だけのこと（このページの言い回し）は `--to 戻さない`。
-- **古くなる:** 担当や体制が変わると外れる。新しいユーザーの言葉と食い違えば、新しいほうに直す（前の日付は `ledger.py why <ID>`）。どちらが今のことか分からなければ聞く。
-- **一般化:** 同じ趣旨の好みが 2 社以上の memory にあれば、顧客によらない決まりとして `rules/` に寄せる（dreaming の 4c）。memory からプラグインへは、じかに上げない。
+- **Format:** one item per line, with `[ws-memory-<number>]` at the head of the line (`ledger.py next ws-memory`). As with rules, the date and the original wording go in the ledger (`ledger.py add --to ws-memory-<number>`; recurrences are counted too). It is read every time, so keep it short.
+- **When it appears:** when you open that customer's `構成案*.md`, `社内メモ_*.md`, or `references.md`, the plugin hook then shows it (Claude Code, Codex, pi). In environments where it does not appear, open it yourself. It takes precedence over the workspace rules and the plugin.
+- **What not to put in:** personal names, spend amounts, internal-only assessments. Write them in `社内メモ_*.md` so they do not slip into customer-facing materials. Things only for that material (the wording on this page) get `--to 戻さない`.
+- **Going stale:** it stops holding when the person in charge or the organization changes. If it conflicts with the user's newer words, update it to the newer one (the earlier date: `ledger.py why <ID>`). If you cannot tell which one is current, ask.
+- **Generalizing:** if preferences with the same gist are in the memory of two or more companies, move them into `rules/` as a rule independent of the customer (dreaming's 4c). Do not promote directly from memory to the plugin.
 
-## 修正の指示の戻し方
+## Routing corrections
 
-指摘は、ワークスペースの決まりの台帳（`.factory/ledger.jsonl`）に [scripts/ledger.py](scripts/ledger.py) で残す。構成案に「修正の指示」の節は作らない。決まりの本文には ID と短い理由だけを書き、日付・ユーザーの言葉・どの資料か・ユーザーが決めたかは、台帳に ID でつなぐ（`ledger.py why <ID>` で出る）。台帳には顧客のことが入るので、`.factory/` から外（Issue・PR・チャット）に写さない。
+Record findings in the workspace's rule ledger (`.factory/ledger.jsonl`) with [scripts/ledger.py](scripts/ledger.py). Do not create a 「修正の指示」 section in the outline. In the rule text, write only the ID and a short reason; link the date, the user's words, which material, and whether the user decided it to the ledger by the ID (`ledger.py why <ID>` shows them). The ledger contains customer information, so do not copy it outside `.factory/` (Issues, PRs, chat).
 
 ```sh
-L=<deck-practices のフォルダ>/scripts/ledger.py
-python3 $L add --deck <資料のフォルダ> --quote "<ユーザーの言葉（できるだけ原文）>" --fix "<直した箇所>" --to <戻し先> --check <lint・レビュー・なし> [--decided] [--plan <AI・人>]
-python3 $L list --deck <資料のフォルダ>     # その資料の指摘。--open で戻し先が「未」のものだけ
-python3 $L route <c-ID> <戻し先>            # 戻し先を決めた・変えた
-python3 $L next <接頭辞>                     # 足す決まりの ID
+L=<deck-practices folder>/scripts/ledger.py
+python3 $L add --deck <material folder> --quote "<the user's words (verbatim where possible)>" --fix "<what was fixed>" --to <destination> --check <lint・レビュー・なし> [--decided] [--plan <AI・人>]
+python3 $L list --deck <material folder>     # findings for that material. With --open, only those whose destination is 「未」
+python3 $L route <c-ID> <destination>        # the destination was decided or changed
+python3 $L next <prefix>                     # the ID for a new rule
 ```
 
-- `--to` は、決まりの ID（`ws-visual-<番号>`。顧客の memory は `ws-memory-<番号>`）、ファイル、`戻さない`、`未` のどれか。
-- `--decided` は、ユーザーがはっきり決めたこと（案から選んだ、「〜にする」と言い切った）。dreaming は、これと食い違う発言を判断待ちにし、覆さない。プラグインの決まりは既定の値で、ワークスペースで上書きしてよい。
-- `--plan` は、構成の見逃し。方針のレビュー（SKILL.md の 5）のあとに、聞き手・問い・主張・順序を変えた指摘のうち、そのレビューで挙がっていなかったもの（① AI は構成案の末尾の受けた指摘、② 人は構成案を見せたときにユーザーが言ったことにない。どちらも、聞くことの一覧にあったものは除く）に付ける。値は、その資料で選んだ方針のレビュー（`AI`・`人`）。構成案のレビューは作り手の発想を縛らないよう決まりに照らさないので、外したときだけをここで数える（`ledger.py rules` の週ごとの表と末尾の行。dreaming の 5）。足したあとで見逃しと分かったら `ledger.py plan <c-ID> <AI・人>` で印を付ける。付け間違いは `plan <c-ID> なし` で外す。
-- **決まりの ID:** 1 項目に 1 つ、行の頭に `[<接頭辞>-<3 桁>]` を付ける（例: `- [ws-visual-<番号>] 収まらない表は 2 枚に分ける（文字を小さくすると読めなくなる）。`）。接頭辞はファイルで決まる。プラグインはファイルの名前（`visual.md` は `visual`。`SKILL.md` はスキルの名前、`README.md` はフォルダの名前、スクリプトはほかと同じ名前になるなら `_py` を付ける）。ワークスペースは、同じパスのプラグインの接頭辞に `ws-` を付ける（`rules/deck-practices/visual.md` は `ws-visual`、`AGENTS.md` は `ws-agents`、顧客の `memory.md` は `ws-memory`）。ID を付けずに手で書かれた項目は、戻し先にするときに、dreaming が ID だけを付ける。ほかの文から決まりを指すときは、角括弧を付けずに `visual-012` と書く（角括弧の ID は、その決まりを書いたところとして読む。`ledger.py`）。
+- `--to` is one of: a rule ID (`ws-visual-<number>`; customer memory: `ws-memory-<number>`), a file, `戻さない`, or `未`.
+- `--decided` marks what the user clearly decided (chose from proposals, or stated 「〜にする」 outright). dreaming puts statements that conflict with it on hold for a decision and does not overturn it. Plugin rules are defaults and may be overridden in the workspace.
+- `--plan` marks a structure miss. Attach it to findings after the plan review (SKILL.md §5) that changed the audience, the question, the claim, or the order and were not raised in that review (for ① AI, not among the findings received at the end of the outline; for ② human, not in what the user said when shown the outline; in both cases, excluding those in the list of questions for the user). The value is the plan review chosen for that material (`AI` or `人`). The outline review does not check against rules, so as not to constrain the maker's ideas, so only its misses are counted here (the weekly table and the last line of `ledger.py rules`; dreaming's 5). If a finding turns out to be a miss after it was added, mark it with `ledger.py plan <c-ID> <AI・人>`. Remove a wrong mark with `plan <c-ID> なし`.
+- **Rule IDs:** one per item, with `[<prefix>-<3 digits>]` at the head of the line (e.g. `- [ws-visual-<number>] 収まらない表は 2 枚に分ける（文字を小さくすると読めなくなる）。`). The prefix is determined by the file. For the plugin, it is the file name (`visual.md` is `visual`; for `SKILL.md`, the skill name; for `README.md`, the folder name; a script gets `_py` if it would collide with another name). For the workspace, add `ws-` to the prefix of the plugin file at the same path (`rules/deck-practices/visual.md` is `ws-visual`, `AGENTS.md` is `ws-agents`, a customer's `memory.md` is `ws-memory`). Items written by hand without an ID get only an ID from dreaming when they become a destination. When referring to a rule from other text, write `visual-012` without brackets (a bracketed ID is read as the place where that rule is written; `ledger.py`).
 
-- **まとめて、決まりの形にする。** 同じ趣旨のものはまとめ、「〜のときは〜する」の形の決まりに直す。この資料の中身だけの直し（このページの言い回し、数字の差し替え）は `--to 戻さない`。
-- **戻す先:** ワークスペースに戻す（上の「決まりの層」）。どの会話でも要る決まり（社外秘の扱い、フォルダ、調べもの、いい資料の考え方の要点）は AGENTS.md。資料を作るときにだけ要ることは、AGENTS.md に足さない（Codex は AGENTS.md を 32 KiB で切り、Claude Code は毎回全部を読む。dreaming の 4h）。作り方は、下の表のプラグインのファイルと同じパスの `rules/<スキル>/<ファイル>` に書く（例: 見た目なら `rules/deck-practices/visual.md`。なければ作り、冒頭に「`deck-practices/visual.md` に足す・上書きする」と書く）。プラグインの決まりを変えたいときも `rules/` に書き、上書きする決まりの ID を `- [ws-visual-<番号>] 〜は〜にする（visual-012 より優先。<短い理由>）。` の形で添える（dreaming が `ledger.py candidates` で、上書きの数と、プラグインから消えた古い上書きを見る）。ID のない節を上書きするときは「プラグインの〇〇の節より優先」と書く。
-  - 作業の手順と残すもの: [SKILL.md](SKILL.md)
-  - 構成・言葉・文体と出典の書き方: [content.md](content.md)
-  - 見た目: [visual.md](visual.md)（スライド）、[visual_doc.md](visual_doc.md)（ドキュメント）
-  - 流用: [reuse.md](reuse.md)
-  - 材料と台帳: [materials.md](materials.md)
-  - Slides API での組み方: `../deck-build/slides.md`
-  - Docs API での組み方と、ドキュメントの確認と納品: `../doc-build/SKILL.md`
-  - 確認と納品: `../deck-build/SKILL.md` と `../deck-review/SKILL.md`（レビューの観点は、依頼文の `prompt_slides.md`・`prompt_doc.md`）
-  - この決まりの直し方: このファイル
-  - 顧客ごとの好み: 顧客の `memory.md`（上の「顧客の memory」）
-  - 顧客のこと（事業・構成・エンジニアの好み）: 顧客の `profile.md`（`../customer-profile/SKILL.md`）
+- **Merge them and put them in the form of rules.** Merge items with the same gist and rewrite them as rules of the form 「〜のときは〜する」. Fixes only to this material's content (the wording on this page, replacing a number) get `--to 戻さない`.
+- **Destination:** route to the workspace ("Rule layers" above). Rules that every conversation needs (handling confidential information, folders, research, the gist of 「いい資料の考え方」) go in AGENTS.md. Do not add to AGENTS.md what only material-making needs (Codex truncates AGENTS.md at 32 KiB, and Claude Code reads all of it every time; dreaming's 4h). How to make things goes in `rules/<skill>/<file>` at the same path as the plugin file in the list below (e.g. for visuals, `rules/deck-practices/visual.md`; if it does not exist, create it and write 「`deck-practices/visual.md` に足す・上書きする」 at the top). When you want to change a plugin rule, also write it in `rules/`, adding the ID of the rule it overrides in the form `- [ws-visual-<number>] 〜は〜にする（visual-012 より優先。<短い理由>）。` (dreaming uses `ledger.py candidates` to see the number of overrides and stale overrides of rules removed from the plugin). When overriding a section without an ID, write 「プラグインの〇〇の節より優先」.
+  - Workflow steps and what to keep: [SKILL.md](SKILL.md)
+  - Structure, wording, 「文体」, and how to write sources: [content.md](content.md)
+  - Visuals: [visual.md](visual.md) (decks), [visual_doc.md](visual_doc.md) (documents)
+  - Reuse: [reuse.md](reuse.md)
+  - Sources and the ledger: [materials.md](materials.md)
+  - Building with the Slides API: `../deck-build/slides.md`
+  - Building with the Docs API, and checking and delivering documents: `../doc-build/SKILL.md`
+  - Checking and delivery: `../deck-build/SKILL.md` and `../deck-review/SKILL.md` (the review aspects are in the request texts `prompt_slides.md` and `prompt_doc.md`)
+  - How to edit these rules: this file
+  - Per-customer preferences: the customer's `memory.md` ("Customer memory" above)
+  - About the customer (business, setup, engineers' preferences): the customer's `profile.md` (`../customer-profile/SKILL.md`)
 
-  確かめ方も決める（下の「決まりの確かめ方」）。
-- **聞いてから戻すもの:** いまの決まりと食い違うものと、この資料だけのことか決まりにすることか分からないもの。`--to 未` にして、報告で聞く。
-- **残して伝える。** 戻したら `ledger.py route` で戻し先を決まりの ID にする。報告の最後に、どの指示をどの決まりに戻したかを書く（`ledger.py list --deck <資料のフォルダ>`）。
+  Also decide how to verify it ("Verifying rules" below).
+- **Ask before routing:** items that conflict with the current rules, and items where you cannot tell whether they are just for this material or should become a rule. Set `--to 未` and ask in the report.
+- **Record and report.** After routing, set the destination to the rule ID with `ledger.py route`. At the end of the report, write which correction was routed to which rule (`ledger.py list --deck <material folder>`).
 
-## 決まりの確かめ方
+## Verifying rules
 
-[rules-002] 決まりは、作るときに守り、仕上げで同じ決まりを使って確かめる。考慮事項を足すより、どう確かめるかを決めるほうを先にする。決まりを足すときは、次のどれで確かめるかも決める。
+[rules-002] Rules are followed when making a material and verified with the same rules at the finish. Decide how to verify a rule before adding more considerations. When adding a rule, also decide which of the following verifies it.
 
-| 確かめ方 | 見るもの | 書き方 |
+| Method | What it looks at | How to write it |
 |---|---|---|
-| lint | JSON で数えられるもの（文字の大きさ、書体、字数、位置、ページの並び）。JSON で見積もれない位置（行の折り返し、改ページ、箱の中の余白）は、Google が描いたページの画像で測る（`box_pad.py`・`doc_layout.py`） | 決まりの文に「lint が〜」と書き、ワークスペースの `rules/deck-build/checks.py` に足す（大元に上げるときは `lint.py` と `--selftest` に移す）。くり返すのを待たず、1 回目から足す |
-| レビュー | 画像・テキスト・構成案と決まりの文から、AI が判断するもの（話の筋、言葉の印象、図の意味、余白や密度の見え方） | 札は付けない（「lint が」のない決まりは、レビューで見る）。deck-review の依頼文（スライドは `prompt_slides.md`、ドキュメントは `prompt_doc.md`）の観点 1〜5 のどこで見るかを確かめ、入らなければ観点に足す |
-| 考え方 | AGENTS.md の「いい資料の考え方」（詳しくは content.md の 0） | 条件にしない。レビューの問いのもとにする |
+| lint | Things countable in JSON (font size, font, character count, position, page order). Positions that JSON cannot estimate (line wrapping, page breaks, padding inside boxes) are measured on the images Google renders (`box_pad.py`, `doc_layout.py`) | Say in the rule text that lint checks it (「lint が〜」 in a Japanese rule, "lint flags …" in an English rule) and add the check to the workspace's `rules/deck-build/checks.py` (when promoting upstream, move it to `lint.py` and `--selftest`). Add it the first time; do not wait for a recurrence |
+| Review | What AI judges from images, text, the outline, and the rule text (the storyline, the impression of the wording, the meaning of diagrams, how margins and density look) | No tag (rules that do not say lint checks them are checked in review). Check which of aspects 1–5 in the deck-review request texts (decks: `prompt_slides.md`; documents: `prompt_doc.md`) covers it; if none does, add it to an aspect |
+| Principle | 「いい資料の考え方」 in AGENTS.md (details in content.md §0) | Do not make it a condition. Use it as the basis for review questions |
 
-- [rules-003] **数えられないものを、lint に無理に下ろさない。** lint を通すための書き方になる（content.md の 6 の「禁句をほかの空疎な語に置き換えるだけにしない」）。画像と決まりの文を見て AI が判断するところは、なくさない。
-- [rules-004] **良し悪しの 2 つに決めつけない。** lint の要確認は、直すか、残す理由を言う。レビューで、決まりからは決まらないもの、どちらとも取れるもの、直すと言いたいことが変わるものは「聞く」にして、迷う理由と案を添えてユーザーに返す（deck-review の「直す範囲」）。
-- **外れの多い条件は、直すか消す。** 要確認が毎回「残した」になる規則（`lint.py --stats`）と、確認を通ったあとにユーザーが直したのに拾えなかった条件は、dreaming の 5 が見る。
-- **決まりの手ごたえを数える。** 決まりがあるのに言われた指摘（再発）と、deck-review の指摘の表で決まりの列を付けた行の結果（直した・残した（誤り）・聞く）を、決まりの台帳が決まりごとに数える（`ledger.py rules`・`why <ID>`）。再発と「直した」が続く決まりは、作るときに守られていないので点検か作る手順に下ろす。「残した（誤り）」が続く決まりは、書き方を直す。指摘が出ない決まりは、守られているのかもしれないので、それだけで外さない。決まりごとの次の一手（下ろす・書き直す・条件を足す・上げる・写しを消す・上書きを見直す）は `ledger.py candidates` が出す。
+- [rules-003] **Do not force what cannot be counted into lint.** It leads to writing just to pass lint (「禁句をほかの空疎な語に置き換えるだけにしない」 in content.md §6). Do not remove the places where AI judges by looking at images and the rule text.
+- [rules-004] **Do not force a good-or-bad binary.** For a lint `要確認`, either fix it or state why it stays. In review, things the rules do not decide, things that can be read either way, and things whose fix would change the point become 「聞く」, and are returned to the user with the reason for hesitating and proposals ("What to fix" in deck-review).
+- **Fix or remove conditions with many false hits.** Rules whose `要確認` always end as 「残した」 (`lint.py --stats`), and conditions that missed something the user fixed after the check passed, are reviewed in dreaming's 5.
+- **Count how well rules work.** The rule ledger counts, per rule, findings raised even though a rule exists (recurrences) and the results of rows in the deck-review findings table with the rule column filled in (「直した・残した（誤り）・聞く」) (`ledger.py rules`, `why <ID>`). A rule with continuing recurrences and 「直した」 is not being followed when making, so push it down into a check or a making step. A rule with continuing 「残した（誤り）」 needs rewording. A rule that produces no findings may simply be followed, so do not remove it for that reason alone. The next move per rule (push down, rewrite, add a condition, promote, delete the copy, revisit the override) is printed by `ledger.py candidates`.

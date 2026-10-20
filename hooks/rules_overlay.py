@@ -66,12 +66,12 @@ def overlays(cwd, text, skill=None, is_path=False):
     for p in memories(ws, cwd, text, is_path):
         if p.is_file() and p not in seen:
             seen.add(p)
-            mem.append(f"## 顧客の memory: {p.relative_to(ws)}\n\nこの顧客の資料への好み（どう作るか。相手の事業や構成は profile.md）。ワークスペースの決まりとプラグインより優先する。新しいユーザーの言葉と食い違えば、そちらに従って memory を直す（deck-practices/rules.md の「顧客の memory」）。\n\n{p.read_text()}")
+            mem.append(f"## 顧客の memory: {p.relative_to(ws)}\n\nこの顧客の資料への好み（どう作るか。相手の事業や構成は profile.md）。ワークスペースの決まりとプラグインより優先する。新しいユーザーの言葉と食い違えば、そちらに従って memory を直す（deck-practices/rules.md の「Customer memory」）。\n\n{p.read_text()}")
     for name, f in refs:
         p = ws / "rules" / name / f
         if p.is_file() and p not in seen:
             seen.add(p)
-            out.append(f"## ワークスペースの決まり: rules/{name}/{f}\n\nプラグインの {name}/{f} への足しと上書き。食い違うところは、こちらに従う（deck-practices/rules.md の「決まりの層」）。\n\n{p.read_text()}")
+            out.append(f"## ワークスペースの決まり: rules/{name}/{f}\n\nプラグインの {name}/{f} への足しと上書き。食い違うところは、こちらに従う（deck-practices/rules.md の「Rule layers」）。\n\n{p.read_text()}")
     return "\n\n".join(x for x in (cut(out, "rules/ のファイルを"), cut(mem, "memory.md を")) if x)
 
 

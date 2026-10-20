@@ -1,37 +1,37 @@
-# ページを書く子への依頼文（スライド）
+# Request to child agents that write pages (slides)
 
-代表の 3 枚のあと、残りのページを子に分けて書かせるときに渡す依頼文（`../deck-practices/SKILL.md` の「作業の始め方」の 7 の deck-practices-016）。`<>` を埋めて、担当ごとに 1 本ずつ頼む。起動のしかた（新しい文脈、メインと同じモデル、Claude Code は 1 つのメッセージで並べる、T3 Code の委任は担当ごとに別のタスク）は `../deck-review/SKILL.md` の「頼み方」と同じ。レビューと違い、代表の 3 枚のページの JSON は手本として渡す。子もページを JSON（`slides.md` の slides-034）で書く。会話は渡さない。会話で決めたことは、頼む前に構成案に書き切る。
+The request you give when you split the remaining pages among child agents after the three representative pages (deck-practices-016 in "How to start" §7 of `../deck-practices/SKILL.md`). Fill in the `<>` and send one request per owner. How to start them (a fresh context, the same model as the main agent, in Claude Code side by side in one message, in T3 Code a separate delegated task per owner) is the same as "How to ask" in `../deck-review/SKILL.md`. Unlike reviews, pass the page JSON of the three representative pages as examples. The child agents also write pages in JSON (slides-034 in `slides.md`). Do not pass the conversation. Write everything decided in the conversation into the outline before you ask.
 
 ```text
-あなたは資料のページを書く担当です。日本語で答えてください。担当のページを、1 ページ 1 つの JSON のファイルに書いてください。組むのは親が 1 回だけするので、slides.py new・build と gslides.py check は回さないでください。
+You are in charge of writing pages of a material. Write each of your pages as one JSON file per page. The parent agent builds only once, so do not run slides.py new or build, or gslides.py check.
 
-## 担当
-- ページ: <p12〜p19（構成案の表の # の番号）>
-- 書くファイル: <資料のフォルダ>/build/p<構成案の番号>.json（1 ページ 1 ファイル。例: p06.json）と、それを構成案の順に並べた <資料のフォルダ>/build/pages_<担当>.json（`{"apiVersion": "slides/v1", "kind": "deck", "name": "<担当>", "pages": ["p06.json", …]}`）。どのページのファイルも頭に `"apiVersion": "slides/v1", "kind": "page"` を書く。ほかのファイルは書き換えない（deck.json、代表の 3 枚、ほかの担当のファイルも）
+## Your pages
+- Pages: <p12〜p19 (the # numbers in the outline's table)>
+- Files to write: <material folder>/build/p<outline number>.json (one file per page. Example: p06.json), and <material folder>/build/pages_<owner>.json that lists them in the outline's order (`{"apiVersion": "slides/v1", "kind": "deck", "name": "<owner>", "pages": ["p06.json", …]}`). Put `"apiVersion": "slides/v1", "kind": "page"` at the top of every page file. Do not rewrite any other file (not deck.json, not the three representative pages, not the other owners' files)
 
-## 読むもの（これだけを開く。ほかを探しに行かない）
-- 構成案: <構成案のパス>（全文を読む。担当のページの行、「書き方の決め」、出典の表）
-- 手本: 代表の 3 枚のページのファイル（<資料のフォルダ>/build/<p05.json など>）
-- ワークスペースの決まり: <ワークスペース>/AGENTS.md と、<ワークスペース>/rules/ の deck-practices・deck-build の下のファイル（あれば）
-- この資料で受けた修正の指示: python3 <deck-practices のフォルダ>/scripts/ledger.py list --deck <資料のフォルダ>
-- 材料: 構成案の出典の表と <資料のフォルダ>/references.md にあるもの（数字と固有名詞を確かめるときだけ開く）
-- 書き方: <deck-build のフォルダ>/slides.md の 2 の slides-034・slides-035・slides-038（JSON のページの書き方、raw、組むときの警告）、一通りの書き方を入れた見本の <deck-build のフォルダ>/samples/json/（同じ型のページを開く）、<deck-practices のフォルダ>/visual.md と content.md の 4〜6。書ける型・キー・色の名前の早見表は `python3 <deck-build のフォルダ>/scripts/slides.py schema --brief` で出る（全部は `schema`）
+## What to read (open only these. Do not go looking for others)
+- Outline: <path to 構成案> (read the whole thing: the rows for your pages, the 「書き方の決め」 section, and the sources table)
+- Examples: the page files of the three representative pages (<material folder>/build/<p05.json and so on>)
+- Workspace rules: <workspace>/AGENTS.md, and the files under deck-practices and deck-build in <workspace>/rules/ (if any)
+- Corrections received for this material: python3 <deck-practices folder>/scripts/ledger.py list --deck <material folder>
+- Material: what is in the outline's sources table and in <material folder>/references.md (open them only to check numbers and proper nouns)
+- How to write: slides-034, slides-035, and slides-038 in §2 of <deck-build folder>/slides.md (writing JSON pages, raw, build warnings), the samples that cover the usual ways of writing in <deck-build folder>/samples/json/ (open the page of the same type), and <deck-practices folder>/visual.md and §4–6 of content.md. `python3 <deck-build folder>/scripts/slides.py schema --brief` prints a quick reference of the types, keys, and color names you can write (`schema` for everything)
 
-## 書き方
-- 並べ方は row・stack・grid で書き、座標は frame の中だけに書く。文字の強調は **太字** と ***赤の太字***、一部だけの大きさは {32:48}、ほかのページへのリンクは [名前](#<ページのファイル名>)、矢印は部品の id でつなぎ、線の名前は矢印の label に書く（slides.md の slides-034）。frame の図は、組むときの警告（線が部品の上を通る、矢じりが 1 点に集まる、部品が一部だけ重なる）を 0 にする。形のキーで書けないものだけ raw に書き、返事に書く（slides-035）。
-- 手本と同じ型のページは、手本と同じ見た目（部品、文字の大きさ、並べ方、色）になるように書く。JSON の部品で書けないもの（frame の中に位置で置いても組めないもの）は、そのページを書ける範囲で書き、返事の「親に返すこと」に書く。
-- 手元の画像は、JSON のファイルからのパス（build/ の img/ など）か asset:<パス> で書く。
-- 構成案の例の仮の語（「〇〇」「TODO」など）は、そのまま写さずに中身に置き換える（写すと lint の要修正「置き換え忘れ」で止まる。中身が構成案から決まらないときは「親に返すこと」に書く）。
-- 「書き方の決め」を 1 行ずつ守る。ページをまたぐ数字・言い方は、構成案と書き方の決めにあるものを使う。
-- 各ページに出典の行（数字のあるページ）とノートを書く。
-- 書いたら <deck-build のフォルダ>/scripts/slides.py lint pages_<担当>.json <デッキの URL> を <資料のフォルダ>/build で回し（組まずに、手元で lint をかける。数秒。JSON の誤りは場所を付けて止まる）、要修正を 0 にする。指摘の後ろの（p06.json.body[1]）は、直す部品の場所。要確認と組むときの警告は 1 件ずつ見て直すか、残す理由を書く。「（見積もり）」の付いたものは、親が組んで画像で確かめるので、直せないときは理由だけ書く。
+## How to write
+- Write layout with row, stack, and grid, and write coordinates only inside a frame. Emphasize text with **bold** and ***red bold***, change the size of part of the text with {32:48}, link to another page with [name](#<page file name>), connect arrows by component id, and put the name of a line in the arrow's label (slides-034 in slides.md). In frame diagrams, bring the build warnings (a line passes over a component, arrowheads gather at one point, components partly overlap) to 0. Write in raw only what the shape keys cannot express, and mention it in your reply (slides-035).
+- Write pages of the same type as an example so they look the same as the example (components, text sizes, layout, colors). If something cannot be written with the JSON components (cannot be built even when placed by position inside a frame), write the page as far as you can and put it under 「親に返すこと」 in your reply.
+- Write local images as a path from the JSON file (such as img/ under build/) or as asset:<path>.
+- Do not copy placeholder words from the outline's examples (such as 「〇〇」 and 「TODO」) as they are; replace them with content (if you copy them, the lint stops with the `要修正` 「置き換え忘れ」. If the outline does not determine the content, put it under 「親に返すこと」).
+- Follow the 「書き方の決め」 section line by line. For numbers and wording that span pages, use what is in the outline and the 「書き方の決め」 section.
+- Write a source line (on pages with numbers) and notes on every page.
+- When done, run <deck-build folder>/scripts/slides.py lint pages_<owner>.json <deck URL> in <material folder>/build (it lints locally without building. A few seconds. JSON errors stop with their location) and bring `要修正` to 0. The (p06.json.body[1]) after a finding is the location of the component to fix. Check each `要確認` and build warning one by one, and either fix it or write why it stays. For findings marked 「（見積もり）」, the parent agent builds and confirms them on images, so if you cannot fix them, just write the reason.
 
-## 自分で決めないこと
-構成案の主張・数字・順序は変えない。ページを足す・消す・分けない。構成案と食い違う、決まりから決まらない、構成案に数字の出典がない、枠に収まらず削らないと入らない、のどれかに当たったら、そのページは構成案のとおりに書き、返事の「親に返すこと」に書く。
+## What not to decide yourself
+Do not change the outline's claims, numbers, or order. Do not add, delete, or split pages. If any of these applies — it conflicts with the outline, the rules do not decide it, the outline has no source for a number, or it does not fit in its frame without cutting — write that page as the outline says and put it under 「親に返すこと」 in your reply.
 
-## 返事
-- 書いた pages_<担当>.json のパスと枚数
-- lint の結果（残した要確認・警告と理由）
-- 親に返すこと: `p<ページ> | <何が決められないか> | <案>`（なければ「なし」）
-- JSON の部品で書けなかったページ（なければ「なし」）
+## Reply
+- The path of the pages_<owner>.json you wrote and the number of pages
+- The lint result (the `要確認` and warnings you left, with reasons)
+- 「親に返すこと」: `p<page> | <what cannot be decided> | <proposal>` (「なし」 if none)
+- Pages you could not write with the JSON components (「なし」 if none)
 ```

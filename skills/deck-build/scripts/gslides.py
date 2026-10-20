@@ -89,7 +89,7 @@ def built(pid):
 def cmd_check(src, *opts):
     """[gslides-001] 画像は、前に取ったときから変わったページだけを取る（テストの e2e。ページの objectId で見る。build が中身の変わったページだけを新しい ID で作る）。
     前に組んだあとに画面で直されていたら（組んだときの版と今の版が違う）、全ページを取る。--all で全ページ、--pages 3,5 でそのページだけ。
-    取ったページの番号・画像・そのページの lint と box_pad の指摘を changed.json に書く（親がページ担当の子に渡す。../SKILL.md の「結果の見方」）。"""
+    取ったページの番号・画像・そのページの lint と box_pad の指摘を changed.json に書く（親がページ担当の子に渡す。../SKILL.md の「Reading the results」）。"""
     pid = file_id(src)
     p = request("GET", f"{SLIDES}/{pid}")
     gapi.CLOCK.lap("GET")

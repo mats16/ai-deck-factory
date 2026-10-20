@@ -978,7 +978,7 @@ def lint_gdoc(doc, r, template=False, font=FONT, mono=MONO_DEFAULT):
 
 def workspace_checks(kind, data, r):
     """ワークスペースの点検。rules/deck-build/checks.py の slides(p, r)・doc(doc, r) を呼ぶ（修正の指示から育てる、そのワークスペースだけの点検。
-    deck-practices/rules.md の「決まりの層」）。足された指摘のうち、checks.py の HARD にある名前は要修正、ほかは要確認。"""
+    deck-practices/rules.md の「Rule layers」）。足された指摘のうち、checks.py の HARD にある名前は要修正、ほかは要確認。"""
     import importlib.util, gapi
     try:
         path = gapi.factory_path().parent / "rules" / "deck-build" / "checks.py"
