@@ -70,7 +70,7 @@ cd <ワークスペース> && claude -p ok --model haiku --max-turns 1 --output-
 /ai-deck-factory:factory-doctor
 ```
 
-doctor の要修正が 0 になれば使える。ワークスペースの `rules/<スキル>/<ファイル>` は、プラグインの同じファイルを Read で開くと hook が続けて出す（2026-10-12 に `rules/deck-practices/visual.md` で確かめた。サブフォルダで開いた会話では出ない）。スキルは `ai-deck-factory:` を付けた名前で呼ぶ（`/ai-deck-factory:deck-build` など）。
+doctor の要修正が 0 になれば使える。ワークスペースの `rules/<スキル>/<ファイル>` は、プラグインの同じファイルを Read で開くと hook が続けて出す（2026-10-12 に `rules/deck-practices/visual.md` で確かめた。サブフォルダで開いた会話では出ない）。`/ai-deck-factory:<スキル>` で呼んだときは、道具を通らずに SKILL.md が入るので、UserPromptSubmit の hook が `rules/<スキル>/SKILL.md` を出す（2026-10-20 に確かめた）。スキルは `ai-deck-factory:` を付けた名前で呼ぶ（`/ai-deck-factory:deck-build` など）。
 
 ## 注意
 

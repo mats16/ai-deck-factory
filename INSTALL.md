@@ -6,15 +6,15 @@ README の「会話で入れる」のプロンプトを貼られたエージェ�
 
 ## 決まり
 
-- **この会話には、まだスキルがない。** 入れたスキルは次の会話から読み込まれる。この会話では `/ai-deck-factory:factory-init` や `/skill:factory-init` を呼ばずに、入れた場所の `SKILL.md` を開いて従う（4）。
-- **ワークスペースだけに入れる。** `~/.claude/settings.json`・`~/.pi/agent/settings.json` は変えない。ほかのフォルダの会話にはスキルが出ない。
+- **この会話には、まだスキルがない。** 入れたスキルは次の会話から読み込まれる。この会話では `/ai-deck-factory:factory-init`・`$ai-deck-factory:factory-init`・`/skill:factory-init` を呼ばずに、入れた場所の `SKILL.md` を開いて従う（4）。
+- **ワークスペースだけに入れる。** `~/.claude/settings.json`・`~/.pi/agent/settings.json` は変えない。Codex は入れる範囲がないので、`~/.codex/config.toml` で切ってワークスペースの `.codex/config.toml` で入れる（3）。ほかのフォルダの会話にはスキルが出ない。
 - **ユーザーが決めることは聞いてから進める。** 場所、ツールを入れるか、`factory.toml` の値。ブラウザが開くログイン（`gcloud auth application-default login`）は、ユーザーに回してもらう。
 - **あるファイルは上書きしない。** factory-init の `init.py` も上書きしない。
 - 手順の `<ワークスペース>` と `<プラグイン>` は、1 と 3 で決まったパスに置き換える。スクリプトは今いるフォルダから `factory.toml` を探すので、ワークスペースのコマンドは `cd <ワークスペース> &&` を付けて回す。
 
 ## 1. 聞く
 
-自分が Claude Code か pi かは聞かない（自分で分かる）。次の 4 つを 1 回でまとめて聞く（Claude Code なら AskUserQuestion）。
+自分が Claude Code・Codex・pi のどれかは聞かない（自分で分かる）。次の 4 つを 1 回でまとめて聞く（Claude Code なら AskUserQuestion）。
 
 1. **ワークスペースにするフォルダ。** 資料（`Customers/`・`Internal/`・`Research/`）と `factory.toml` を置く。候補に、今の会話のフォルダと `~/Documents` を出す。なければ作る。すでに `factory.toml` か `AGENTS.md` があれば、足りないものだけ置くことを伝える。
 2. **全社の共有テーマのフォルダ。** 会社でスライドのテーマ（テンプレート）を配っていれば、その Google Drive のフォルダの URL。なければ「ない」。プロンプトに URL が書いてあれば聞かずに使う。4 で `factory.toml` の `[drive] shared_themes` に書く。
@@ -49,6 +49,22 @@ claude plugin list --json | python3 -c "import json,sys; [print(p.get('readFromF
 - 1 つめで `ai-deck-factory` が出たら、`add` は飛ばす（名前は 1 つしか持てない。足すと前のものとぶつかる）。出た入れ元（`path`・`url`・`repo`）が、ここで入れるもの（GitHub）と違うときは、そのことと、ほかのワークスペースもその入れ元を読んでいることを伝え、そのまま使うかをユーザーに聞く。入れ元を勝手に替えない。
 - 最後に出たパスが `<プラグイン>`。手元のパスから入れたなら checkout（`readFromFolder`）、GitHub から入れたなら写し（`installPath`）。
 
+**Codex**
+
+```sh
+cd <ワークスペース>
+codex plugin marketplace list --json | python3 -c "import json,sys; [print(m) for m in json.load(sys.stdin)['marketplaces'] if m['name']=='ai-deck-factory']"   # もうあるか
+codex plugin marketplace add mats16/ai-deck-factory
+codex plugin add ai-deck-factory@ai-deck-factory --json | python3 -c "import json,sys; print(json.load(sys.stdin)['installedPath'])"
+python3 -c 'import os,pathlib; p=pathlib.Path(os.environ.get("CODEX_HOME","~/.codex")).expanduser()/"config.toml"; k="[plugins.\"ai-deck-factory@ai-deck-factory\"]\nenabled = true"; s=p.read_text(); assert k in s, "見つからない"; p.write_text(s.replace(k, k[:-4]+"false"))'
+mkdir -p .codex && { grep -qs 'ai-deck-factory@ai-deck-factory' .codex/config.toml || printf '[plugins."ai-deck-factory@ai-deck-factory"]\nenabled = true\n' >> .codex/config.toml; }
+```
+
+- 1 つめで出たときは、Claude Code と同じく `marketplace add` を飛ばし、入れ元（`marketplaceSource`）が違えばユーザーに聞く。
+- 3 つめに出たパスが `<プラグイン>`（`~/.codex/plugins/cache/` の写し）。
+- 4 つめでユーザーの設定の `enabled` を切り、5 つめでワークスペースだけで入れる。4 つめが止まったら、`~/.codex/config.toml` の `[plugins."ai-deck-factory@ai-deck-factory"]` を見せ、`enabled = false` にしてもらう（切らないと、どのフォルダの会話にもスキルが出る）。5 つめは、ワークスペースの `.codex/config.toml` にもう `ai-deck-factory@ai-deck-factory` があれば足さないので、そのときは中身を見て `enabled = true` かを確かめる。ワークスペースの `.codex/config.toml` は、そのフォルダを信頼したときだけ読まれる。
+- hook は、次に対話の Codex をワークスペースで開いたとき、`/hooks` で `ai-deck-factory` の 2 つを信頼してもらう（6 で伝える。信頼するまで `rules/` が出ない。`<プラグイン>/docs/codex-plugin.md`）。
+
 **pi**
 
 ```sh
@@ -58,7 +74,7 @@ pi install -l git:github.com/mats16/ai-deck-factory
 
 `<プラグイン>` は `<ワークスペース>/.pi/git/github.com/mats16/ai-deck-factory`。
 
-どちらも `<プラグイン>/skills/factory-init/SKILL.md` があることを確かめる。
+どれも `<プラグイン>/skills/factory-init/SKILL.md` があることを確かめる。
 
 ## 4. ワークスペースを作る
 
@@ -75,7 +91,7 @@ pi install -l git:github.com/mats16/ai-deck-factory
    - 人がいなくても、権限の確認で止まらない。
 
    時刻は手元の時間帯で書く（UTC が既定の道具もある）。2 つ以上あれば、この会話を動かしているアプリのものにする（T3 Code の中なら T3 Code）。よく使うものの値と注意は schedule.md にある（T3 Code の `schedule_task` は 1、Claude Code Desktop は 2、Omnigent の `sys_scheduled_task_create` は 4）。schedule.md にない道具でも、上を満たせば使い、登録した値を 6 で返す。
-2. **なければ、手で入れてもらう。** Claude Code の CLI と pi には、会話を閉じても残るスケジューラーがない。launchd（macOS）か cron で `run.sh` を回す設定（schedule.md の 5）を、`<ワークスペース>`・run.sh のパス・時刻・引数（Claude Code なら `claude`、pi なら `pi`）を埋めて示し、入れる・すぐ回す・止めるのコマンドを添える。`~/Library/LaunchAgents/` と crontab は、エージェントが書かない（会話の外で毎日動くものを足すので、ユーザーが中身を見て入れる）。Claude Code Desktop を使っているなら、その Routines で作ってもよいことも添える（schedule.md の 2）。
+2. **なければ、手で入れてもらう。** Claude Code・Codex の CLI と pi には、会話を閉じても残るスケジューラーがない。launchd（macOS）か cron で `run.sh` を回す設定（schedule.md の 5）を、`<ワークスペース>`・run.sh のパス・時刻・引数（Claude Code なら `claude`、Codex なら `codex`、pi なら `pi`）を埋めて示し、入れる・すぐ回す・止めるのコマンドを添える。`~/Library/LaunchAgents/` と crontab は、エージェントが書かない（会話の外で毎日動くものを足すので、ユーザーが中身を見て入れる）。Claude Code Desktop を使っているなら、その Routines で作ってもよいことも添える（schedule.md の 2）。
 
 登録したら、すぐ回して確かめる（道具の「すぐ回す」、launchd は `kickstart`）。権限の確認が出たら、ユーザーに許してもらう（次からは聞かれないようにする）。初めての回は 7 日前からの会話を見る。この回から 12 時間以内の次の回は、重ねないために止まる（dreaming の SKILL.md の 0）ので、6 で伝える。
 
@@ -88,10 +104,11 @@ pi install -l git:github.com/mats16/ai-deck-factory
 - doctor の結果。残った要確認と、ユーザーが回すもの。
 - 次からの開き方。**ワークスペースの直下で開く**（サブフォルダで開くと、プラグインのスキルも hook も読み込まれない）。
   - Claude Code: `cd <ワークスペース> && claude`。スキルは `/ai-deck-factory:deck-build` のように呼ぶ。
+  - Codex: `cd <ワークスペース> && codex`。初めてはフォルダを信頼し、`/hooks` で `ai-deck-factory` の hook を信頼する。スキルは `$ai-deck-factory:deck-build` のように呼ぶ。
   - pi: `cd <ワークスペース> && pi`。初めては `/trust` で信頼を保存する（保存しないと、パッケージのスキルが出ない。dreaming の定期の回も読めない）。スキルは `/skill:deck-build` のように呼ぶ。
 - 最初の資料は「〇〇向けの提案のスライドを作って」のように頼めばよい（スキル `deck-practices` から始まる）。
 
 ## うまくいかないとき
 
 - **同じ名前のスキルがある。** ワークスペースの `.agents/skills/`・`.claude/skills/` に deck-build などがあると、二重に読まれる（pi ではプラグインのものが負ける）。doctor の「スキルの重なり」に出るので、どちらを使うかをユーザーに聞く。
-- **入れる範囲、確かめ方、外し方。** Claude Code は `<プラグイン>/docs/claude-code-plugin.md`、pi は `<プラグイン>/docs/pi.md`。
+- **入れる範囲、確かめ方、外し方。** Claude Code は `<プラグイン>/docs/claude-code-plugin.md`、Codex は `<プラグイン>/docs/codex-plugin.md`、pi は `<プラグイン>/docs/pi.md`。

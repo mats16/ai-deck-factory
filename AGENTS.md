@@ -1,12 +1,12 @@
 # AI Deck Factory を直すときの決まり
 
-このリポジトリは、AI Deck Factory のプラグイン（Claude Code）とパッケージ（pi）の元。中身・入れ方・ワークスペースの作りは [README.md](README.md)、設定のガイドは `docs/`。
+このリポジトリは、AI Deck Factory のプラグイン（Claude Code・Codex）とパッケージ（pi）の元。中身・入れ方・ワークスペースの作りは [README.md](README.md)、設定のガイドは `docs/`。
 
 **`sandbox/` の下で開いた会話には、このファイルは効かない。** そこは利用者として動作を見る検証用のワークスペースで、このファイルは親のフォルダから読まれているだけ。`sandbox/` の `AGENTS.md`（factory-init の雛形）に従い、プラグインの利用者として振る舞う。
 
 ## 直すときの決まり
 
-- **Claude Code と pi で同じソースを使う。** `skills/` は両方が読む。`rules/` を続けて出す仕組みは、`hooks/rules_overlay.py` を Claude Code（`hooks/hooks.json`）と pi（`extensions/rules.ts`）の両方から呼んでいる。片方だけに効く直しにしない。
+- **Claude Code・Codex・pi で同じソースを使う。** `skills/` はどれも読む。Codex は Claude Code の形（`.claude-plugin/`・`hooks/hooks.json`）をそのまま読むので、Codex のための別のファイルは置かない。`rules/` を続けて出す仕組みは、`hooks/rules_overlay.py` を Claude Code と Codex（`hooks/hooks.json`）と pi（`extensions/rules.ts`）から呼んでいる。どれか 1 つだけに効く直しにしない。
 - **スクリプトは標準ライブラリだけで書く。** Pillow などが要るものだけ、先頭の `# /// script` に依存を書いて `uv run` で回す。Python は 3.11 以上で動かす（README の「入れ方」）。
 - **直したスクリプトは `--selftest` を通す。** 回し方は下の「sandbox で確かめる」の 2。見た目に効く部品（`slides.py`・`template.py`・`docs.py`）を直したら、テンプレートの見本を組み直して画像で見る（`deck-build/slides.md`・`doc-build/SKILL.md`）。JSON のページの形と部品を直したら、sandbox で `python3 ../tests/render/run.py --judge` を回し、`skills/deck-build/samples/json/` の見本を全部組んで、全ページの画像をページごとの見るところ（`tests/render/expect.json`）と比べる（形にキーを足したら見本にも足す。selftest が見る。見本のページを足したら見るところも足す）。部品や書き方の説明を直したら、`docs/fixtures/` の依頼文を会話を持たない子に渡し、説明だけで正しい部品を選べるかを見る（[docs/development.md](docs/development.md) の「依頼文で試す」）。
 - **スキルを足す・外す・名前を変えるときは、数と名前の出てくるところをそろえる。** README の表、`docs/` の「12 個」、`deck-practices` などから指しているパス。
@@ -72,7 +72,17 @@ worktree の直下に検証用のワークスペース `sandbox/` を置き、wo
 
    worktree から読まれた 12 個のスキルが出る。足りないときは、同じ名前のスキルがほかにあって負けている（パッケージのものはいちばん優先が低い）か、trust を保存していない（[docs/pi.md](docs/pi.md)）。
 
-5. **`rules/` が続けて出るかを見る。** `sandbox/rules/deck-practices/visual.md` に目印の 1 行を書き、会話で `../skills/deck-practices/visual.md` を開かせる。目印が続けて差し込まれれば、hook（Claude Code）と拡張（pi）が効いている。hook だけなら、会話を開かずに確かめられる。
+5. **Codex で開く。** `sandbox/` で、本番とぶつからないように `CODEX_HOME` を分けて worktree を入れる。Codex は写しを読むので、直したら `codex plugin add` を回し直す。
+
+   ```sh
+   export CODEX_HOME=/tmp/adf-codex-$(basename "$(dirname "$PWD")") && mkdir -p $CODEX_HOME   # 会話を回すなら、~/.codex の auth.json か config.toml のモデルの設定を写す
+   codex plugin marketplace add .. && codex plugin add ai-deck-factory@ai-deck-factory
+   codex debug prompt-input ok | grep -oE 'ai-deck-factory:[a-z-]+: ' | sort -u   # 12 個が出る（モデルは呼ばない）
+   ```
+
+   hook は、対話の Codex の `/hooks` で信頼するまで動かない（`codex exec` で試すだけなら `--dangerously-bypass-hook-trust`）。詳しいことは [docs/development.md](docs/development.md) の「Codex」。
+
+6. **`rules/` が続けて出るかを見る。** `sandbox/rules/deck-practices/visual.md` に目印の 1 行を書き、会話で `../skills/deck-practices/visual.md` を開かせる。目印が続けて差し込まれれば、hook（Claude Code・Codex）と拡張（pi）が効いている。`$ai-deck-factory:<スキル>`（Codex）・`/ai-deck-factory:<スキル>`（Claude Code）で呼んだときは、`rules/<スキル>/SKILL.md` が出る（UserPromptSubmit）。hook だけなら、会話を開かずに確かめられる。
 
    ```sh
    mkdir -p rules/deck-practices && echo "目印" > rules/deck-practices/visual.md
@@ -80,12 +90,12 @@ worktree の直下に検証用のワークスペース `sandbox/` を置き、wo
      | python3 ../hooks/rules_overlay.py claude
    ```
 
-6. **直したところを、資料を作って確かめる。** `sandbox/` の会話で、直したスキルを使う場面（`/ai-deck-factory:deck-build`、pi なら `/skill:deck-build` など）を通し、lint と Google が描いたページの画像で見る。`factory-kaizen` だけは、この worktree ではなく GitHub の `main` を clone するので、ここでは試せない。
+7. **直したところを、資料を作って確かめる。** `sandbox/` の会話で、直したスキルを使う場面（`/ai-deck-factory:deck-build`、Codex なら `$ai-deck-factory:deck-build`、pi なら `/skill:deck-build` など）を通し、lint と Google が描いたページの画像で見る。`factory-kaizen` だけは、この worktree ではなく GitHub の `main` を clone するので、ここでは試せない。
 
-7. **消す。** 手順 1 から `sandbox/` の中にいるので、worktree の直下に戻ってから消す（worktree ごと消すなら要らない）。
+8. **消す。** 手順 1 から `sandbox/` の中にいるので、worktree の直下に戻ってから消す（worktree ごと消すなら要らない）。
 
    ```sh
    cd .. && rm -rf sandbox
    ```
 
-   Google Drive に組んだものは、検証用のフォルダごと消す。
+   Google Drive に組んだものは、検証用のフォルダごと消す。Codex で試したなら `/tmp/adf-codex-<worktree の名前>` も消す。
