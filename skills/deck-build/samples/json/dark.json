@@ -4,7 +4,7 @@
   {"type": "text", "text": "塗りのない文字は、地が濃ければ白になる。カードの番号の円は、地によらず赤"},
   {"type": "row", "items": [
     {"type": "card", "num": 1, "head": "白いカード", "text": "番号の円は赤"},
-    {"type": "card", "num": 10, "head": "濃紺のカード", "text": "文字は白、番号の円は赤", "fill": "NAVY_BLOCK"},
+    {"type": "card", "num": 10, "shape": "round_rectangle", "head": "濃紺のカード", "text": "文字は白、番号の角丸は赤", "fill": "NAVY_BLOCK"},
     {"type": "card", "head": "印のない濃いカード", "text": "見出しも本文も白", "fill": "NAVY_BLOCK"}]},
   {"type": "row", "widths": [2, 1], "items": [
     {"type": "grid", "cols": 2, "items": [
@@ -15,5 +15,6 @@
     {"type": "row", "items": [
       {"type": "num", "n": 10, "size": "small"},
       {"type": "num", "n": 12, "size": "medium"},
-      {"type": "num", "n": 99, "size": "large"}]}]}],
- "note": "濃い地のページ。塗りのない文字の色、濃い地のカード、cols で折り返す grid、2 字の番号の 3 つの大きさ。foot を false にすると、フッターとページ番号を置かない。"}
+      {"type": "num", "n": 99, "size": "large"},
+      {"type": "num", "n": "01", "size": "large", "shape": "round_rectangle"}]}]}],
+ "note": "濃い地のページ。塗りのない文字の色、濃い地のカード、cols で折り返す grid、2 字の番号の 3 つの大きさと角丸の番号。foot を false にすると、フッターとページ番号を置かない。"}

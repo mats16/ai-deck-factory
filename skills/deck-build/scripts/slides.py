@@ -79,6 +79,7 @@ COPYRIGHT_PT = 9  # 著作権表示と、高さをそろえるページ番号だ
 BAND_PAD_X, BAND_PAD_Y = 0.25, 0.2
 # [slides_py-001] 正円の番号の直径（in）と数字（pt）。medium・large は数字の高さが円の 4 割ほど。small は周りの 11pt の文字に合わせて 11pt（11pt の太字なので、赤に白の 3.62:1 で届く。visual.md の 3 の visual-039）
 NUM = {"small": (0.3, 11), "medium": (0.36, 14), "large": (0.48, 18)}  # 図の中の印／カードと手順（既定）／大きな段
+NUM_SHAPES = ("ellipse", "round_rectangle")  # 番号の形。角丸は高さを円の直径にし、幅を数字に合わせる（num_w）
 # [slides_py-002] 赤（RED）の線の太さ（pt）。強調の囲みは実線でも点線でも 2pt（強調のための線なので、細くしない）。ほかの枠線は 0.75pt
 EMPH_PT = 2
 
@@ -174,6 +175,12 @@ def em_width(s, mono=False, bold=False):
     """文字の幅の見積もり（em）。全角と、矢印・丸数字・× などの記号（U+2100 から上と ×÷±…※†‡）は 1、英数字と記号は TEXT_EM（bold なら TEXT_BOLD_EM、mono なら MONO_EM）、ほかは 0.57。"""
     em = TEXT_BOLD_EM if bold else TEXT_EM
     return sum(1.0 if ord(c) >= 0x2100 or c in "×÷±…※†‡" else MONO_EM if mono and c in em else em.get(c, 0.57) for c in s)
+
+
+def num_w(n, size="medium", shape="ellipse"):
+    """番号の見える幅（in）。円は直径。角丸は、直径と、太字の数字の幅に直径の半分（左右に 1/4 ずつ）を足した幅の広いほう（1 字なら正方形）。"""
+    dia, pt_ = NUM[size]
+    return dia if shape == "ellipse" else max(dia, em_width(str(n), bold=True) * pt_ / 72 + dia / 2)
 
 
 def all_bold(parts, bold=False):
@@ -635,7 +642,7 @@ class Deck:
 
     def text(self, sid, x, y, w, h, parts, size=11, color=TEXT, bold=False, align="START", valign="TOP",
              spacing=None, fill=None, line=None, bullets=False, kind=None, fit=True, radius=CORNER_RADIUS, edge=False, pad=None, gap=0,
-             dash=False, weight=None, mono=False):
+             dash=False, weight=None, mono=False, wide=False):
         """parts は文字列か、(文字列, {"bold":…, "color":…, "size":…, "link":…}) の並び。改行は \\n（段落を分ける）、\\v は段落の中の改行。
         link は URL か、ページ番号（int。Appendix の出典のページなど）。リンクの文字は周りの色のまま下線を付ける。
         spacing（行間、%）を省くと、2 行以上の見込みなら 125、1 行なら 100（visual.md の 2）。基準（size）の 2 倍以上の文字の段落
@@ -645,7 +652,8 @@ class Deck:
         枠の内側の余白は 0.1 in で変えられず 1 字分に足りないので、文字の枠を内に縮める（visual.md の 4。lint が見る）。中央寄せには効かない。
         gap（pt）は段落の間の空き（最後の段落には付けない。付けると上下の中央が上にずれる）。
         改行を含む part は、その行が枠に収まるかを見て、収まらない見込みなら警告する（fit=False で見ない）。
-        mono=True で、英数字を等幅の MONO にする（コードの箱・コマンドだけの札。visual.md の 2）。"""
+        mono=True で、英数字を等幅の MONO にする（コードの箱・コマンドだけの札。visual.md の 2）。
+        wide=True で、楕円でない図形も、楕円と同じく文字の枠を図形より広げる（角丸の番号。Deck.num）。"""
         parts = [parts] if isinstance(parts, str) else parts
         full = "".join(p if isinstance(p, str) else p[0] for p in parts)
         weight = weight or (EMPH_PT if line == RED else 0.75)  # box と同じ
@@ -661,7 +669,8 @@ class Deck:
         # 均等に振って中央に置く。ただし 2 字以上は幅が足りないと折り返す（「10」は文字の場所 0.20 in で折り返し、0.22 in で 1 行）。数字の幅の見積もりちょうどでは
         # 書体で折り返す（medium の「10」は 0.218 in。#51）ので、字数によらず、横を円か数字の幅の広いほうに左右 0.05 in ずつ足した幅まで広げる。
         # 番号でない楕円の文字（JSON の shape: ellipse）も同じ枠になり、枠が楕円より 0.1 in 広い
-        ring = (x, y, w, h) if kind == "ELLIPSE" else None
+        # 角丸の番号（wide）も、図形の内側の余白で 2 桁が折り返すので同じ枠にする
+        ring = (x, y, w, h) if kind == "ELLIPSE" or wide else None
         if ring:
             fw = max(w, em_width(full) * size / 72 + 2 * INSET) + 0.1
             x, w, spacing = x - (fw - w) / 2, fw, spacing or 100  # 行の見込みで 125 にしない（1 行で中央に置く）
@@ -681,7 +690,9 @@ class Deck:
                     self.warn(f"折り返した最終行が 2 字以下の見込み「{ln}」（{n} 行。言い換えか \\v で行を決める）")
         if spacing is None:
             spacing = 125 if est_lines(full.strip("\n"), avail, size, mono, all_bold(parts, bold)) > 1 else 100
-        if ring:
+        if ring and kind != "ELLIPSE":  # 角丸は box が背景を組む。負の inner で文字の枠を背景より広げる
+            e = self.box(sid, *ring, fill, line, kind, radius, -(w - ring[2]) / 2, dash, weight)
+        elif ring:
             bg = self._shape(sid, *ring, fill, line, kind, dash=dash, weight=weight)  # 円を先に置く（文字の枠より下）
             e = self._shape(sid, x, y, w, h)
             self.round_groups.append((bg, e, self.oid()))
@@ -739,14 +750,17 @@ class Deck:
                     self.reqs.append(req)
             i += u16(s)
 
-    def num(self, sid, n, cx, cy, size="medium", fill=RED):
-        """正円の番号。(cx, cy) は円の中心（大きさを替えても位置が動かず、横に並べる見出しと中心をそろえやすい）。size は NUM の small・medium・large。
-        数字は、RED の塗りなら ON_RED、ほかの塗りなら WHITE。"""
+    def num(self, sid, n, cx, cy, size="medium", fill=RED, shape="ellipse"):
+        """番号。(cx, cy) は図形の中心（大きさを替えても位置が動かず、横に並べる見出しと中心をそろえやすい）。size は NUM の small・medium・large。
+        shape は NUM_SHAPES の ellipse（正円）か round_rectangle（高さは円の直径、幅は num_w）。数字は、RED の塗りなら ON_RED、ほかの塗りなら WHITE。"""
         if size not in NUM:
             raise ValueError(f"番号の大きさ {size!r} は書けない（{'・'.join(NUM)}）")
+        if shape not in NUM_SHAPES:
+            raise ValueError(f"番号の形 {shape!r} は書けない（{'・'.join(NUM_SHAPES)}）")
         dia, pt_ = NUM[size]
-        return self.text(sid, cx - dia / 2, cy - dia / 2, dia, dia, str(n), size=pt_, color=ON_RED if fill == RED else WHITE, bold=True, align="CENTER", valign="MIDDLE",
-                         fill=fill, kind="ELLIPSE")
+        w = num_w(n, size, shape)
+        return self.text(sid, cx - w / 2, cy - dia / 2, w, dia, str(n), size=pt_, color=ON_RED if fill == RED else WHITE, bold=True, align="CENTER", valign="MIDDLE",
+                         fill=fill, kind=SHAPES[shape], wide=True)
 
     def label(self, sid, v, x, y, w, h, fill=PANEL, color=HEAD, size=11, bold=True, align="CENTER", radius=CORNER_RADIUS, pad=None, mono=False):
         """塗りの箱と、その中の短い言葉（札・日付・工程の名前）。図形と文字を 1 つにする（slides.md の 4）。
@@ -1041,15 +1055,15 @@ SPEC_EL = {  # type → (要るキー, 書けるキー)
     "text": ({"text": "md"}, {**_TEXT, **_BOX, "valign": tuple(VALIGN)}),
     "label": ({"text": "md"}, {k: _TEXT[k] for k in ("size", "color", "bold", "align", "mono", "pad")} | {"fill": "c", "radius": "n"}),
     "card": ({}, {"head": "s", "text": "md", "items": "items", "fill": "c", "line": "c", "step": "p",
-                  "icon": "s", "num": "ns", "image": "s", "align": ("left", "center"), "valign": ("top", "middle")}),  # icon・num・image は印（どれか 1 つ）
+                  "icon": "s", "num": "ns", "image": "s", "shape": NUM_SHAPES, "align": ("left", "center"), "valign": ("top", "middle")}),  # icon・num・image は印（どれか 1 つ）。shape は num の形
     "stat": ({"value": "s"}, {"unit": "s", "label": "s", "sub": "s", "size": "p", "color": "c", "fill": "c", "line": "c", "align": ("left", "center")}),  # 数字の強調
     "code": ({"text": "s"}, {"hot": "ints", "size": "p"}),
     "table": ({"rows": "rows"}, {"widths": "nums", "header": "hn", "first_col": "b", "zebra": "b", "align": "aligns", "valign": tuple(VALIGN), "borders": TABLE_BORDERS,
                                  "mono_cols": "ints", "size": "p", "row_h": "nh", "fills": "fills"}),  # セルは記法つきの文字か TABLE_CELL
     "image": ({"src": "s"}, {"alt": "s"}),
     "icon": ({"name": "s"}, {"size": "p", "color": "c"}),
-    "num": ({"n": "ns"}, {"size": tuple(NUM), "fill": "c"}),
-    "list": ({"items": "litems"}, {"icon": "s", "start": "pi", "size": tuple(NUM), "gap": "n", "color": "c"}),  # 印（番号かアイコン）と文字の並び。印の中心を項目の 1 行目にそろえる
+    "num": ({"n": "ns"}, {"size": tuple(NUM), "fill": "c", "shape": NUM_SHAPES}),
+    "list": ({"items": "litems"}, {"icon": "s", "start": "pi", "digits": "pi", "size": tuple(NUM), "shape": NUM_SHAPES, "gap": "n", "color": "c"}),  # 印（番号かアイコン）と文字の並び。印の中心を項目の 1 行目にそろえる。digits は整数の番号を 0 で埋める桁、shape は番号の形
     "box": ({}, _BOX),
     "arrow": ({"from": "pt", "to": "pt"}, {"color": "c", "head": "b", "dash": "b", "weight": "p", "route": ("straight", "bent"), "label": "md",
                          "label_side": ("top", "bottom", "left", "right"), "offset": "f"}),  # label は線の札、label_side はその置き場所、offset は線を横（縦）にずらす in
@@ -1069,6 +1083,7 @@ GANTT_BAR = ({"from": "pi", "to": "pi"}, {"text": "s", "status": tuple(GANTT_STA
 GANTT_MARK = ({"at": "p", "text": "s"}, {})  # 節目: 位置（today と同じ。3 は 3 列目の左端、3.5 は中ほど）、言葉（11pt の 1 行）
 BARS_LINE = ({"values": "bvals"}, {"unit": "s", "label": "s"})  # 棒の折れ線: 棒ごとの数（items の順。mermaid の xychart の line [..]）、単位、何の数か
 BARS_THRESHOLD = ({"value": "n"}, {"label": "s"})  # 棒の直線（目標・上限など）: 棒と同じ目盛りの数、何の線か
+OUTLINE = ("text", "box")  # shape が部品そのものの形（num・list・card の shape は番号の形）
 NO_SIZE = ("icon", "num", "arrow")  # w・h を書かない（大きさは size、矢印は両端）
 CONTAINERS = ("row", "stack", "grid", "frame")  # 並べ方の箱（中の部品を置くだけで、Deck を呼ばない）
 NO_ESC = (*CONTAINERS, "list")  # raw を書けない（並べ方の箱は Deck を呼ばない。list は印と文字で呼ぶメソッドが分かれる）
@@ -1088,7 +1103,7 @@ SPEC_THEME = ({}, {"description": "s", "font": "s", "mono": "s", "copyright": "s
 # 同じ名前で同じ意味のもの（数え始めや単位の違う mono_cols・hot・fills・widths と、stat の size・color〔数字の大きさと色〕は入れない。2026-10-16 のレビュー）
 _SAME = {"text": "size color bold align valign mono fill line dash weight radius pad spacing", "label": "size color fill bold align mono pad radius",
          "card": "head fill line step", "code": "size", "table": "size header first_col zebra align valign borders row_h", "image": "alt", "icon": "size color",
-         "num": "size fill", "box": "fill line dash weight radius", "arrow": "color head dash weight", "stat": "fill line align"}
+         "num": "size fill shape", "box": "fill line dash weight radius", "arrow": "color head dash weight", "stat": "fill line align"}
 SPEC_PROMOTED = {(t, k): k for t, ks in _SAME.items() for k in ks.split()} | {("text", "gap"): "para_gap", ("text", "kind"): "shape", ("box", "kind"): "shape"}
 MD = re.compile(r"\\([\\*`\[\]<{}])|\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\{(\d+(?:\.\d+)?):(.+?)\}|`([^`]+)`|\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)|<br>")  # URL の中の 1 段の () も読む
 
@@ -1382,6 +1397,8 @@ class SpecPage:
             self.gantt_check(e, loc)
         if kind == "bars":
             self.bars_check(e, loc)
+        if kind == "card" and "shape" in e and "num" not in e:  # カードの shape は番号の形（カードの箱の形ではない）
+            sys.exit(f"{loc}（card）.shape: 番号（num）の形なので、num を書いたカードで使う")
         if kind == "list":
             for i, it in enumerate(e["items"]):
                 l = f"{loc}（list）.items[{i}]"
@@ -1673,7 +1690,7 @@ class SpecPage:
             size = e.get("size", 11)
             mono, bold = e.get("mono", False), e.get("bold", e["type"] == "label")  # 札（Deck.label）は既定で太字
             return max(em_width(ln, mono, bold) for ln in spec_plain(spec_md(e["text"])).replace("\v", "\n").split("\n")) * size / 72 + 2 * size / 72 + 0.06
-        return e.get("w") or (NUM[e.get("size", "medium")][0] if e["type"] == "num" else e.get("size", 0.5) if e["type"] == "icon" else None)
+        return e.get("w") or (num_w(e["n"], e.get("size", "medium"), e.get("shape", "ellipse")) if e["type"] == "num" else e.get("size", 0.5) if e["type"] == "icon" else None)
 
     def slot_w(self, e, w):
         """縦に並べるときの幅。書いた幅か決まった幅、なければ並びの幅（超えない）。"""
@@ -1746,7 +1763,9 @@ class SpecPage:
             if src.startswith("http") or not (r := image_ratio(src)):
                 sys.exit(f"{loc}（image）: 画像の縦横の比が分からないので h を書く（URL の画像と、読めない形式の手元の画像）")
             return w / r
-        if kind in ("icon", "num"):
+        if kind == "num":  # 角丸の番号は幅と高さが違う
+            return NUM[e.get("size", "medium")][0]
+        if kind == "icon":
             return self.fixed_w(e)
         if kind == "list":
             rows = self.list_rows(e, w, loc)
@@ -1763,15 +1782,15 @@ class SpecPage:
     def list_rows(self, e, w, loc):
         """list の項目ごとの (場所, 印の種類, 印, 見出しの parts, 本文の parts, 見出しの高さ, 本文の高さ, 文字の上端, 印の上端, 項目の高さ)。上端は項目の上端から。
         印の中心を 1 行目（見出しがあればその行）の中心にそろえる。2 行目からは文字の左端にそろえて下げ、印は 1 行目の横に残る。
-        印を書かない項目は、list の icon か、start から項目の順で数えた番号。"""
+        印は list_marks、文字の左端は印の列（list_mark_w）の右。"""
         d, emph = NUM[e.get("size", "medium")][0], spec_color(ON_FILL.get(self.bg, ("TEXT", "RED_TEXT"))[1])
-        tw, out = w - d - MARK_GAP, []
+        marks = self.list_marks(e)
+        mw = self.list_mark_w(e, marks)
+        tw, out = w - mw - MARK_GAP, []
         if tw <= 0.3:
-            sys.exit(f"{loc}（list）: 幅が足りない（{w:.2f} in に、印 {d:.2f} in と間 {MARK_GAP} in）")
-        for i, it in enumerate(e["items"]):
+            sys.exit(f"{loc}（list）: 幅が足りない（{w:.2f} in に、印 {mw:.2f} in と間 {MARK_GAP} in）")
+        for i, (it, (kind, v)) in enumerate(zip(e["items"], marks)):
             it, l = {"text": it} if isinstance(it, str) else it, f"{loc}.items[{i}]"
-            m = self.mark(it)  # 印が 2 つ以上の項目は check が止めている
-            kind, v = (m, it[m]) if m else ("icon", e["icon"]) if "icon" in e else ("num", e.get("start", 1) + i)
             head = [(it["head"], {"bold": True, "size": 12})] if it.get("head", "").strip() else []  # 空白だけの見出しは置かない（check と同じ見方）
             body = spec_md(it.get("text", ""), emph, l)
             body = body if spec_plain(body).strip() else []  # 記法を外して空白だけの本文は置かない（check と同じ見方）
@@ -1782,20 +1801,38 @@ class SpecPage:
             out.append((l, kind, v, head, body, hh, bh, ty, my, max(my + d, ty + hh + (HEAD_GAP if head and body else 0) + bh)))
         return out
 
+    @staticmethod
+    def list_marks(e):
+        """list の項目ごとの (印の種類, 印)。印を書かない項目は、list の icon か、start から項目の順で数えた番号。整数の番号は digits の桁まで 0 で埋める。"""
+        out = []
+        for i, it in enumerate(e["items"]):
+            it = it if isinstance(it, dict) else {}
+            m = next((k for k in ("icon", "num", "image") if k in it), None)  # 印が 2 つ以上の項目は check が止めている
+            kind, v = (m, it[m]) if m else ("icon", e["icon"]) if "icon" in e else ("num", e.get("start", 1) + i)
+            out.append((kind, f"{v:0{e['digits']}d}" if kind == "num" and isinstance(v, int) and "digits" in e else v))
+        return out
+
+    @staticmethod
+    def list_mark_w(e, marks):
+        """list の印の列の幅。いちばん広い印（角丸の 2 桁の番号など）に合わせ、各印は列の中央に置く（本文の左端がそろう）。"""
+        size, shape = e.get("size", "medium"), e.get("shape", "ellipse")
+        return max(num_w(v, size, shape) if kind == "num" else NUM[size][0] for kind, v in marks)
+
     def list(self, e, x, y, w, loc):
         dark = self.bg in ON_FILL
         on = spec_color(ON_FILL[self.bg][0] if dark else "TEXT")
         size = e.get("size", "medium")
-        d = NUM[size][0]
-        tx, tw = x + d + MARK_GAP, w - d - MARK_GAP
+        d, mw = NUM[size][0], self.list_mark_w(e, self.list_marks(e))
+        tx, tw, mx = x + mw + MARK_GAP, w - mw - MARK_GAP, x + (mw - d) / 2  # mx はアイコン・画像の左端（列の中央に置く）
         for l, kind, v, head, body, hh, bh, ty, my, ih in self.list_rows(e, w, loc):
             self.index.append((l, spec_plain(head) + spec_plain(body)))
             if kind == "num":
-                self.emit("num", f"{l}.num", n=v, cx=x + d / 2, cy=y + my + d / 2, size=size, fill=RED)  # 地によらず赤の円（印のあるカードと同じ）
+                self.emit("num", f"{l}.num", n=v, cx=x + mw / 2, cy=y + my + d / 2, size=size, fill=RED,
+                          **({"shape": e["shape"]} if "shape" in e else {}))  # 地によらず赤（印のあるカードと同じ）
             elif kind == "icon":
-                self.emit("icon", f"{l}.icon", name=v, x=x, y=y + my, size=d, color=hex_of(spec_color(e.get("color")) if "color" in e else on))
+                self.emit("icon", f"{l}.icon", name=v, x=mx, y=y + my, size=d, color=hex_of(spec_color(e.get("color")) if "color" in e else on))
             else:
-                self.emit("image", f"{l}.image", src=self.src({"src": v}, l), x=x, y=y + my, w=d, h=d, alt=spec_plain(head or body))
+                self.emit("image", f"{l}.image", src=self.src({"src": v}, l), x=mx, y=y + my, w=d, h=d, alt=spec_plain(head or body))
             if head:
                 self.emit("text", f"{l}.head", x=tx, y=y + ty, w=tw, h=max(hh, 0.2), parts=head, size=12, color=on if dark else spec_color("HEAD"), spacing=100, edge=True)
             if body:  # 見出しがあれば、本文は灰色の補足
@@ -1824,12 +1861,13 @@ class SpecPage:
         m, fill = self.mark(e), e.get("fill", "CARD")
         on, emph = (spec_color(c) for c in ON_FILL.get(fill, ("TEXT", "RED_TEXT")))
         size = 0 if m is None else MARK_IMG if m == "image" else MARK  # 印のない濃い地のカード（dark_card）は印の場所を取らない
+        mw = num_w(e["num"], "medium", e.get("shape", "ellipse")) if m == "num" else size  # 印の幅（角丸の 2 桁の番号は高さより広い）
         center, valign = e.get("align") == "center", e.get("valign")
         if center and valign == "middle":
             sys.exit(f"{loc}（card）: 印を上に置く align center と、valign middle は一緒に使えない")
         body, bul = self.card_body(e, loc, emph)
         head = [(e["head"], {"bold": True, "size": 12, "color": spec_color("WHITE" if fill in ON_FILL else "HEAD")})] if e.get("head") else []
-        tw = w - 2 * MARK_IN if center or m is None else w - 2 * MARK_IN - size - MARK_GAP
+        tw = w - 2 * MARK_IN if center or m is None else w - 2 * MARK_IN - mw - MARK_GAP
         hh = spec_text_h(head, tw, 12, 100) if head else 0  # 見出しと本文は別の枠（箇条書きが見出しに付かないように。d.card と同じ）
         bh = spec_text_h(body, tw - (11 * 1.3 / 72 if bul else 0), 11, 125) if body else 0
         th = hh + (HEAD_GAP if head and body else 0) + bh
@@ -1852,7 +1890,7 @@ class SpecPage:
             return {"h": need, "least": start + hi if valign == "top" else hi - lo}
         self.index.append((loc, spec_plain(head) + spec_plain(body or "")))
         self.emit("card", loc, e, x=x, y=y, w=w, h=h, fill=spec_color(fill), line=spec_color(e.get("line", "RULE" if fill == "CARD" else None)))
-        mx = x + (w - size) / 2 if center else x + MARK_IN
+        mx = x + (w - mw) / 2 if center else x + MARK_IN
         # 印と文字を合わせた範囲の上端（枠の上端から）。valign middle は枠のちょうど中央（構成図の箱。矢印は箱の辺の中央に付く）。
         # h を書いて中身より低くしたカードは、上下の空きの比を保って縮める（h が need なら、文字の上は start）
         if top:
@@ -1870,10 +1908,11 @@ class SpecPage:
         elif m == "icon":
             self.emit("icon", f"{loc}.icon", name=e["icon"], x=mx, y=my, size=size, color=hex_of(on))
         elif m == "num":
-            self.emit("num", f"{loc}.num", n=e["num"], cx=mx + size / 2, cy=my + size / 2, size="medium", fill=RED)  # 地によらず赤の円（数字は ON_RED）
+            self.emit("num", f"{loc}.num", n=e["num"], cx=mx + mw / 2, cy=my + size / 2, size="medium", fill=RED,
+                      **({"shape": e["shape"]} if "shape" in e else {}))  # 地によらず赤（数字は ON_RED）
         else:
             self.emit("image", f"{loc}.image", src=self.src({"src": e["image"]}, loc), x=mx, y=my, w=size, h=size, alt=e.get("head"))
-        tx = x + MARK_IN if center or m is None else mx + size + MARK_GAP
+        tx = x + MARK_IN if center or m is None else mx + mw + MARK_GAP
         align = "CENTER" if center else "START"
         if head:
             self.emit("text", f"{loc}.head", x=tx, y=ty, w=tw, h=max(hh, 0.2), parts=head, size=12, color=on, spacing=100, edge=True, align=align)
@@ -1956,7 +1995,7 @@ class SpecPage:
     def place(self, e, x, y, w, h, loc):
         kind = e["type"]
         if kind in ("icon", "num"):  # 決まった大きさで置く。grid や比で分けた row の列の幅に広げない（measure と同じ大きさ）
-            w = h = self.fixed_w(e)
+            w, h = self.fixed_w(e), self.measure(e, 0, loc)
         if (i := e.get("id")) is not None:
             if i in self.ids:
                 sys.exit(f"{loc}: id「{i}」が 2 つある")
@@ -1966,7 +2005,7 @@ class SpecPage:
             # 番号（num）は文字の枠が円より広い（Deck.text の ring）ので、CONNECT に入れない
             center = e.get("align", "center" if kind == "label" else "left") == "center"
             shrink = kind in ("text", "label", "stat") and not center and (kind == "stat" or e.get("pad") is None or e["pad"] > INSET)
-            if kind in CONNECT and (kind != "text" or e.get("fill") or e.get("line")) and e.get("shape", "rectangle") in ("rectangle", "round_rectangle") and not shrink:
+            if kind in CONNECT and (kind != "text" or e.get("fill") or e.get("line")) and (kind not in OUTLINE or e.get("shape", "rectangle") in ("rectangle", "round_rectangle")) and not shrink:
                 self.anchors[i] = loc
         fill = e.get("fill")
         ground = fill or (self.bg if kind == "text" else None)  # 文字の下の地。塗りのない文字（枠線だけの箱も）はページの地
@@ -2027,7 +2066,8 @@ class SpecPage:
         if kind == "icon":
             return self.emit("icon", loc, e, name=e["name"], x=x, y=y, size=w, color=hex_of(spec_color(e.get("color", "TEXT"))))
         if kind == "num":
-            return self.emit("num", loc, e, n=e["n"], cx=x + w / 2, cy=y + w / 2, size=e.get("size", "medium"), fill=spec_color(e.get("fill", "RED")))
+            return self.emit("num", loc, e, n=e["n"], cx=x + w / 2, cy=y + h / 2, size=e.get("size", "medium"), fill=spec_color(e.get("fill", "RED")),
+                             **({"shape": e["shape"]} if "shape" in e else {}))
         if kind == "box":
             if h <= 0:
                 sys.exit(f"{loc}（box）: h がない（row・grid の中なら行の高さになる）")
@@ -2184,7 +2224,7 @@ class SpecPage:
             tw = min(r[2], widest_em(e["text"]) * e.get("size", 11) / 72)
             return (r[0] + {"left": 0, "center": (r[2] - tw) / 2, "right": r[2] - tw}[e.get("align", "left")], r[1], tw, r[3])
         rs = [(loc, kind, ink(kind, r, e)) for kind, loc, r, _, _, e in self.placed if r[2] > 0 and r[3] > 0]
-        rings = {loc for _, loc, _, _, _, e in self.placed if e.get("shape") == "ellipse"}  # 輪の上にカードを載せる図は、重ねるのが意図
+        rings = {loc for kind, loc, _, _, _, e in self.placed if kind in OUTLINE and e.get("shape") == "ellipse"}  # 輪の上にカードを載せる図は、重ねるのが意図
         for i, (l1, k1, a) in enumerate(rs):
             for l2, k2, b in rs[i + 1:]:
                 if l1 not in rings and min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0]) > 0.03 and min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1]) > 0.03 and not rect_in(a, b) and not rect_in(b, a):
@@ -3695,8 +3735,17 @@ def selftest():
     circle = next(r["createShape"]["elementProperties"] for r in corners.reqs[start:] if r.get("createShape",{}).get("shapeType") == "ELLIPSE")
     assert abs(circle["size"]["width"]["magnitude"] - NUM["large"][0]*EMU) < 2 and abs(circle["transform"]["translateX"] - (2 - NUM["large"][0]/2)*EMU) < 2
     assert any(r.get("updateTextStyle",{}).get("style",{}).get("fontSize") == pt(NUM["large"][1]) for r in corners.reqs[start:])
+    for n in ("1", "10"):  # 角丸の番号: 角丸の背景（box）+ 円と同じ幅の取り方の透明の枠。中心は (cx, cy)
+        start = len(corners.reqs)
+        frame = corners.num(sid, n, 2, 2, shape="round_rectangle")
+        made = {r["createShape"]["objectId"]: r["createShape"]["elementProperties"] for r in corners.reqs[start:] if "createShape" in r}
+        w, (dia, sz) = num_w(n, "medium", "round_rectangle"), NUM["medium"]
+        fw = made[frame]["size"]["width"]["magnitude"] / EMU
+        assert abs(fw - (max(w, em_width(n)*sz/72 + 2*INSET) + .1)) < 1e-6 and abs(made[frame]["transform"]["translateX"] / EMU - (2 - fw/2)) < 1e-6
+        assert abs(made[frame]["size"]["height"]["magnitude"] - dia*EMU) < 2 and corners.round_groups[-1][1] == frame and len(made) > 2  # 角は円と四角で組む
+        assert min(p["transform"]["translateX"] for k, p in made.items() if k != frame) / EMU >= 2 - w/2 - 1e-6  # 背景は見える幅の内
     corners.finish()
-    assert len(corners.round_groups) == 22 and all(len(r["groupObjects"]["childrenObjectIds"]) >= 2 for r in corners.reqs if "groupObjects" in r)
+    assert len(corners.round_groups) == 24 and all(len(r["groupObjects"]["childrenObjectIds"]) >= 2 for r in corners.reqs if "groupObjects" in r)
     assert all(any(r.get("groupObjects",{}).get("childrenObjectIds") == [bg,e] for r in corners.reqs) for bg,e,gid in corners.round_groups)  # 文字と背景を 1 つにする
     assert any(r.get("insertText",{}).get("text") == "角丸の文字" for r in corners.reqs)
     # 塗りの箱の左寄せの文字は、箱の端から 1 字分（文字の大きさ）。中央寄せと塗りのない文字は枠のまま。四角の箱も図形と文字の枠を分ける
@@ -4432,7 +4481,8 @@ def selftest_spec():
                       ({"type": "card", "icon": "a:b", "align": "center", "valign": "middle"}, "一緒に使えない"),
                       ({"type": "list", "items": [{"icon": "a:b", "num": 1, "text": "t"}]}, "どれか 1 つ"), ({"type": "list", "items": [{"icon": "a:b"}]}, "text か head"),
                       ({"type": "list", "items": ["a"], "raw": {"x": 1}}, "知らないキー raw"), ({"type": "list", "items": ["a", " "]}, "text か head"), ({"type": "list", "items": ["***  ***"]}, "text か head"),
-                      ({"type": "list", "items": [{"head": "h", "text": "- a\n- b"}]}, "箇条書き"), ({"type": "list", "size": "large", "items": ["a"], "w": 0.8}, "幅が足りない")]:
+                      ({"type": "list", "items": [{"head": "h", "text": "- a\n- b"}]}, "箇条書き"), ({"type": "list", "size": "large", "items": ["a"], "w": 0.8}, "幅が足りない"),
+                      ({"type": "card", "icon": "a:b", "shape": "round_rectangle"}, "num を書いたカード"), ({"type": "num", "n": 1, "shape": "chevron"}, "shape")]:
         try:
             make_deck(lambda x: x.spec({"title": "t", "body": [bad]}), "x")
             raise AssertionError(f"通した: {bad}")
@@ -4460,6 +4510,26 @@ def selftest_spec():
     assert not any("list にする" in w for w in d.warnings)  # 塗りのある文字は行の高さまで伸びるので知らせない
     assert first_pt([("48", {"size": 32}), "件\n", ("次", {"size": 40})], 11, 5) == 32 and first_pt("a\nb", 11, 5) == 11 and first_pt([("小", {"size": 8})], 11, 5) == 8
     assert first_pt([(" ", {"size": 20}), "abc"], 11, 5) == 20 and first_pt(["あ" * 20, ("大", {"size": 32})], 11, 1.5) == 11  # 1 行目の大きさ（折り返した先の大きな文字は見ない）
+    # 角丸の番号: 高さは円の直径、幅は数字に合わせる。list の印の列はいちばん広い番号に合わせて中央に置き、row・card の文字は見える幅の右から
+    wide = num_w("10", "medium", "round_rectangle")
+    assert num_w(1, "medium", "round_rectangle") == d0 == num_w("10") < wide
+    globals()["iconify"] = lambda name, color=TEXT, w=512: f"https://x/{name}.png"
+    try:
+        _, rr = run({"title": "t", "body": [{"type": "list", "shape": "round_rectangle", "digits": 2, "start": 9, "items": ["九", "十"]},
+                                            {"type": "list", "shape": "round_rectangle", "start": 9, "items": ["九", {"icon": "tabler:a", "text": "a"}, "十一"]},
+                                            {"type": "row", "items": [{"type": "num", "n": "01", "shape": "round_rectangle"}, {"type": "text", "text": "文", "fill": "PANEL"}]},
+                                            {"type": "card", "num": 10, "shape": "round_rectangle", "head": "見出し"}]})
+    finally:
+        globals()["iconify"] = real_iconify
+    by = {e["loc"]: e for e in rr}
+    a, b = by["spec.body[0].items[0].num"], by["spec.body[0].items[1].num"]
+    assert (a["n"], b["n"], a["shape"]) == ("09", "10", "round_rectangle") and near(a["cx"], X + wide / 2) and near(by["spec.body[0].items[0].text"]["x"], X + wide + MARK_GAP)
+    n9, ic, n11 = by["spec.body[1].items[0].num"], by["spec.body[1].items[1].icon"], by["spec.body[1].items[2].num"]
+    assert (n9["n"], n11["n"]) == (9, 11) and near(n9["cx"], n11["cx"]) and near(ic["x"] + d0 / 2, n9["cx"])  # 桁の違う番号とアイコンは列の中央
+    rn, rt = by["spec.body[2].items[0]"], by["spec.body[2].items[1]"]
+    assert near(rt["x"], X + num_w("01", "medium", "round_rectangle") + GAP) and near(rn["cy"] - d0 / 2, rt["y"])  # row の幅は見える幅、高さは直径
+    cn, ch = by["spec.body[3].num"], by["spec.body[3].head"]
+    assert cn["shape"] == "round_rectangle" and near(ch["x"], cn["cx"] + wide / 2 + MARK_GAP)
     with tempfile.TemporaryDirectory() as t:
         here = os.getcwd()
         os.chdir(t)
@@ -4537,6 +4607,14 @@ def selftest_spec():
     assert "items[6]: 矢印の線が spec.body[0].items[2]（label）の上を通る" in w and "items[7]: 矢印の線が spec.body[0].items[5]（text）の上を通る" in w, w  # 文字のあるところだけ見る
     assert "items[6] と spec.body[0].items[8]: 矢じりの先が 1 点に集まる" in w and "items[3]（label）と spec.body[0].items[4]（card）が一部だけ重なる" in w, w
     assert w.count("上を通る") == 2 and w.count("重なる") == 1, w  # 囲みの box、両端の部品、自分の札は数えない
+    dc, ec = run({"title": "t", "body": [{"type": "frame", "h": 2, "items": [  # カードの shape は番号の形。円の番号のカードも、箱としてつなぎ、重なりを見る
+        {"type": "card", "id": "a", "num": 1, "shape": "ellipse", "head": "番号", "x": 0, "y": 0, "w": 3}, {"type": "label", "id": "b", "text": "B", "x": 4, "y": 0, "w": 2, "h": 0.6},
+        {"type": "label", "text": "C", "x": 2.5, "y": 0.5, "w": 1, "h": 0.6}, {"type": "arrow", "from": "a", "to": "b"},
+        {"type": "num", "n": 1, "shape": "ellipse", "x": 0, "y": 1.2}, {"type": "list", "shape": "ellipse", "items": ["項目"], "x": 2, "y": 1.2, "w": 2},
+        {"type": "label", "text": "D", "x": 0.2, "y": 1.4, "w": 2.2, "h": 0.4}]}]})
+    w = "\n".join(dc.warnings)
+    assert next(e for e in ec if e["call"] == "arrow")["link"][0] == "spec.body[0].items[0]" and "items[0]（card）と spec.body[0].items[2]（label）が一部だけ重なる" in w
+    assert "items[4]（num）と spec.body[0].items[6]（label）が一部だけ重なる" in w and "items[5]（list）と spec.body[0].items[6]（label）が一部だけ重なる" in w, w
     arr, lab = next(e for e in els if e["loc"] == "spec.body[0].items[8]"), next(e for e in els if e["loc"] == "spec.body[0].items[8].label")
     assert lab["call"] == "text" and lab["parts"] == "① 要求" and near(lab["x"] + lab["w"] / 2, (arr["x1"] + arr["x2"]) / 2) and near(lab["y"] + lab["h"] + LABEL_GAP, arr["y1"])  # 横の線の上の中央
     d, _ = run({"title": "t", "body": [{"type": "frame", "h": 3, "items": [  # 輪（楕円）の上にカードを載せる図は、一部だけ重なっても知らせない
