@@ -1257,15 +1257,22 @@ def spec_plain(parts):
     return parts if isinstance(parts, str) else "".join(p if isinstance(p, str) else p[0] for p in parts)
 
 
-def first_pt(parts, size):
-    """parts の最初の段落の、いちばん大きな文字の大きさ（pt。{32:…} の文字があればその大きさ。{8:…} だけなら 8）。"""
-    out = 0
-    for p in [parts] if isinstance(parts, str) else parts:
-        t, sz = (p, size) if isinstance(p, str) else (p[0], p[1].get("size", size))
-        lead = re.split(r"[\n\v]", t, maxsplit=1)[0]
-        out = max(out, sz) if lead else out  # 空白だけの文字も、その大きさで行の高さが決まる
-        if len(lead) < len(t):
+def first_pt(parts, size, avail):
+    """parts を幅 avail（in）で折り返した 1 行目の、いちばん大きな文字の大きさ（pt。{32:…} の文字があればその大きさ。{8:…} だけなら 8）。
+    折り返しは run_lines と同じ送り方で見る。空白だけの文字も、その大きさで行の高さが決まる。"""
+    runs = [(p, size, False) if isinstance(p, str) else (p[0], p[1].get("size", size), p[1].get("bold", False)) for p in ([parts] if isinstance(parts, str) else parts)]
+    t = "".join(c for c, *_ in runs)
+    pts = [sz for c, sz, _ in runs for _ in c]
+    ws = [em_width(ch, False, b) * sz / 72 for c, sz, b in runs for ch in c]
+    out, cur = 0, 0.0
+    for m in re.finditer(r"[!-~]+| +|[\n\v]|.", t):
+        a, z = m.span()
+        if t[a] in "\n\v":
             break
+        for k, e in ([(k, k + 1) for k in range(a, z)] if sum(ws[a:z]) > avail + 1e-9 else [(a, z)]):
+            if cur + sum(ws[k:e]) > avail + 1e-9 and cur > 0:
+                return out or size
+            out, cur = max(out, *pts[k:e]), cur + sum(ws[k:e])
     return out or size
 
 
@@ -1763,7 +1770,7 @@ class SpecPage:
             body = body if spec_plain(body).strip() else []  # 記法を外して空白だけの本文は置かない（check と同じ見方）
             hh = spec_text_h(head, tw, 12, 100) if head else 0
             bh = spec_text_h(body, tw, 11) if body else 0
-            first = (12 if head else first_pt(body, 11)) * 1.2 / 72  # 1 行目の高さ。2 行以上の行間 125% は 1 行目の下に足される（2026-10-20 に Google が描いた画像で測った。125% で見込むと 3.5 px 上に出た）
+            first = (12 if head else first_pt(body, 11, tw)) * 1.2 / 72  # 1 行目の高さ。2 行以上の行間 125% は 1 行目の下に足される（2026-10-20 に Google が描いた画像で測った。125% で見込むと 3.5 px 上に出た）
             ty, my = max((d - first) / 2, 0), max((first - d) / 2, 0)
             out.append((l, kind, v, head, body, hh, bh, ty, my, max(my + d, ty + hh + (HEAD_GAP if head and body else 0) + bh)))
         return out
@@ -4400,7 +4407,8 @@ def selftest_spec():
     assert any("list にする" in w for w in d.warnings)  # row に番号と文字を並べたら知らせる
     d, _ = run({"title": "t", "body": [{"type": "row", "items": [{"type": "num", "n": 1}, {"type": "text", "text": "文", "fill": "PANEL"}]}]})
     assert not any("list にする" in w for w in d.warnings)  # 塗りのある文字は行の高さまで伸びるので知らせない
-    assert first_pt([("48", {"size": 32}), "件\n", ("次", {"size": 40})], 11) == 32 and first_pt("a\nb", 11) == 11 and first_pt([("小", {"size": 8})], 11) == 8 and first_pt([(" ", {"size": 20}), "abc"], 11) == 20  # 1 行目の大きさは最初の段落だけで見る
+    assert first_pt([("48", {"size": 32}), "件\n", ("次", {"size": 40})], 11, 5) == 32 and first_pt("a\nb", 11, 5) == 11 and first_pt([("小", {"size": 8})], 11, 5) == 8
+    assert first_pt([(" ", {"size": 20}), "abc"], 11, 5) == 20 and first_pt(["あ" * 20, ("大", {"size": 32})], 11, 1.5) == 11  # 1 行目の大きさ（折り返した先の大きな文字は見ない）
     with tempfile.TemporaryDirectory() as t:
         here = os.getcwd()
         os.chdir(t)
