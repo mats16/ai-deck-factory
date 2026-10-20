@@ -19,7 +19,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gapi import DRIVE, GSLIDES, PPTX, SLIDES, batch, factory, file_id, folder_id, request, run, trash, upload
 from lint import JA, cells, contrast, flatten, lum, paras, solid
-from slides import (BG, BLANK, CARD, COPYRIGHT_PT, DECOR, EMU, GA, HEAD, INSET, NAVY, NAVY_BLOCK, ON_RED, OSS, PAD, PANEL, PREVIEW, RED, RED_ON_NAVY,
+from slides import (BG, BLANK, CARD, CARD_DOWN, COPYRIGHT_PT, DECOR, EMU, GA, HEAD, INSET, NAVY, NAVY_BLOCK, ON_RED, OSS, PAD, PANEL, PREVIEW, RED, RED_ON_NAVY,
                     RED_SOFT, RED_TEXT, RULE, SLOTS, STAGE_TEXT, SUB, SUB_ON_NAVY, TEXT, WHITE, W, X, Y_BODY, Y_FOOT, build, cols, make_deck, number_style)
 from slides import (BUILTIN_THEMES, FIXED as FIXED_DEFAULT, FOLDER, FONT_EM, JP_FONTS, LAYOUT_MARK, NAMED, ROLE, THEME_MARK, THEME_PROP, THEMES_DIR, TONES, VARIANTS, find_themes_folder, is_blank,
                     load_theme, need_brand, placeholders, read_theme, record_template, templates, theme_file, theme_fixed, theme_font, theme_names,
@@ -216,7 +216,7 @@ def specimen(theme, t, origin=()):
         d.note(s, "表紙です。小見出しは相手と日付、タイトルは白、副題と小見出しは濃紺の上の赤、社名は濃紺の上の補足の色（SUB_ON_NAVY）です。表紙にはページ番号を置きません。")
 
         s = d.divider("01", "色と部品", "テーマの色の役割と、本文ページの部品")
-        d.card(s, X, 5.0, 2.4, 0.85, None, body=[("扉の中のブロック\n", {"bold": True, "color": WHITE}), ("白と SUB_ON_NAVY だけを載せる", {"color": SUB_ON_NAVY})],
+        d.card(s, X, 5.0, 2.4, 0.85 + CARD_DOWN, None, body=[("扉の中のブロック\n", {"bold": True, "color": WHITE}), ("白と SUB_ON_NAVY だけを載せる", {"color": SUB_ON_NAVY})],
                fill=NAVY_BLOCK, line=None)
         d.note(s, "章の扉です。章番号は飾りの色ですが、濃紺の上で大きな文字の基準（3:1）に届く色にします。扉の中のブロックには、白と濃紺の上の補足の色（SUB_ON_NAVY）だけを載せます。濃紺の上の赤は、ブロックの上ではコントラストが届きません。")
 
@@ -244,13 +244,13 @@ def specimen(theme, t, origin=()):
                   "DECOR は slides.py の章の扉が使い、ページには書きません。")
 
         s = d.page("部品は役割の色で塗り、大きさと間隔は既定に従う", "カード、パネル、数字、札、正円の番号、表、矢印、結論バンド、出典の行の見本。")
-        hw = (W - 0.3) / 2
-        d.card(s, X, Y_BODY, hw, 1.5, "カードの見出し（12pt 太字）", body=["本文は 11pt。", ("強調は太字", {"bold": True}), "。\n",
+        hw = (W - 0.3) / 2  # d.card の h は、中身を下げる CARD_DOWN の分を足す（下の空きを保つ）
+        d.card(s, X, Y_BODY, hw, 1.5 + CARD_DOWN, "カードの見出し（12pt 太字）", body=["本文は 11pt。", ("強調は太字", {"bold": True}), "。\n",
                                                                   ("赤の文字", {"color": RED_TEXT, "bold": True}), "は 18pt 未満でも読める色。\n",
                                                                   ("リンク", {"link": docs}), "は周りの色のまま下線を付ける。"])
         d.text(s, X - INSET, 3.4, hw + 2 * INSET, 0.65, [("32", {"size": 32, "bold": True, "color": HEAD}), ("%", {"size": 16, "bold": True, "color": HEAD}),
                                                         ("  数字 32pt・単位 16pt。赤にするなら RED", {"color": SUB})])
-        d.card(s, X, 4.18, hw, 0.8, None, body=[("パネル\n", {"bold": True}), "塗りだけで囲み、枠線は付けない。"], fill=PANEL, line=None)
+        d.card(s, X, 4.18, hw, 0.8 + CARD_DOWN, None, body=[("パネル\n", {"bold": True}), "塗りだけで囲み、枠線は付けない。"], fill=PANEL, line=None)
         for i, (label, fill, fg) in enumerate([("GA", GA, STAGE_TEXT), ("Beta", PREVIEW, STAGE_TEXT), ("OSS", OSS, WHITE)]):
             d.text(s, X + i * 0.95, 5.13, 0.8, 0.4, label, color=fg, bold=True, align="CENTER", valign="MIDDLE", fill=fill)
         d.text(s, X + 3.2, 5.13, 0.8, 0.4, "推奨", color=RED_TEXT, bold=True, align="CENTER", valign="MIDDLE", fill=RED_SOFT)  # 提供ステージの札と離す（赤と緑を並べない）
@@ -272,15 +272,15 @@ def specimen(theme, t, origin=()):
         d.card(s, X, Y_BODY, hw, 4.2, "項目のカード（items）", items=[
             ("items", "見出しと説明の組を、step の間隔で並べる"), ("step", "既定は 0.95 in。説明が 2 行になるなら広げる"),
             ("縦の並び", "見出しと説明は 1 つの枠に入れ、改行で分ける"), ("横の並び", "横に並ぶカードは y・h・valign をそろえる")])
-        d.card(s, rx, Y_BODY, hw, 1.5, "箇条書き（bullets）", body="短い項目を並べるときに使う\n1 つの枠の本文は 8 行まで\n字下げは文字の大きさの 1.3 倍", bullets=True)
+        d.card(s, rx, Y_BODY, hw, 1.5 + CARD_DOWN, "箇条書き（bullets）", body="短い項目を並べるときに使う\n1 つの枠の本文は 8 行まで\n字下げは文字の大きさの 1.3 倍", bullets=True)
         y0 = 3.48
         d.box(s, rx, y0, hw, 1.55, line=SUB, kind="ROUND_RECTANGLE")  # 塗りのない角丸は辺と弧を線でつなぐ。継ぎ目の段をここで見る（slides.md の 5）
         d.text(s, rx + PAD, y0 + 0.1, hw - 2 * PAD, 0.34, "塗りのない角丸の囲み（まとまりを示す）", size=12, color=HEAD, bold=True)
         for (x, w), label in zip(cols(2, 0.24, rx + 0.2, hw - 0.4), ("部品 A", "部品 B")):
             d.text(s, x, y0 + 0.55, w, 0.8, label, align="CENTER", valign="MIDDLE", fill=PANEL)
         y1 = 5.2  # 強調の赤い点線の囲み。中のカードと同じ半径（Google 標準の角丸にしない）で、線は赤の既定の 2pt（2026-10-08、ユーザー）
-        d.box(s, rx, y1, hw, 1.3, line=RED, kind="ROUND_RECTANGLE", dash=True)
-        d.card(s, rx + 0.12, y1 + 0.12, hw - 0.24, 1.06, "強調の点線の囲み（dash=True。赤の線は 2pt）", body="重なる範囲や、見てほしいところを囲む。角は中のカードと同じ丸み")
+        d.box(s, rx, y1, hw, 1.3 + CARD_DOWN, line=RED, kind="ROUND_RECTANGLE", dash=True)
+        d.card(s, rx + 0.12, y1 + 0.12, hw - 0.24, 1.06 + CARD_DOWN, "強調の点線の囲み（dash=True。赤の線は 2pt）", body="重なる範囲や、見てほしいところを囲む。角は中のカードと同じ丸み")
         d.note(s, "項目のカード、箇条書き、塗りのない角丸の囲み、強調の点線の囲みの見本です。塗りのない角丸の囲みは辺と弧を線でつないで描くので、"
                   "部品を直したら、継ぎ目に段が出ていないかと、点線の囲みの角が中のカードと同じ丸みになっているかを、ここで見ます。")
 
