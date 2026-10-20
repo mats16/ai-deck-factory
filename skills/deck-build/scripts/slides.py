@@ -1888,6 +1888,11 @@ class SpecPage:
         top = valign == "top" or valign is None and h is not None and h > need - 0.01
         if h is None:  # least は印と文字が収まる最小（上寄せは、上の空きも）
             return {"h": need, "least": start + hi if valign == "top" else hi - lo}
+        # h を書いて高くしたカードは上寄せになる。中身（印と文字）がカードの半分までの低さなら、下だけが空いて見えるので middle を勧める。
+        # 行数ではなく高さで見る（文字の大きさと印の大きさで変わる）。row・grid で隣に合わせて伸ばされたカードは、見出しの高さをそろえるので出さない
+        if not center and valign is None and "h" in e and h - need >= 0.1 and hi - lo <= h / 2:
+            self.warns.append(f"{loc}（card）: 中身の高さ {hi - lo:.2f} in がカードの高さ {h:.2f} in の半分までで、上寄せのため下が上より {h - need:.2f} in 広く空く。"
+                              "\"valign\": \"middle\" にするか、h を外して中身に合わせる（隣のカードと見出しの高さをそろえるなら \"valign\": \"top\" を書く）")
         self.index.append((loc, spec_plain(head) + spec_plain(body or "")))
         self.emit("card", loc, e, x=x, y=y, w=w, h=h, fill=spec_color(fill), line=spec_color(e.get("line", "RULE" if fill == "CARD" else None)))
         mx = x + (w - mw) / 2 if center else x + MARK_IN
@@ -4446,13 +4451,13 @@ def selftest_spec():
     _, lg = run({"title": "t", "body": [{"type": "row", "items": [{"type": "card", "num": 1, "head": "段", "text": "1 行の本文"},
                                                                    {"type": "card", "num": 2, "head": "段", "text": "本文<br>2 行目"}, {"type": "card", "num": 3}]}]})
     lc, nm = [e for e in lg if e["call"] == "card"], [e for e in lg if e["call"] == "num"]
-    assert near(nm[0]["cy"] - lc[0]["y"], nm[1]["cy"] - lc[1]["y"])  # 短い文字どうしでも、そろえた行ではいちばん高いカードも 1 行目にそろえる（PR のレビュー）
+    assert near(nm[0]["cy"] - lc[0]["y"], nm[1]["cy"] - lc[1]["y"])  # 短い文字どうしでも、いちばん高いカードと印の高さがそろう（PR のレビュー）
     assert near(nm[2]["cy"] - lc[2]["y"], MARK_IN + MARK / 2)  # 印だけのカードは、1 行目にそろえず、印の上を MARK_IN のままにする（PR のレビュー）
     two = {"type": "card", "num": 1, "head": "段", "text": "本文<br>2 行目"}
-    two["h"] = round(SpecPage(Path(".")).measure(two, 5, "c") + 0.005, 3)  # 中身の高さとほぼ同じ h（上寄せだが、h > need + 0.01 にならない）
+    two["h"] = round(SpecPage(Path(".")).measure(two, 5, "c") + 0.005, 3)  # 中身の高さとほぼ同じ h（上寄せで、下はほとんど空かない）
     _, lg = run({"title": "t", "body": [{"type": "row", "w": 10, "items": [two, {"type": "card", "num": 2, "head": "段"}]}]})
     lc, nm = [e for e in lg if e["call"] == "card"], [e for e in lg if e["call"] == "num"]
-    assert near(nm[0]["cy"] - lc[0]["y"], nm[1]["cy"] - lc[1]["y"])  # h を書いたカードも、行の印を 1 行目にそろえる（PR #76 のレビュー）
+    assert near(nm[0]["cy"] - lc[0]["y"], nm[1]["cy"] - lc[1]["y"])  # h を書いたカードも、隣と印の高さがそろう（PR #76 のレビュー）
     card = {"type": "card", "num": 1, "head": "段", "text": "1 行の本文"}
     _, lg = run({"title": "t", "body": [{"type": "row", "items": [card, card, {"type": "text", "text": "x", "fill": "PANEL"}]}]})
     lc, nm = [e for e in lg if e["call"] == "card"], [e for e in lg if e["call"] == "num"]
@@ -4468,6 +4473,14 @@ def selftest_spec():
                                                                           for i, text in enumerate(("1 行の本文", "本文<br>2 行目"))]}]})
     nm = [e for e in lg if e["call"] == "num"]
     assert near(nm[0]["cy"], nm[1]["cy"])  # frame に 1 枚ずつ置いたカードも、本文の行数によらず番号の高さがそろう（2026-10-20 の p18）
+    short, long = {"type": "card", "num": 1, "head": "段", "text": "1 行の本文"}, {"type": "card", "num": 1, "head": "段", "text": "長い本文が続く。" * 12}
+    for c, warned in ((short | {"h": 1.6}, True), (short | {"h": 1.6, "valign": "middle"}, False), (short | {"h": 1.6, "valign": "top"}, False), (short, False),
+                      ({"type": "card", "head": "段", "text": "1 行の本文", "fill": "NAVY", "h": 1.6}, True),  # 印のない濃い地のカードも、印のあるカードと同じく組むので見る
+                      (long | {"h": round(SpecPage(Path(".")).measure(long, 4, "c") + 0.3, 2)}, False)):
+        d, _ = run({"title": "t", "body": [{"type": "frame", "h": 2.5, "items": [c | {"x": 0, "y": 0, "w": 4}]}]})
+        assert any("\"valign\": \"middle\" にするか" in w for w in d.warnings) == warned, c  # h で高くした低い中身のカードは middle を勧める（行数でなく高さで見る）
+    d, _ = run({"title": "t", "body": [{"type": "row", "items": [short, long]}]})
+    assert not any("\"valign\": \"middle\" にするか" in w for w in d.warnings)  # 隣に合わせて伸ばされたカードは、見出しをそろえる上寄せなので出さない
     _, lg = run({"title": "t", "body": [{"type": "card", "image": "https://x/a.png", "head": "製品"}]})
     lc, li = (next(e for e in lg if e["call"] == c) for c in ("card", "image"))
     assert near(li["y"] - lc["y"], lc["y"] + lc["h"] - li["y"] - li["h"])  # 印が高さを決めるカードは、印の上下の空きが同じ
