@@ -1836,9 +1836,11 @@ class SpecPage:
         # 中身（印と文字）は、上下の空きが同じに見える位置に置く。横に置く印と枠の間は MARK_IN
         start, end = MARK_TOP - (0.05 if center else 0), MARK_END + (0.03 if bh > 0.3 else 0)
         content = size + (MARK_GAP + th if th else 0) if center else th
-        # 横に置く印は、短い文字（印の 2 倍ほどまで）なら文字の上下の中央、長い文字なら印の中心を見出しの 1 行目（12pt）の中心にそろえる（ロゴも同じ。線画のアイコンは小さく見えるので ICON_INK を掛ける）
+        # 横に置く印は、短い文字（印の 2 倍ほどまで）なら文字の上下の中央、長い文字なら印の中心を 1 行目（見出しの 12pt か、見出しがなければ本文の 1 行目のいちばん大きな文字。list と同じ）
+        # の中心にそろえる（ロゴも同じ。線画のアイコンは小さく見えるので ICON_INK を掛ける）
         short = valign == "middle" or th <= MARK_SHORT * size * (ICON_INK if m == "icon" else 1)
-        mark = 0 if center else ((th if short else 12 * 1.2 / 72) - size) / 2  # 印の上端の、文字の上端からの位置
+        first = (12 if head or not body else first_pt(body, 11, tw - (11 * 1.3 / 72 if bul else 0))) * 1.2 / 72
+        mark = 0 if center else ((th if short else first) - size) / 2  # 印の上端の、文字の上端からの位置
         lo, hi = min(mark, 0), max(content, mark + size)  # 印と文字を合わせた範囲の上端と下端（文字の上端から）
         if not th:  # 文字のない、印だけのカードは、印の上下を MARK_IN にする
             start = end = MARK_IN - lo
@@ -4373,6 +4375,9 @@ def selftest_spec():
     _, lg = run({"title": "t", "body": [{"type": "card", "image": "https://x/a.png"}]})
     lc, li = (next(e for e in lg if e["call"] == c) for c in ("card", "image"))
     assert near(li["y"] - lc["y"], MARK_IN) and near(lc["y"] + lc["h"] - li["y"] - li["h"], MARK_IN)  # 印だけのカードは、印の上下を MARK_IN にする
+    _, lg = run({"title": "t", "body": [{"type": "card", "num": 1, "text": "{32:Revenue}\nDetails\nMore details", "w": 5}]})
+    tx, nm = (next(e for e in lg if e["call"] == c) for c in ("text", "num"))
+    assert near(nm["cy"], tx["y"] + 32 * 1.2 / 72 / 2)  # 見出しのないカードは、本文の 1 行目の大きさで印をそろえる（PR #74 のレビュー）
     _, lg = run({"title": "t", "body": [{"type": "card", "image": "https://x/a.png", "align": "center"}]})
     lc, li = (next(e for e in lg if e["call"] == c) for c in ("card", "image"))
     assert near(li["y"] - lc["y"], MARK_IN) and near(lc["y"] + lc["h"] - li["y"] - li["h"], MARK_IN)  # 上に印を置くカードも同じ
