@@ -39,7 +39,7 @@ def check(ws, local=False):
         (ok if (root / name).is_file() else need)(name, "" if (root / name).is_file() else "ない。factory-init で置く")
     if old := sorted((root / "Customers").glob("*/CLAUDE.md")):
         how = lambda p: f"{p.relative_to(root)}（{'memory.md に中身を移して消す' if (p.parent / 'memory.md').exists() else 'memory.md に名前を変える'}）"
-        warn("顧客の memory", f"前の形の CLAUDE.md がある。Claude Code しか読まない（hook が Claude Code と pi で続けて出すのは memory.md）: {', '.join(map(how, old))}")
+        warn("顧客の memory", f"前の形の CLAUDE.md がある。Claude Code しか読まない（hook が Claude Code・Codex・pi で続けて出すのは memory.md）: {', '.join(map(how, old))}")
     agents = (root / "AGENTS.md").read_text() if (root / "AGENTS.md").is_file() else ""
     if "人がレビューするかも選んでもらう" in agents:  # 2026-10-13 までの雛形
         warn("AGENTS.md の方針のレビュー", "前の雛形の「人がレビューするかも選んでもらう」が残っている。ワークスペースの決まりが優先するので、factory.toml の [review] plan_reviewer が効かず、資料ごとに聞く。factory-init の雛形の今の文（plan_reviewer に従う）に替える")

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """プラグインのスキルのファイルが読まれたら、ワークスペースの同じパスの rules/<スキル>/<ファイル> を続けて出す（開き忘れを防ぐ）。
 顧客の資料の 構成案*.md・社内メモ_*.md・references.md が読まれたら、その顧客の Customers/<顧客>/memory.md（資料への好み。どう作るか）を続けて出す。
-決まりの層は skills/deck-practices/rules.md。Claude Code は hooks.json の PostToolUse（Read・Bash・Skill）、pi は extensions/rules.ts から呼ぶ。
-usage: rules_overlay.py claude   （標準入力に Claude Code の hook の JSON）
+/ai-deck-factory:<スキル>（Claude Code）・$ai-deck-factory:<スキル>（Codex）で呼んだスキルは、道具を使わずに SKILL.md が入るので、プロンプトから拾って rules/<スキル>/SKILL.md を出す。
+決まりの層は skills/deck-practices/rules.md。Claude Code と Codex は hooks.json の PostToolUse（Read・Bash・Skill）と UserPromptSubmit、pi は extensions/rules.ts から呼ぶ。
+usage: rules_overlay.py claude   （標準入力に Claude Code か Codex の hook の JSON）
        rules_overlay.py pi       （標準入力に {"cwd", "text", "isPath"}。isPath は text が読んだファイルのパスのとき。出力は {"context": …}）
        rules_overlay.py --selftest
 標準ライブラリだけ。ワークスペース（factory.toml のあるフォルダ）の外や、rules/ と memory.md がないときは何も出さない。"""
@@ -12,6 +13,7 @@ from pathlib import Path
 SKILLS = {p.parent.name for p in (Path(__file__).resolve().parent.parent / "skills").glob("*/SKILL.md")}
 REF = re.compile(rf"(?<![\w-])({'|'.join(map(re.escape, SKILLS))})/([\w./-]+\.md)")  # スキルの名前で始まるパス（前のフォルダは問わない）
 MEMORY_FROM = re.compile(r"(?:^|/)(?:構成案[^/]*|社内メモ_[^/]*|references)\.md$")  # 資料を始めるときとコンパクションのあとに読むもの（組む途中に何度も開く build/ は入れない）
+CALL = re.compile(rf"(?:^\s*/|(?<![\w$/.-])\$)ai-deck-factory:({'|'.join(map(re.escape, SKILLS))})(?![\w-])", re.ASCII)  # プロンプトで呼んだスキル（Claude Code の / は頭だけ、Codex の $ はどこでも。和文は続けて書いても呼んだことになる）
 PUNCT = "();<>|&`"  # コマンドの区切り
 LIMIT = 20000  # 差し込む字数の上限（決まりが育ちすぎたら、AGENTS.md と同じく分ける合図）
 
@@ -73,6 +75,11 @@ def overlays(cwd, text, skill=None, is_path=False):
     return "\n\n".join(x for x in (cut(out, "rules/ のファイルを"), cut(mem, "memory.md を")) if x)
 
 
+def called(cwd, prompt):
+    """プロンプトで呼んだスキル（/ai-deck-factory:<スキル>・$ai-deck-factory:<スキル>）に当たる rules/<スキル>/SKILL.md の中身。"""
+    return "\n\n".join(filter(None, (overlays(cwd, "", s) for s in dict.fromkeys(CALL.findall(prompt)))))
+
+
 def cut(parts, what):
     """決まりと memory は、それぞれ LIMIT 字まで（片方が長くても、もう片方を押し出さない）。"""
     text = "\n\n".join(parts)
@@ -84,11 +91,14 @@ def main(mode):
     if mode == "pi":
         print(json.dumps({"context": overlays(ev.get("cwd", "."), ev.get("text", ""), is_path=bool(ev.get("isPath")))}, ensure_ascii=False))
         return
-    ti = ev.get("tool_input", {})
-    ctx = overlays(ev.get("cwd", "."), ti.get("file_path") or ti.get("command") or "", ti.get("skill") if ev.get("tool_name") == "Skill" else None,
-                   is_path=bool(ti.get("file_path")))
+    cwd, ti, event = ev.get("cwd", "."), ev.get("tool_input", {}), ev.get("hook_event_name", "PostToolUse")
+    if event == "UserPromptSubmit":
+        ctx = called(cwd, ev.get("prompt", ""))
+    else:
+        ctx = overlays(cwd, ti.get("file_path") or ti.get("command") or "", ti.get("skill") if ev.get("tool_name") == "Skill" else None,
+                       is_path=bool(ti.get("file_path")))
     if ctx:
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": ctx}}, ensure_ascii=False))
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": event, "additionalContext": ctx}}, ensure_ascii=False))
 
 
 def selftest():
@@ -104,6 +114,11 @@ def selftest():
         assert overlays(ws, f"{ws}/rules/deck-practices/visual.md") == ""  # rules/ そのものを読んだときは出さない
         assert overlays(ws, "/plug/skills/deck-practices/content.md") == ""  # rules/ に同じファイルがない
         assert "最初に聞くこと" in overlays(ws, "", "ai-deck-factory:deck-practices")
+        assert CALL.findall("/ai-deck-factory:deck-build と $ai-deck-factory:deck-review、ai-deck-factory:doc-build、$ai-deck-factory:deck-builds") == ["deck-build", "deck-review"]  # 呼んだものだけ
+        assert CALL.findall("さっきの /ai-deck-factory:deck-build は x/$ai-deck-factory:doc-build") == []  # 文の途中の / とパスの中は呼んでいない
+        assert CALL.findall("資料を$ai-deck-factory:deck-buildで作る") == ["deck-build"] and CALL.findall("/ai-deck-factory:doc-buildで") == ["doc-build"]  # 和文が続いても切る
+        assert "最初に聞くこと" in called(ws, "/ai-deck-factory:deck-practices を回して") and called(ws, "$ai-deck-factory:deck-build") == ""  # rules/ に SKILL.md のないスキル
+        assert called(ws, "/ai-deck-factory:deck-practices $ai-deck-factory:deck-practices").count("最初に聞くこと") == 1
         assert overlays("/", "/plug/skills/deck-practices/visual.md") == ""  # ワークスペースの外
         deck = Path(ws) / "Customers" / "acme" / "deck_202610"
         deck.mkdir(parents=True)

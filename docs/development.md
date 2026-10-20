@@ -1,6 +1,6 @@
 # 開発しながら動作を見る
 
-プラグインを直す人のための手順。直すのは元のリポジトリの worktree でし、その worktree の下に検証用のワークスペース `sandbox/` を置いて、資料を作って確かめる。`sandbox/` はリポジトリの `.gitignore` で無視しているので commit に入らず、worktree を消せば一緒に消える。worktree ごとに分かれるので、いくつかのブランチを並べて試せる。2026-10-12 に Claude Code と pi 1.0.0 で確かめた。利用者の入れ方は [claude-code-plugin.md](claude-code-plugin.md)・[pi.md](pi.md)。
+プラグインを直す人のための手順。直すのは元のリポジトリの worktree でし、その worktree の下に検証用のワークスペース `sandbox/` を置いて、資料を作って確かめる。`sandbox/` はリポジトリの `.gitignore` で無視しているので commit に入らず、worktree を消せば一緒に消える。worktree ごとに分かれるので、いくつかのブランチを並べて試せる。2026-10-12 に Claude Code と pi 1.0.0 で、Codex は 2026-10-20 に Codex CLI 0.162.1 で確かめた。利用者の入れ方は [claude-code-plugin.md](claude-code-plugin.md)・[codex-plugin.md](codex-plugin.md)・[pi.md](pi.md)。
 
 元の checkout（`~/Projects/ai-deck-factory`）は `main` のままにしておく。ほかのワークスペースにこの checkout のパスで入れたプラグインはここを読むので、利用者と同じものが動く（GitHub や git の URL で入れたものは、checkout とは別の版を読む）。
 
@@ -32,6 +32,22 @@ claude --plugin-dir ..
 - `claude plugin marketplace add .. --scope project` で入れてはいけない。マーケットプレイスの名前（`ai-deck-factory`）は `~/.claude/plugins/known_marketplaces.json` に 1 つしか持てず、本番のワークスペースで足したものとぶつかる。外すと、ほかで足したものの記録も消える。
 - そこから起こす `claude -p` の子（dreaming の `run.sh claude` など）には、プラグインが入っていない。子まで確かめるときは pi で試す。
 - worktree が点で始まるフォルダの下（T3 Code の `~/.t3/worktrees` など）にあると、`claude -p` で回した会話は、sandbox の中のファイルを「sensitive file」として書けない（`--permission-mode acceptEdits` でも止まる）。`claude -p` で資料まで作って確かめるときは、sandbox を `/tmp/<名前>/` に写し、そこで `claude --plugin-dir <worktree>` を回す。終わったら消す。
+
+## Codex
+
+`sandbox/` で、`CODEX_HOME` を分けて worktree を入れる。
+
+```sh
+export CODEX_HOME=/tmp/adf-codex-$(basename "$(dirname "$PWD")") && mkdir -p $CODEX_HOME
+codex plugin marketplace add .. && codex plugin add ai-deck-factory@ai-deck-factory
+codex debug prompt-input ok | grep -oE 'ai-deck-factory:[a-z-]+: ' | sort -u
+```
+
+- `CODEX_HOME` は worktree の外に置く。Codex は worktree（マーケットプレイスの根元）を丸ごと写すので、中に置くと自分を写し続けて止まる（`File name too long`）。
+- ふだんの `~/.codex` で `codex plugin marketplace add ..` しない。マーケットプレイスの名前（`ai-deck-factory`）は 1 つしか持てず、本番のワークスペースで足したものとぶつかる。
+- 会話は `$CODEX_HOME/plugins/cache/ai-deck-factory/ai-deck-factory/local/` の写しを読む。手元のパスで足しても写すので、直したら `codex plugin add ai-deck-factory@ai-deck-factory` を回し直す。
+- 分けた `CODEX_HOME` にはログインがない。会話を回すなら、`~/.codex/auth.json`（ChatGPT のログイン）か、`~/.codex/config.toml` の `model_provider`・`[model_providers.<名前>]` を写す。会話の記録も `$CODEX_HOME/sessions/` に残るので、dreaming の `sessions.py`（`~/.codex/sessions/` を読む）には出ない。
+- hook は信頼するまで動かない。対話の Codex の `/hooks` で信頼するか、`codex exec --dangerously-bypass-hook-trust` で回す。`sed -n 1,3p ../skills/deck-practices/visual.md` を回させたあとと、`$ai-deck-factory:factory-doctor` で呼んだときに、`sandbox/rules/` の目印が差し込まれることを確かめた。
 
 ## pi
 
@@ -81,6 +97,7 @@ pi -ns --skill <worktree>/skills -ne -e <worktree>/extensions/rules.ts
 
 - Claude Code は、入れてあるものと重ねても、読まれるのは `--plugin-dir` の版だけ（二重にならない）。
 - pi は、`--skill` だけを足すと入れてあるパッケージのほうが勝つ。`-ns`（スキルを探さない）・`-ne`（拡張を探さない）を付けると、渡したものだけが読まれる。ほかのスキル（`~/.agents/skills` など）と拡張も止まる。
+- Codex には、入れずに渡す起動オプションがない。本番のワークスペースで試すなら、上の「Codex」と同じく `CODEX_HOME` を分けて入れる。
 - どちらも、子のプロセスには伝わらない。子は入れてある版（checkout のパスで入れたなら `~/Projects/ai-deck-factory`）を読む。
 
 ## 消す
@@ -90,4 +107,5 @@ worktree を消せば `sandbox/` も消える。worktree を残して作り直�
 残るもの:
 
 - Google Drive に組んだスライドとドキュメント。`[drive]` に替えた検証用のフォルダごと消す。
+- Codex で試したときの `CODEX_HOME`（`/tmp/adf-codex-<worktree の名前>`）。`rm -rf` で消す。
 - Claude Code のメモリと会話の記録（`~/.claude/projects/<sandbox のパスの / . _ を - にしたもの>/`）と、pi の会話の記録（`~/.pi/agent/sessions/--<sandbox のパスの / を - にしたもの>--/`）。害はないが、たまに消す。

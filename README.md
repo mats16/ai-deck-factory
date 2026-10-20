@@ -2,7 +2,7 @@
 
 日本語のスライド（Google Slides）とドキュメント（Google Docs）を Slides API・Docs API で直接組み、lint・Google が描いたページの画像・別の目のレビューで確かめて渡す仕組み。会話の記録から、決まりに戻し忘れた指示を拾って決まりを育てていく（dreaming）。
 
-同じソースを、Claude Code のプラグインと pi のパッケージの両方から入れられる。
+同じソースを、Claude Code と Codex のプラグイン、pi のパッケージから入れられる。
 
 ## 中身
 
@@ -23,19 +23,19 @@
 
 ```
 INSTALL.md                        会話で入れるときに、エージェントが読む手順（README の「会話で入れる」）
-.claude-plugin/plugin.json        Claude Code のプラグイン
+.claude-plugin/plugin.json        Claude Code のプラグイン（Codex もこれを読む）
 .claude-plugin/marketplace.json   このリポジトリをそのままマーケットプレイスにする
 package.json                      pi のパッケージ（pi.skills: ./skills）
-skills/                           上の 12 個（Claude Code と pi で共通）
-hooks/hooks.json                  Claude Code の hook（プラグインのファイルを読んだら rules/ を、顧客の資料を読んだら memory.md を続けて出す）
-hooks/rules_overlay.py            その中身（Claude Code と pi で共有）
+skills/                           上の 12 個（Claude Code・Codex・pi で共通）
+hooks/hooks.json                  Claude Code と Codex の hook（プラグインのファイルを読むかスキルを呼んだら rules/ を、顧客の資料を読んだら memory.md を続けて出す）
+hooks/rules_overlay.py            その中身（Claude Code・Codex・pi で共有）
 extensions/rules.ts               pi の拡張（同じことを pi の read・bash で）
-docs/                             設定のガイド（claude-code-plugin.md: Claude Code に入れる範囲と確かめ方。pi.md: pi に入れる範囲と確かめ方。development.md: 開発しながら動作を見る）
+docs/                             設定のガイド（claude-code-plugin.md: Claude Code に入れる範囲と確かめ方。codex-plugin.md: Codex に入れる範囲と hook の信頼。pi.md: pi に入れる範囲と確かめ方。development.md: 開発しながら動作を見る）
 ```
 
 ## 会話で入れる
 
-Claude Code か pi を開き、次を貼る（どのフォルダで開いた会話でもよい）。
+Claude Code・Codex・pi のどれかを開き、次を貼る（どのフォルダで開いた会話でもよい）。
 
 ```text
 AI Deck Factory を入れて、ワークスペースを作ってください。
@@ -57,6 +57,15 @@ claude plugin update ai-deck-factory@ai-deck-factory               # GitHub か�
 ```
 
 マーケットプレイスが GitHub を指していれば、会話は `~/.claude/plugins/cache/` に写した版を読む。`plugin.json` に版を書いていないので commit の SHA が版になり、push してから `update` で届く。手元のパスで足したなら、会話は checkout をそのまま読むので、保存すれば次の会話から効く（commit も `update` も要らない）。手元で直しながら試すときは `claude --plugin-dir ~/Projects/ai-deck-factory`（worktree と検証用のワークスペースで試す手順は [docs/development.md](docs/development.md)）。スキルは `/ai-deck-factory:factory-init` のように呼ぶ。資料のフォルダだけで効かせる（`--scope project`）入れ方と、効いている範囲の確かめ方は [docs/claude-code-plugin.md](docs/claude-code-plugin.md)。
+
+**Codex**
+
+```sh
+codex plugin marketplace add mats16/ai-deck-factory   # 手元の checkout なら ~/Projects/ai-deck-factory
+codex plugin add ai-deck-factory@ai-deck-factory     # 直したものを取るときも回し直す（GitHub なら先に codex plugin marketplace upgrade ai-deck-factory）
+```
+
+Codex は Claude Code の形（`.claude-plugin/`・`hooks/hooks.json`）をそのまま読む。会話が読むのは `~/.codex/plugins/cache/` の写しで、手元のパスで足しても写すので、直したら `add` を回し直す。hook は、対話の Codex の `/hooks` で信頼するまで動かない。スキルは `$ai-deck-factory:factory-init` のように呼ぶ。資料のフォルダだけで効かせる入れ方（Codex には scope がないので、ユーザーの設定で切り、ワークスペースの `.codex/config.toml` で入れる）と、効いている範囲の確かめ方は [docs/codex-plugin.md](docs/codex-plugin.md)。
 
 **pi**
 
@@ -237,6 +246,7 @@ gcloud の既定の OAuth クライアントで作った認証情報は、`googl
 - 2026-10-20: カード（`card`）の中身を、枠の上下の中央に置く（印のあるカードも、ないカードも）。上寄せにするのは、`row`・`grid` で隣に合わせて伸ばされたカードだけで、隣のカードと見出しの高さをそろえる。最終行の下には行間の空きがあるので、画像で測って上下の空きが同じに見える位置にする。横に置く印は、印に対して文字が短ければ文字の上下の中央に、長ければ見出しの 1 行目にそろえる（線画のアイコンは枠より小さく見えるので、番号やロゴより早く 1 行目にそろえる）。1 行目には印の中心をそろえ、印の上の辺と文字の上はそろえない。ロゴも分けずに同じにする。決めるのはカードの縦幅ではなく文字の高さ。`deck-practices/visual.md` の visual-027 の「白いカードは、見出しの上の空きより下を広く」は消した（ユーザー「2行程度の card の場合は、アイコンを中央に配置したほうが自然かも」「アイコンが小さければ1行目と高さを合わせたほうが自然な一方で、このサイズなら中央のほうがいい気がします」「そもそも枠に対して文字などが中央に配置されていないことも修正したいです。文字数が多い場合や、隣に文字長の違う card がある場合に card サイズを揃える場合は上揃えで良いですが、基本は中央揃えが適切な気がします」「これはほぼ宣言的記述で意味をなしてないので消してもいいかも」「印のない白いカードも中央に配置してほしい」「では1 行目揃えで良いです。ロゴは分ける処理の方を避けたいので、1 行目揃えで良いです。」）。
 - 2026-10-20: `row`・`grid` で高さのちがうカードを伸ばしてそろえた行では、文字が短くても、どのカードも横に置く印を 1 行目にそろえる（いちばん高いカードと `h` を書いたカードも。伸ばされないので下は空かないが、隣と印の高さがそろう）。上寄せのカードは文字が上下の中央にないので、文字の中央に置くと、隣の長い文字のカード（1 行目にそろえる）と印の高さがずれた。`h` を書いて高くしたカードも 1 行目にそろえる。印だけのカードは、印の上を MARK_IN のままにする。文字の上下の中央に置く印は、本文の最終行の下の行間の空きを数えずに、文字の見た目の中央に置く（前は 0.033 in 下に見えた）（ユーザー「横の card に合わせている場合など、文字が card 内でセンタリングされておらず下に余白がある状況の場合はアイコンは1行目に合わせるべきです。」「中央揃えの場合の数字が中央ではなくズレているように見えます」）。
 - 2026-10-20: 番号の形を選べるようにする。JSON の `num`・`list`・`card` に同じ `shape`（`ellipse`〔既定〕・`round_rectangle`）を足し、`Deck.num` も `shape` を受ける。角丸は高さを円の直径にし、幅を数字に合わせる（1 字なら正方形）。`list` に、整数の番号を 0 で埋める桁 `digits` を足す（単体の `num` とカードは `"01"` と書ける）。社内向けの資料 64 枚を移したとき、p.2 の「01」の札を `label` で代用していた。カードの `shape` は番号の形で、カードの箱の形ではない（ユーザー「1は採用、3は後回し」「4 は digits を足してください。」「2 はほとんどの num が card と併用されているのと、記述方法を統一したいので card も対象に含めてください。」）。
+- 2026-10-20: Codex のプラグインとしても入れられるようにする。Codex は Claude Code の形（`.claude-plugin/`・`hooks/hooks.json`・`${CLAUDE_PLUGIN_ROOT}`）をそのまま読むので、Codex のための別のファイルは置かない。Codex には入れる範囲がないので、ユーザーの設定で切り、ワークスペースの `.codex/config.toml` で入れる（INSTALL.md の「ワークスペースだけに入れる」に合わせる）。`$ai-deck-factory:<スキル>`（Codex）・`/ai-deck-factory:<スキル>`（Claude Code）で呼んだスキルは道具を使わずに SKILL.md が入り、PostToolUse が出ないので、UserPromptSubmit の hook で `rules/<スキル>/SKILL.md` を出す（`docs/codex-plugin.md`）（ユーザー「codex plugin としても入れられるようにしてください。」）。
 
 ## 入れていないもの
 
@@ -273,6 +283,7 @@ gcloud の既定の OAuth クライアントで作った認証情報は、`googl
 - **gantt の見直しの残り（2026-10-19）:** 過去の pages.py がこの機械になく、節目と行のまとまりが過去の資料で何枚あるかは数えていない。月の途中から始まるバー（「9 月の後半」）は書けず、1 列のバーで描く。節目の言葉は表の右端で左に回すだけで、隣の節目の言葉どうしが重なるかは段を分けて避ける（印と言葉の幅は字幅の見込み）。表の右端（`at` が `cols` の数 + 1）の菱形は、半分が本文の右端より 0.1 in 外に出る。
 - **番号の形の残り（2026-10-20）:** 形は `ellipse`・`round_rectangle` の 2 つで、四角は足していない。デッキかテーマで番号の形の既定を決める書き方（`defaults`）は後回しにした（ページごとに書くので、デッキの中で形が交ざりうる）。角丸の番号にも矢印はつながない（文字の枠が図形より広い）。
 - **list の残り（2026-10-20）:** 項目の間を矢印でつなぐ（手順の段）、項目ごとの淡い地、左右の列で項目の上端をそろえる `step` は足していない（矢印の手順は `row` の `"arrows": true`、地のある項目は印のあるカード）。項目の本文に `- ` の箇条書きは書けない（止める）。印の大きさは `num` の 3 つから選ぶだけで、文字の大きさは 11pt（見出しは 12pt）に決めている。既定の項目の間 0.16 in は、依頼文（`docs/fixtures/07-list.md`）で書かせた子が 2 回とも 0.3 in に広げたので、画像を見て広げるかを決める。
+- **Codex の確かめ（後回し）:** factory-doctor は、Codex でプラグインがユーザーの設定で切れているか、hook を `/hooks` で信頼したかを見ない。信頼していないと、`rules/` が黙って出ない（`docs/codex-plugin.md`）。
 
 ## ライセンス
 
