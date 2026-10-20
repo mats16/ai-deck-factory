@@ -1373,6 +1373,7 @@ class SpecPage:
         self.warns, self.placed = [], []  # 組むときの警告（spec_page が d.warn に出す）、置いた部品の (種類, 場所, 位置, 塗りの箱か, 塗りのない文字か, 部品)
         self.anchors, self.body, self.room = {}, None, None  # id → 矢印をつなぐ部品の場所、本文の場所と下端の限り（最後のガントが余った高さを使う）
         self.id_loc, self.lines = {}, []  # id → 部品の場所、引いた矢印の (場所, 折れ点, 矢じりか, 両端の部品の場所, 札の場所)（tangles が見る）
+        self.first_line = set()  # 印を 1 行目にそろえるカードの場所（高さのちがうカードを伸ばしてそろえた row・grid の行。marked）
 
     def emit(self, call, loc, e=None, **kw):
         """Deck の呼び出しを解いた形に足す。部品 e の raw は同じメソッドの引数に重ねる。"""
@@ -1878,7 +1879,8 @@ class SpecPage:
         # の中心にそろえる（ロゴも同じ。線画のアイコンは小さく見えるので ICON_INK を掛ける）
         short = valign == "middle" or th <= MARK_SHORT * size * (ICON_INK if m == "icon" else 1)
         first = (12 if head or not body else first_pt(body, 11, tw - (11 * 1.3 / 72 if bul else 0))) * 1.2 / 72
-        mark = 0 if center else ((th if short else first) - size) / 2  # 印の上端の、文字の上端からの位置
+        # 印の上端の、文字の上端からの位置。本文の最終行の下には行間の空き（MARK_TOP と MARK_END の差）があるので、文字の上下の中央はその半分だけ上（2026-10-20 の画像で 0.033 in 下に見えた）
+        mark = 0 if center else ((th - (MARK_TOP - MARK_END if body else 0) if short else first) - size) / 2
         lo, hi = min(mark, 0), max(content, mark + size)  # 印と文字を合わせた範囲の上端と下端（文字の上端から）
         if not th:  # 文字のない、印だけのカードは、印の上下を MARK_IN にする
             start = end = MARK_IN - lo
@@ -1888,6 +1890,9 @@ class SpecPage:
         top = valign == "top" or valign is None and h is not None and h > need - 0.01
         if h is None:  # least は印と文字が収まる最小（上寄せは、上の空きも）
             return {"h": need, "least": start + hi if valign == "top" else hi - lo}
+        # 伸ばされて下が空いたカードは、文字が上下の中央にないので、短い文字でも印を 1 行目にそろえる。そろえた row・grid の行では、いちばん高いカードも（隣と印の高さがそろう）
+        if not center and th and top and (h > need + 0.01 or loc in self.first_line):
+            mark = (first - size) / 2
         self.index.append((loc, spec_plain(head) + spec_plain(body or "")))
         self.emit("card", loc, e, x=x, y=y, w=w, h=h, fill=spec_color(fill), line=spec_color(e.get("line", "RULE" if fill == "CARD" else None)))
         mx = x + (w - mw) / 2 if center else x + MARK_IN
@@ -2090,12 +2095,16 @@ class SpecPage:
         it, cy, k = iter(ws), y, 0
         for row in self.rows_of(e):
             cw = [next(it) for _ in row]
-            rh = max(self.measure(c, cw[j], f"{loc}.items[{k + j}]") for j, c in enumerate(row))
+            hs = [self.measure(c, cw[j], f"{loc}.items[{k + j}]") for j, c in enumerate(row)]
+            rh = max(hs)
+            grow = ["h" not in c and (c["type"] in STRETCH or c["type"] == "text" and (c.get("fill") or c.get("line"))) for c in row]
+            cards = [j for j, c in enumerate(row) if grow[j] and c["type"] == "card"]
+            if any(hs[j] < rh - 0.01 for j in cards):  # 伸ばすカードがあれば、行のカードの印を 1 行目にそろえる（ほかの部品が伸びるだけなら、カードの文字は中央のまま）
+                self.first_line.update(f"{loc}.items[{k + j}]" for j in cards)
             cx = x
             for j, c in enumerate(row):
                 l = f"{loc}.items[{k + j}]"
-                grow = "h" not in c and (c["type"] in STRETCH or c["type"] == "text" and (c.get("fill") or c.get("line")))
-                self.place(c, cx, cy, cw[j], rh if grow else self.measure(c, cw[j], l), l)
+                self.place(c, cx, cy, cw[j], rh if grow[j] else hs[j], l)
                 if e.get("arrows") and j < len(row) - 1:
                     self.emit("arrow", f"{loc}.arrows[{k + j}]", x1=cx + cw[j] + ARROW_PAD, y1=cy + rh / 2, x2=cx + cw[j] + gap - ARROW_PAD, y2=cy + rh / 2)
                 cx += cw[j] + gap
@@ -4418,6 +4427,23 @@ def selftest_spec():
                                                                    {"type": "card", "num": 2, "head": "段", "text": "1 行の本文"}]}]})
     lc, heads = [e for e in lg if e["call"] == "card"], [e for e in lg if e["loc"].endswith(".head")]
     assert len(lc) == len(heads) == 3 and all(near(t["y"] - c["y"], MARK_TOP) for t, c in zip(heads, lc))  # 見出しの上は、印が高さを決めるロゴのカードも、伸ばされたカードも同じ（PR のレビュー）
+    _, lg = run({"title": "t", "body": [{"type": "row", "items": [{"type": "card", "num": 1, "head": "段", "text": "1 行の本文"},
+                                                                   {"type": "card", "num": 2, "head": "段", "text": "長い本文が続く。" * 12}]}]})
+    lc, nm = [e for e in lg if e["call"] == "card"], [e for e in lg if e["call"] == "num"]
+    assert near(nm[0]["cy"] - lc[0]["y"], nm[1]["cy"] - lc[1]["y"])  # 伸ばされて下が空いた短い文字のカードも、印を 1 行目にそろえる（2026-10-20 の画像）
+    _, lg = run({"title": "t", "body": [{"type": "row", "items": [{"type": "card", "num": 1, "head": "段", "text": "1 行の本文"},
+                                                                   {"type": "card", "num": 2, "head": "段", "text": "本文<br>2 行目"}, {"type": "card", "num": 3}]}]})
+    lc, nm = [e for e in lg if e["call"] == "card"], [e for e in lg if e["call"] == "num"]
+    assert near(nm[0]["cy"] - lc[0]["y"], nm[1]["cy"] - lc[1]["y"])  # 短い文字どうしでも、そろえた行ではいちばん高いカードも 1 行目にそろえる（PR のレビュー）
+    assert near(nm[2]["cy"] - lc[2]["y"], MARK_IN + MARK / 2)  # 印だけのカードは、1 行目にそろえず、印の上を MARK_IN のままにする（PR のレビュー）
+    card = {"type": "card", "num": 1, "head": "段", "text": "1 行の本文"}
+    _, lg = run({"title": "t", "body": [{"type": "row", "items": [card, card, {"type": "text", "text": "x", "fill": "PANEL"}]}]})
+    lc, nm = [e for e in lg if e["call"] == "card"], [e for e in lg if e["call"] == "num"]
+    assert all(near(n["cy"] - c["y"], c["h"] / 2) for n, c in zip(nm, lc))  # 伸びるのがほかの部品だけなら、カードの印は中央のまま（PR のレビュー）
+    for text in ("1 行の本文", "本文<br>2 行目"):
+        _, lg = run({"title": "t", "body": [{"type": "card", "num": 1, "head": "段", "text": text, "w": 5}]})
+        nm, hd, tx = (next(e for e in lg if e["call"] == "num" and c == "num" or e["loc"].endswith(f".{c}")) for c in ("num", "head", "text"))
+        assert near(nm["cy"], (hd["y"] + tx["y"] + tx["h"] - (MARK_TOP - MARK_END)) / 2), text  # 短い文字の印は、最終行の下の行間の空きを除いた文字の中央。本文の行数によらない（PR のレビュー）
     _, lg = run({"title": "t", "body": [{"type": "card", "image": "https://x/a.png", "head": "製品"}]})
     lc, li = (next(e for e in lg if e["call"] == c) for c in ("card", "image"))
     assert near(li["y"] - lc["y"], lc["y"] + lc["h"] - li["y"] - li["h"])  # 印が高さを決めるカードは、印の上下の空きが同じ
