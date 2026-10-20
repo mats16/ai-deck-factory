@@ -1,48 +1,48 @@
 ---
 name: doc-build
-description: 日本語のドキュメント（提案書・調査レポート・説明資料・PoC の計画書）を、markdown（build/doc.md）で書き、Docs API で Google Docs に組み、確かめて直すループを回す。docs.py（doc.md の書き方・mermaid の図・テーマのファイル・テンプレートから書き始める init・同じ URL への組み直し・画面での直しの検知）と docs.py check（lint・ページの画像とレイアウト・doc.md と組んだ文書の照合・テンプレートとの照合・元のテンプレートとの骨組みの比較）、Docs API の落とし穴。Word で渡すときは Google Docs から書き出す。ドキュメントを書き始める前と、渡す前に必ず使う。
+description: Write Japanese documents (proposals, research reports, explanatory materials, PoC plans) in markdown (build/doc.md), build them in Google Docs with the Docs API, and run the loop of checking and fixing. Covers docs.py (doc.md syntax, mermaid diagrams, theme files, init to start from a template, rebuilding to the same URL, detecting edits made in the UI), docs.py check (lint, page images and layout, matching doc.md against the built document, matching against the template, comparing the skeleton with the original template), and Docs API pitfalls. When delivering as Word, export from Google Docs. Always use before you start writing a document and before you deliver it.
 ---
 
-# 日本語のドキュメントを Google Docs に組んで仕上げる
+# Build and finish Japanese documents in Google Docs
 
-[doc-build-001] ドキュメントは Google Docs を Docs API で直接組む（経緯は `Research/gdocs_pipeline_20261009.md`）。中身の正本は資料の `build/doc.md`（markdown）で、docs.py が名前付きスタイルとテーマで組み、同じ URL に組み直す（2026-10-10 に doc.py から移した。下の 1）。見た目の決まりは `../deck-practices/visual_doc.md`、中身の書き方は `../deck-practices/content.md`（スライドと同じ）。スライドは `../deck-build/`。
+[doc-build-001] Documents are built directly in Google Docs with the Docs API (history in `Research/gdocs_pipeline_20261009.md`). The source of truth for the content is the material's `build/doc.md` (markdown); docs.py builds it with named styles and a theme, and rebuilds it to the same URL (moved from doc.py on 2026-10-10. §1 below). The visual rules are in `../deck-practices/visual_doc.md`, and how to write the content is in `../deck-practices/content.md` (same as slides). Slides are in `../deck-build/`.
 
-| 作るもの | 書き始める前に読む |
+| What you make | Read before you start writing |
 |---|---|
-| Google Docs（既定） | このファイルと `../deck-practices/visual_doc.md` |
+| Google Docs (default) | This file and `../deck-practices/visual_doc.md` |
 
 ```sh
-K=<deck-build のフォルダ>/scripts   # このスキルのフォルダの ../deck-build/scripts。スクリプトはスライドと同じ場所（gapi.py・lint.py を共有する）
-cd <フォルダ>/build
-python3 $K/docs.py init <テンプレートの名前>                      # ワークスペースにテンプレートがあり、それから書き始めるとき（doc.md を写す。下の 1.3）
-python3 $K/docs.py new <Drive のフォルダの URL> <YYYYMMDD_の名前>   # 初めて組むとき。出た URL を構成案に書き、すぐユーザーに伝える（../deck-build/SKILL.md の deck-build-003）
-python3 $K/docs.py build <URL>                                    # 直したら組み直す（URL は変わらない。画面で直されていたら止まる）
-python3 $K/docs.py check <URL>                                    # 確かめる（下の 2。要修正があれば exit 1）
-python3 $K/docs.py export <URL> /tmp/<資料名>.docx                 # 相手が Word を求めたときだけ（下の 6）
+K=<deck-build folder>/scripts   # ../deck-build/scripts relative to this skill's folder. The scripts are in the same place as for slides (gapi.py and lint.py are shared)
+cd <folder>/build
+python3 $K/docs.py init <template name>                      # when the workspace has a template and you start from it (copies doc.md. §1.3 below)
+python3 $K/docs.py new <Drive folder URL> <YYYYMMDD_name>   # first build. Write the printed URL in the outline and tell the user right away (deck-build-003 in ../deck-build/SKILL.md)
+python3 $K/docs.py build <URL>                                    # rebuild after edits (the URL does not change. Stops if someone edited in the UI)
+python3 $K/docs.py check <URL>                                    # check (§2 below. exit 1 if there is 要修正)
+python3 $K/docs.py export <URL> /tmp/<material name>.docx                 # only when the counterpart asks for Word (§6 below)
 ```
 
-## 1. doc.md の書き方と、確かめるループ
+## 1. Writing doc.md and the check loop
 
-### 1.1 進め方
+### 1.1 Workflow
 
-[doc-build-002] まず markdown で中身を詰め、それからテンプレートとともに API で組み、確かめて直すことを繰り返す。スライドのページの JSON と同じく、**直すのは doc.md（中身）と docs.py のテーマ・部品（見た目）で、組んだ文書は手で直さない**。markdown をアップロードしてできた文書を直してテンプレートに近づけるやり方は取らない（直しが文書にしか残らず、上げ直すと消える）。
+[doc-build-002] First settle the content in markdown, then build it with the template through the API, and repeat checking and fixing. As with slide page JSON, **edit doc.md (content) and docs.py's themes and components (appearance); do not edit the built document by hand**. Do not upload markdown and then edit the resulting document to bring it closer to the template (the edits live only in the document and are lost when you upload again).
 
-1. `docs.py init <テンプレート>` で doc.md を作る（テンプレートがなければ、下の 1.2 の形で書き始める）。
-2. 中身を書く。構成案で合意した中身を、ユーザーを待たずに doc.md に書く（`../deck-practices/SKILL.md` の deck-practices-006）。ユーザーが doc.md で中身を詰めたいと言ったときは、そうしてよい（読む人に見せるのは、組んだ Google Docs）。
-3. `docs.py new`（初回）か `docs.py build` で組み、`docs.py check` で確かめる。
-4. 要修正を 0 にし、要確認を 1 件ずつ見て、画像を開いて見る（下の 5）。直しは doc.md か docs.py に入れ、3 に戻る。
-5. 新しく作った文書は、返す前に `/deck-review`（`../deck-review/SKILL.md`）。指摘も doc.md に入れて組み直す。返したあとの直しでは、`../deck-practices/SKILL.md` の deck-practices-017 で決めた範囲だけを回す。
+1. Create doc.md with `docs.py init <template>` (if there is no template, start writing in the format of §1.2 below).
+2. Write the content. Write the content agreed in the outline into doc.md without waiting for the user (deck-practices-006 in `../deck-practices/SKILL.md`). If the user says they want to settle the content in doc.md, you may do so (what readers see is the built Google Docs).
+3. Build with `docs.py new` (first time) or `docs.py build`, and check with `docs.py check`.
+4. Bring `要修正` to 0, check each `要確認` one by one, and open and look at the images (§5 below). Put fixes into doc.md or docs.py, and go back to 3.
+5. Before returning a newly made document, run `/deck-review` (`../deck-review/SKILL.md`). Put the findings into doc.md as well and rebuild. For fixes after delivery, run only the scope decided by deck-practices-017 in `../deck-practices/SKILL.md`.
 
-### 1.2 doc.md の形
+### 1.2 doc.md format
 
-頭（`---` で挟む）に資料の情報を、本文に markdown を書く。書式は書かない。書体・大きさ・色・空きは、docs.py の名前付きスタイル（`STYLES`）とテーマが決め、組むたびに入れ直す（`STYLES` を変えれば、組み直した資料すべてに効く）。文字の記法はスライドと同じ（`../deck-build/slides.md` の 2 の「文字の記法」。大きさの `{32:…}` はスライドだけ）。
+Write the material's information in the header (between `---` lines) and markdown in the body. Do not write formatting. Font, size, color, and spacing are decided by docs.py's named styles (`STYLES`) and the theme, and are reapplied on every build (changing `STYLES` affects every material you rebuild). The text notation is the same as for slides (the "Text markup" item in `../deck-build/slides.md` §2. The size notation `{32:…}` is slides only).
 
 ````markdown
 ---
-name: Acme様_Lakebase導入の検討｜Internal Only   # 末尾の秘密区分（Internal Only・Confidential）だけがフッターに出る
-theme: acme                                      # ワークスペースの themes/docs/acme.json。省くと既定（A4・10.5pt・濃紺の見出し）
-template: proposal                               # テンプレートから書いたとき（check が照合する）
-title: Lakebase の導入の検討について              # 表紙を作らない資料の題と副題（subtitle:）
+name: Acme様_Lakebase導入の検討｜Internal Only   # only the trailing confidentiality label (Internal Only, Confidential) appears in the footer
+theme: acme                                      # the workspace's themes/docs/acme.json. If omitted, the default (A4, 10.5pt, navy headings)
+template: proposal                               # when written from a template (check matches against it)
+title: Lakebase の導入の検討について              # title and subtitle (subtitle:) of a material without a cover
 ---
 
 # 1. 要旨
@@ -66,26 +66,26 @@ flowchart LR
 ```
 ````
 
-| 書き方 | 組まれるもの |
+| Syntax | What is built |
 |---|---|
-| 頭の `name`・`theme`・`template`・`omit` | 資料名、テーマ、照合するテンプレート、テンプレートの節のうち外す節（`omit:` の下に `  - 節の名前`） |
-| 頭の `cover:`（`  - 行` の並び）と `cover_left` | 表紙のページ。題の行を中央に大きく置き、下に左の語（社名など）と自社のロゴ（`factory.toml` の `[brand] logo`。なければ置かない）を並べて改ページする。テンプレートに表紙があるときだけ |
-| 頭の `title`・`subtitle` | 1 ページ目の頭の題と副題（日付・宛先など）。表紙のページは作らない（visual_doc.md の 2） |
-| `#`・`##`・`###` | 見出し（H1〜H3）。番号は文字で書く（「1. 要旨」）。H1 から順に、段を飛ばさない |
-| 段落 | 空行で区切る。行は「。」の後で分けてよい（組むときにつなぐ。英数字どうしの間だけ空白を入れる）。`**太字**`・`***赤の太字***`（結論の語句だけ。visual_doc.md の 3）・`[文字](URL)`・`` `コード` ``・`<br>`（段落の中の改行）。太字・赤の中にリンクとコードを入れられる（`***[文字](URL)***`）。記号そのものは `\*` のように `\` を付ける |
-| `出典: …` で始まる段落 | 出典の行（表と図の下。9pt・補助の色）。リンクを付ける（content.md の 6） |
-| `- `・`1. ` | 箇条書き（番号付き）。2 字以上下げた項目は 2 段目。前置きの段落は、続く箇条書き・表と同じページに置く |
-| `表: 題 {widths: 30 80 40}` と、すぐ下の `\|` の表 | 表。1 行目が見出しの行（ページをまたぐと次のページの頭にも出る）。題は表の上に「表 N　…」。`widths` は列の幅の比で、表は本文の左端から右端まで広がる。セルの中の改行は `<br>`、縦線は `\\|` |
-| `![題](画像){width=150}` | 図。画像は `assets/` の中のパス（`"gcp/bigquery.png"`）、build/ からのパス、URL。幅は mm（本文の幅 150 mm で書く。テーマで本文が広がれば、その比で広げる）。題は図の下に「図 N　…」 |
-| `図: 題 {width: 120}` と、すぐ下の ```` ```mermaid ```` | mermaid の図（[書き方](https://mermaid.js.org/intro/)）。docs.py が手元の mermaid-cli で PNG に描いて図として置く（下の doc-build-009）。`図:` の行は省ける（題なし）。次の行が ```` ```mermaid ```` でない `図:` の行は、本文の段落のまま。幅は `![…]` と同じ mm で、省くと図の文字が本文と同じ大きさになる幅（本文の幅を超えれば本文の幅）。ふつうは省く |
-| `> …` | 引用（顧客の声、テンプレートの書き手への注記）。左に線を引き、補助の色にする |
-| ```` ``` ```` | コードとコマンド。英数字は等幅の書体（既定は Cascadia Mono）、和文は本文の書体（既定は Noto Sans JP） |
-| `\newpage` | 改ページ（付録の前など） |
-| `<!-- … -->` | 組まない覚え書き（元にした資料、変えたところの理由） |
+| Header `name`, `theme`, `template`, `omit` | Material name, theme, template to match against, and sections of the template to leave out (`  - <section name>` under `omit:`) |
+| Header `cover:` (a list of `  - <line>`) and `cover_left` | A cover page. Places the title lines large in the center, puts the left-hand words (such as the company name) and our own logo (`[brand] logo` in `factory.toml`; not placed if absent) side by side below, and breaks the page. Only when the template has a cover |
+| Header `title`, `subtitle` | Title and subtitle (date, addressee, and so on) at the top of page 1. No cover page is made (visual_doc.md §2) |
+| `#`, `##`, `###` | Headings (H1–H3). Write numbers as text (「1. 要旨」). Go in order from H1 and do not skip levels |
+| Paragraph | Separate with blank lines. You may break lines after 「。」 (they are joined when built; a space is inserted only between alphanumerics). `**bold**`, `***red bold***` (only for the key phrase of a conclusion. visual_doc.md §3), `[text](URL)`, `` `code` ``, `<br>` (line break within a paragraph). Links and code can go inside bold and red (`***[text](URL)***`). Escape literal symbols with `\`, such as `\*` |
+| Paragraph starting with `出典: …` | Source line (below tables and figures. 9pt, supporting color). Add a link (content.md §6) |
+| `- `, `1. ` | Bullet lists (numbered). Items indented 2 or more spaces are level 2. Keep an introductory paragraph on the same page as the list or table that follows |
+| `表: <title> {widths: 30 80 40}` with a `\|` table right below | Table. Row 1 is the header row (repeated at the top of the next page when the table crosses pages). The title appears above the table as 「表 N　…」. `widths` are ratios of column widths; the table spans from the left to the right edge of the body. Line breaks in a cell are `<br>`, a vertical bar is `\\|` |
+| `![<title>](<image>){width=150}` | Figure. The image is a path inside `assets/` (`"gcp/bigquery.png"`), a path from build/, or a URL. Width is in mm (write it for a body width of 150 mm; if the theme widens the body, it scales by that ratio). The title appears below the figure as 「図 N　…」 |
+| `図: <title> {width: 120}` with ```` ```mermaid ```` right below | A mermaid diagram ([syntax](https://mermaid.js.org/intro/)). docs.py draws it as PNG with the local mermaid-cli and places it as a figure (doc-build-009 below). The `図:` line can be omitted (no title). A `図:` line not followed by ```` ```mermaid ```` stays a body paragraph. Width is in mm, as for `![…]`; if omitted, it is the width at which the diagram text is the same size as the body (the body width if that exceeds it). Usually omit it |
+| `> …` | Quote (customer voice, notes to the template's writer). Draws a line on the left and uses the supporting color |
+| ```` ``` ```` | Code and commands. Alphanumerics in the monospace font (default Cascadia Mono), Japanese in the body font (default Noto Sans JP) |
+| `\newpage` | Page break (before an appendix, and so on) |
+| `<!-- … -->` | Notes that are not built (the material it was based on, reasons for changes) |
 
-- 図と表の番号は、docs.py が出てくる順に振る。本文から「表 1 のとおり」と指すときは、組んだあとのテキストで番号を確かめる。
-- 組むときの警告（表の列の幅の数が列に合わない、図が本文の幅を超える、`表:` の次が表でない）は、1 件ずつ見る。
-- [doc-build-010] **テーマ:** 既定は A4・本文 10.5pt・濃紺の見出し（visual_doc.md）。会社の文書のテンプレートに合わせるときは、ワークスペースの `themes/docs/<名前>.json`（テーマのファイル。ファイルの名前がテーマの名前で、英数字と - _）に書き、doc.md の頭に `theme: <名前>` と書く。形はスライドのテーマのファイル（`../deck-build/slides.md` の slides-036）にそろえ、頭の `apiVersion`（`docs/v1`）・`kind`、`description`・`font`・`mono`・`colors` は同じキー（`colors` の役割の名前も、同じ意味のものはスライドと同じ）。`page`・`margins`・`styles` はドキュメントだけのキー。書いていない値は既定のまま。知らないキー・役割と、6 桁でない色・正でない大きさなどの書けない値は、組む前に場所を付けて止まる（factory-doctor も同じ関数で見る）。色のコントラストは見ない（会社の文書のテンプレートの色に合わせるため）ので、色を書いたら画像で読めるかを見る。`theme:` を書かない doc.md は `[docs] default_theme`（なければ既定の `standard`）。ただしテーマのファイルがあるのに `theme:` がないと、`docs.py new` は一覧を出して止まる（選ばせるため。既定のままなら `theme: standard` と書く）。どれを使うかは資料ごとに選ぶ（`docs.py themes` が名前と説明を出す。`../deck-practices/SKILL.md` の「作業の始め方」の 5）。A4 でない用紙のテーマ（Letter など）は、lint の「用紙が A4 でない」「1 行の字数が多い」を出さない（A4 のテーマは、ほかの A4 の文書と同じく「1 行の字数が多い」を出す）。`factory.toml` の `[docs.themes]`（2026-10-19 までの書き方）は読まない（factory-doctor が要修正に出す）。
+- docs.py numbers figures and tables in order of appearance. When the body refers to them, as in 「表 1 のとおり」, check the number in the text after building.
+- Check each build warning (the number of column widths does not match the columns, a figure is wider than the body, the line after `表:` is not a table) one by one.
+- [doc-build-010] **Theme:** The default is A4, 10.5pt body, navy headings (visual_doc.md). To match a company document template, write the workspace's `themes/docs/<name>.json` (a theme file. The file name is the theme name, alphanumerics and - _), and write `theme: <name>` in the header of doc.md. Match the format to the slide theme files (slides-036 in `../deck-build/slides.md`): the header `apiVersion` (`docs/v1`) and `kind`, and `description`, `font`, `mono`, and `colors` are the same keys (role names in `colors` are also the same as for slides when they mean the same thing). `page`, `margins`, and `styles` are document-only keys. Values not written stay at the default. Unknown keys and roles, and values that cannot be written (colors that are not 6 hex digits, sizes that are not positive, and so on), stop before building with their location (factory-doctor checks with the same function). Color contrast is not checked (to match the colors of company document templates), so when you write colors, check on the images that the text is readable. A doc.md without `theme:` uses `[docs] default_theme` (or the default `standard` if absent). However, if theme files exist and `theme:` is missing, `docs.py new` prints the list and stops (to make you choose. To keep the default, write `theme: standard`). Choose which one to use per material (`docs.py themes` prints names and descriptions. "How to start" §5 of `../deck-practices/SKILL.md`). Themes on paper other than A4 (Letter, and so on) do not get the lint findings 「用紙が A4 でない」 or 「1 行の字数が多い」 (A4 themes get 「1 行の字数が多い」 like other A4 documents). `[docs.themes]` in `factory.toml` (the way of writing until 2026-10-19) is not read (factory-doctor reports it as `要修正`).
   ```json
   {"apiVersion": "docs/v1", "kind": "theme",
    "description": "米国の本社に出す文書。英語版のテンプレートに合わせた Letter の版面",
@@ -95,105 +95,105 @@ flowchart LR
    "styles": {"BODY": {"size": 10}, "H1": {"size": 12, "above": 16, "below": 6},
               "H2": {"size": 11}, "H3": {"size": 10.5, "color": "303F47", "spacing": 90}}}
   ```
-  | キー | 中身 |
+  | Key | Content |
   |---|---|
-  | `description` | どの資料・聞き手に使うか、使わない場面（`docs.py themes` が出す。スライドと同じ） |
-  | `font`・`mono` | 本文とコードの等幅の書体。書けるのは `slides.py` の `JP_FONTS`（和文を描けると確かめた書体）と DM Sans（和文は Google が選ぶゴシック。Docs では確かめていない）。等幅はリガチャのある書体（`LIGATURE_MONO`）を止める |
-  | `colors` | 役割 → `#` を付けない 6 桁。`HEAD`（題と見出し。既定 `1B3139`）・`TEXT`（本文。`303F47`）・`SUB`（副題・図表の題・出典・引用・フッター。`5A6F77`）・`RULE`（罫線と引用の線。`DCE0E2`）・`PANEL`（コードの地。`EEEDE9`）・`RED_TEXT`（`***赤の太字***`。`CC2B17`）・`TABLE_HEAD`・`TABLE_HEAD_TEXT`（表の見出しの行の地と文字。`1B3139`・`FFFFFF`）。mermaid の図の色もここから取る |
-  | `page`・`margins` | 用紙の幅・高さ、上下・左右の余白（mm） |
-  | `styles` | 名前付きスタイルごと（`TITLE`・`SUBTITLE`・`H1`・`H2`・`H3`・`BODY`）の `size`（pt）・`color`（6 桁。書かなければ題と見出しは `HEAD`、副題は `SUB`、本文は `TEXT`）・`above`・`below`（上・下の空き。pt）・`spacing`（行間の %。行送りは「字の 1.88 倍 × %」。下の 7）。既定は `docs.py` の `STYLES` |
-  `font`・`mono` を書かなければ Noto Sans JP と Cascadia Mono。行送りと字の幅の見込みは、この 2 つで測った値のまま（違う書体では 1 行の字数や改ページがずれる）。Google Fonts にない名前は、黙って別の書体で描かれる。書いたら、そのテーマの文書を組み、`docs.py check` の「PDF の書体」と画像で見る。lint の書体の検査は、`docs.py check` が、`docs.py build` が文書に残した書体（組んだときのテーマの書体）と比べる。残していない文書（前の版で組んだもの）と、`lint.py` に文書の JSON をじかに渡したときは、既定の書体と比べる。
-- 画像の選び方と出どころ（`assets/README.md`、Iconify、各社のアイコン）は、スライドと同じ（`../deck-build/slides.md` の 6）。図を Google Slides で描いて貼るときは、`gslides.py thumb` で画像にしてから `![…](…)` で置く。
-- [doc-build-009] **mermaid:** 流れ・順序・状態など、箱と矢印で足りる図は ```` ```mermaid ```` で doc.md に書く（中身が doc.md に残り、直すと組み直しで図も変わる。GitHub でもそのまま見える）。アイコンやロゴの要る構成図は、Google Slides で描いて貼る。docs.py は手元で mermaid-cli（`npx` で版を固定した `@mermaid-js/mermaid-cli`。`docs.py` の `MERMAID_CLI`。初めては数分かかる。Node.js が要る）で描く。版の分からない手元の `mmdc` は使わない（版で描き方が変わり、PNG の指紋と合わなくなる）。図の中身を外のサービス（mermaid.ink など）に渡さない（`../deck-build/assets/README.md`）。色はテーマの `colors`（箱の地は `PANEL`、枠は `HEAD`、線は `SUB`、文字は `TEXT`）、書体はテーマの本文の書体、文字は本文と同じ大きさで描く。書体は手元に入っているもので描かれる（入っていなければ別のゴシックになるので、画像で見る）。描いた PNG は `build/mermaid/<指紋>.png` に置き、中身・色・書体・mermaid-cli の版が同じなら描き直さない（組むたびに、使っていない PNG を消す）。手元の書体と、mermaid-cli が取ってくる Chrome は指紋に入らないので、入れ替えて描き直したいときは `build/mermaid/` を消して組み直す。本文の幅に縮めて図の文字が 9pt 未満になるときは、組むときの警告に出る（横に長い図は `flowchart TB` にするか、図を分ける）。書き方の誤りは、mermaid-cli の出力を付けて止まる。
+  | `description` | Which materials and audiences it is for, and when not to use it (printed by `docs.py themes`. Same as slides) |
+  | `font`, `mono` | Body font and monospace font for code. Allowed are `JP_FONTS` in `slides.py` (fonts confirmed to render Japanese) and DM Sans (Japanese falls back to a Gothic font Google chooses. Not confirmed in Docs). For monospace, fonts with ligatures (`LIGATURE_MONO`) are stopped |
+  | `colors` | Role → 6 hex digits without `#`. `HEAD` (title and headings. Default `1B3139`), `TEXT` (body. `303F47`), `SUB` (subtitle, figure and table titles, source lines, quotes, footer. `5A6F77`), `RULE` (rules and the quote line. `DCE0E2`), `PANEL` (code background. `EEEDE9`), `RED_TEXT` (`***red bold***`. `CC2B17`), `TABLE_HEAD` and `TABLE_HEAD_TEXT` (background and text of the table header row. `1B3139` and `FFFFFF`). Colors of mermaid diagrams are also taken from here |
+  | `page`, `margins` | Paper width and height, and top/bottom and left/right margins (mm) |
+  | `styles` | Per named style (`TITLE`, `SUBTITLE`, `H1`, `H2`, `H3`, `BODY`): `size` (pt), `color` (6 digits. If not written, title and headings use `HEAD`, subtitle `SUB`, body `TEXT`), `above` and `below` (space above and below. pt), `spacing` (line spacing in %. Line pitch is "1.88 × font size × %". §7 below). Defaults are `STYLES` in `docs.py` |
+  If `font` and `mono` are not written, they are Noto Sans JP and Cascadia Mono. The line pitch and character-width estimates stay at the values measured with these 2 fonts (with other fonts, characters per line and page breaks shift). A name not in Google Fonts is silently rendered in another font. When you write one, build a document with that theme and check 「PDF の書体」 in `docs.py check` and the images. The lint's font check in `docs.py check` compares against the font that `docs.py build` recorded in the document (the theme's font at build time). Documents without that record (built with an earlier version), and document JSON passed directly to `lint.py`, are compared against the default font.
+- How to choose images and where they come from (`assets/README.md`, Iconify, each company's icons) is the same as for slides (`../deck-build/slides.md` §6). To draw a figure in Google Slides and paste it, turn it into an image with `gslides.py thumb` and then place it with `![…](…)`.
+- [doc-build-009] **mermaid:** Write diagrams that boxes and arrows are enough for (flows, sequences, states, and so on) as ```` ```mermaid ```` in doc.md (the content stays in doc.md, rebuilding after an edit changes the diagram too, and GitHub shows it as is). Architecture diagrams that need icons or logos are drawn in Google Slides and pasted. docs.py draws locally with mermaid-cli (`@mermaid-js/mermaid-cli` with a pinned version via `npx`. `MERMAID_CLI` in `docs.py`. The first run takes a few minutes. Needs Node.js). Do not use a local `mmdc` of unknown version (rendering changes between versions and no longer matches the PNG fingerprint). Do not give diagram content to outside services (such as mermaid.ink) (`../deck-build/assets/README.md`). Colors come from the theme's `colors` (box background `PANEL`, border `HEAD`, lines `SUB`, text `TEXT`), the font is the theme's body font, and text is drawn at the same size as the body. The font is whatever is installed locally (if it is not installed, another Gothic font is used, so check on the images). The PNG is placed at `build/mermaid/<fingerprint>.png` and not redrawn if the content, colors, font, and mermaid-cli version are the same (each build deletes unused PNGs). The local fonts and the Chrome that mermaid-cli fetches are not part of the fingerprint, so to redraw after replacing them, delete `build/mermaid/` and rebuild. If shrinking to the body width makes the diagram text smaller than 9pt, a build warning appears (for wide diagrams use `flowchart TB` or split the diagram). Syntax errors stop with the mermaid-cli output.
 
-### 1.3 テンプレート
+### 1.3 Templates
 
-テンプレートは、ワークスペースの `rules/doc-build/templates/<名前>/doc.md` が構造の正本で（会社の文書の型なので、プラグインには入れない。テンプレートがなければ、doc.md を白紙から書く）、組んだ見本の URL は `factory.toml` の `[docs.templates]`。`docs.py init <名前>` がここから写す。
+The source of truth for a template's structure is the workspace's `rules/doc-build/templates/<name>/doc.md` (it is a company's document format, so it is not in the plugin. If there is no template, write doc.md from scratch), and the URL of the built sample is in `[docs.templates]` in `factory.toml`. `docs.py init <name>` copies from here.
 
-- **中身:** 節（H1）の並び、節ごとの例の文と箇条書き、例の表（見出しの行が列の決まり）、書き手への注記（`> <担当: SA>`）、札（`[会社名]`・`[氏名]` など、リンクでない `[ ]`）、テーマと表紙。頭の `source:` は元にした文書（英語版）の URL、`skeleton_ok:` は元の文書と骨組みが違うことを認めた節と理由（`  - <節の名前>: <理由>`）。
-- **書き始める:** `docs.py init <名前>` が doc.md を写し、頭に `template: <名前>` を足す（`source`・`skeleton_ok` は外す）。札と注記を中身に置き換える。札と注記が残っているうちは check が要修正を出すので、置き換え忘れは残らない。
-- **照合（check）:** テンプレートの H1 の節がそろっているか（外すなら頭の `omit:` に書く）、節の順、節の中に例の表と同じ列の表があるか（列の名前の中の札は何にでも合う）、表紙とテーマ。足した節（H1）は要確認に出る。節の中の H2 と、表のほかの表は自由。
-- [doc-build-003] **テンプレートを作る・直す:** 渡されたテンプレートの文書を複製して文字だけを置き換えない。節・順・中身（入れ子の箇条書き、例の表、書き手への注記）を `rules/doc-build/templates/<名前>/doc.md` に写し（英語なら訳し）、頭に `source:` を書き、docs.py で組む（スライドやコードと同じく、元と見比べ、lint で確かめながら作るため）。テンプレートのフォルダで `docs.py check <見本の URL>` を回すと、元の文書と節ごとの骨組み（箇条書きの段ごとの項目の数・表の大きさ・図の数）を比べる。違いは、直すか、理由を `skeleton_ok:` に書く。見た目は元の文書のページの画像（`docs.py export <URL> /tmp/x.pdf` と `pdftoppm`）と並べて見比べる。変えたところ（書式、表紙、lint で直した書き方）は doc.md の頭の覚え書きに理由と一緒に書く。古い Google Doc の複製には組まない。同じ行間の値でも行が詰まって描かれる（API に設定が出ない）
-- **docs.py・lint.py・doc_layout.py を直したら、** `--selftest` を 3 つとも通し、テンプレートの見本を組み直して check を回す（そのフォルダで `docs.py build`・`check`。スライドの `template.py visual` と同じ役目）。部品を変えると、それを使う資料を組み直したときに見た目も変わる。
-- テンプレートの節や表を変えると、それで書いた資料の照合も変わる。変えたら、そのテンプレートで書いた資料（`grep -rl "template: <名前>" Customers Internal`）の check を回す。
+- **Content:** the order of sections (H1), example sentences and bullets per section, example tables (the header row defines the columns), notes to the writer (`> <担当: SA>`), tags (`[会社名]`, `[氏名]`, and so on: `[ ]` that are not links), and the theme and cover. The header `source:` is the URL of the document it was based on (the English version), and `skeleton_ok:` lists the sections whose skeleton is accepted as different from the original, with reasons (`  - <section name>: <reason>`).
+- **Starting to write:** `docs.py init <name>` copies doc.md and adds `template: <name>` to the header (removing `source` and `skeleton_ok`). Replace the tags and notes with content. While tags and notes remain, check reports `要修正`, so no leftover placeholders remain.
+- **Matching (check):** whether all H1 sections of the template are present (to leave one out, write it in the header `omit:`), the order of sections, whether each section has a table with the same columns as the example table (tags in column names match anything), and the cover and theme. Added sections (H1) are reported as `要確認`. H2 inside sections and tables other than the example tables are free.
+- [doc-build-003] **Making or fixing a template:** Do not copy the given template document and replace only the text. Copy the sections, order, and content (nested bullets, example tables, notes to the writer) into `rules/doc-build/templates/<name>/doc.md` (translate if it is in English), write `source:` in the header, and build with docs.py (as with slides and code, so that you make it while comparing with the original and checking with the lint). Running `docs.py check <sample URL>` in the template's folder compares the skeleton per section with the original document (number of items per bullet level, table size, number of figures). Fix the differences or write the reason in `skeleton_ok:`. For appearance, compare side by side with page images of the original document (`docs.py export <URL> /tmp/x.pdf` and `pdftoppm`). Write what you changed (formatting, cover, wording fixed by the lint) with reasons in the notes at the top of doc.md. Do not build into a copy of an old Google Doc. Even with the same line spacing value, lines are rendered tighter (the setting does not show in the API)
+- **When you edit docs.py, lint.py, or doc_layout.py,** pass `--selftest` for all 3, rebuild the template samples, and run check (`docs.py build` and `check` in that folder. Same role as `template.py visual` for slides). Changing a component changes the appearance of the materials that use it when they are rebuilt.
+- Changing a template's sections or tables changes the matching of the materials written with it. After changing one, run check on the materials written with that template (`grep -rl "template: <name>" Customers Internal`).
 
-## 2. docs.py check がすること
+## 2. What docs.py check does
 
-1. `documents.get` の JSON を `/tmp/docs_<ID の頭 8 字>/doc.json` に書く
-2. テキストを `text.md` に書き出す（見出しは `#`、表は 1 行を ` | ` でつなぎ、画像は［画像］。レビューに渡す）
-3. `lint.py` の `lint_gdoc` を JSON にかける（下の 3）
-4. Drive の PDF の書き出し（Google が描いたページ）を `doc.pdf` に、ページの画像を `p-N.png`（110 dpi。A4 で 910 × 1286）に取る
-5. `doc_layout.py` が、PDF の行の位置（`pdftotext -bbox-layout` の `bbox.html`）と画像で、レイアウトを測る（下の 4）
-6. PDF に使われた書体を出す（箇条書きの記号と番号の Arial は、API で変えられないので構わない）
-7. **doc.md と組んだ文書の照合**（今いるフォルダの doc.md と、組んだ文書の JSON を、同じ 1 行 1 要素の形にして比べる。`canon_doc`・`canon_json`）: 用紙と余白、名前付きスタイル（書体・大きさ・太字・色）、塊の順と種類（見出し・段落・出典・引用・箇条書きの段と番号・表の大きさと列の幅・セル・図の幅・図表の題・コード・改ページ・表紙）、文字と太字・リンク・コード。差は要修正。組み直していない、画面で直された、docs.py の組み方が壊れた、のどれかなので、組み直すか docs.py を直す
-8. **テンプレートとの照合**（頭に `template:` があるとき。上の 1.3）。抜けた節・表の列・表紙・テーマ・残った札と注記は要修正、節の順と足した節は要確認
-9. **元の文書との骨組みの比較**（頭に `source:` があるとき。テンプレートのフォルダで回す）。違いは要確認（`skeleton_ok:` に書いた節は数だけ）
+1. Writes the `documents.get` JSON to `/tmp/docs_<first 8 chars of the ID>/doc.json`
+2. Writes the text to `text.md` (headings as `#`, each table row joined with ` | `, images as `［画像］`. Passed to reviews)
+3. Runs `lint_gdoc` in `lint.py` on the JSON (§3 below)
+4. Saves Drive's PDF export (the pages Google rendered) as `doc.pdf` and page images as `p-N.png` (110 dpi. 910 × 1286 for A4)
+5. `doc_layout.py` measures the layout from line positions in the PDF (`bbox.html` from `pdftotext -bbox-layout`) and the images (§4 below)
+6. Prints the fonts used in the PDF (Arial for bullet symbols and numbers is fine, because the API cannot change it)
+7. **Matching doc.md against the built document** (turns the doc.md in the current folder and the built document's JSON into the same one-element-per-line form and compares them. `canon_doc`, `canon_json`): paper and margins, named styles (font, size, bold, color), order and kind of blocks (headings, paragraphs, source lines, quotes, bullet levels and numbering, table size and column widths, cells, figure widths, figure and table titles, code, page breaks, cover), and text, bold, links, and code. Differences are `要修正`. The cause is one of: not rebuilt, edited in the UI, or docs.py's building is broken. Rebuild, or fix docs.py
+8. **Matching against the template** (when the header has `template:`. §1.3 above). Missing sections, table columns, cover, theme, and leftover tags and notes are `要修正`; section order and added sections are `要確認`
+9. **Comparing the skeleton with the original document** (when the header has `source:`. Run in the template's folder). Differences are `要確認` (only counts for sections listed in `skeleton_ok:`)
 
-[doc-build-004] lint・照合の要修正があれば exit 1 を返す。照合の相手の doc.md は、今いるフォルダになければ、`docs.py build` が文書に残したフォルダ（Drive の appProperties の `docs_py_src`。Documents からの相対パス）から探す。だから `/deck-review` のようにどこから動かしても 7〜9 が回る。見つからないときと、doc.md の `name` が文書の名前にないときは、照合しなかったことを出す。
+[doc-build-004] If the lint or matching has `要修正`, it returns exit 1. If the doc.md to match against is not in the current folder, it is looked up from the folder that `docs.py build` recorded in the document (`docs_py_src` in Drive's appProperties. A path relative to Documents). So 7–9 run no matter where you run it from, as with `/deck-review`. If it is not found, or the doc.md `name` is not in the document's name, it reports that matching was not done.
 
-## 3. lint（Docs の規則）
+## 3. lint (Docs rules)
 
-ルールの中身と出典は `../deck-practices/visual_doc.md` と `content.md`。スライドと同じ `lint.py` の中にあり、文章の規則はスライドと共有する。
+The content and sources of the rules are in `../deck-practices/visual_doc.md` and `content.md`. They live in the same `lint.py` as for slides, and the text rules are shared with slides.
 
-- **見出しと段落の 1 文目の一覧:** 見出しを段にして、各段落の 1 文目を並べる。見出しだけで話が通るか、1 文目を順に読んで要約になるかを見る（visual_doc.md の 3）。**本文の字数**と **1 行の字数**も出す。
-- **要修正（exit 1）:** 絵文字、長いダッシュ、置き換え忘れ、差し替えの札、テーマの書体（既定は Noto Sans JP）でない書体（コードの等幅の書体は通す）、等幅の書体の和文、9pt 未満の文字、A4 でない用紙、追跡の印（`utm_source=`）の付いたリンク、見出しの句点（文の途中のものも）、「〜ください」「〜します」で終わる見出しと題（visual_doc.md の 2）。
-- **要確認:** スライドと同じ文章の規則（空疎な言い回し、あおり、和欧間のスペースの抜け、約物の前後のスペース、要確認・TBD の残り、社外秘の表示など）とリンクのない出典の行。ドキュメントだけのもの（値と出典は visual_doc.md）:
-  - 文: 文体の混在（本文の段落の文末の です・ます と だ・である。少ないほうを出す）、100 字を超える一文、9 文以上の段落、1 行 40 字を超える版面
-  - 見出し: 段の飛び、4 段目以下、子が 1 つだけ、重複、見出しの中の太字、中身のない見出し、太字の段落を見出しの代わりにしたもの、「について」で終わる題、最初の章が要旨でない、末尾の「まとめ」
-  - 表と図: 表の題・図の題の抜け、本文の幅を超える図、数字に出典のリンクがない節（H1・H2 ごと）
-  - AI の文書に出やすい癖（Docs 1-15）: 太字が多い（本文 1,000 字に 3 か所を超える）、太字とコロンで始まる箇条書き、コロンで終わる文、1 項目だけの箇条書き、箇条書きの句点の混在、空の段落の連続
-- スライドだけの規則（です・ます、本文 8 行、結論バンド、ノート、扉）は見ない。
-- [doc-build-005] **テンプレートとテーマで決まるものは出さない**（毎回出て、読み飛ばされるようになるため）: テンプレートから書いた文書とテンプレートの見本（doc.md の頭に `template:` か `source:`）の「冒頭に要旨がない」（節の順はテンプレートが決める）、A4 でない用紙のテーマ（`themes/docs/<名前>.json` の `page`）の「1 行の字数が多い」、すぐ後ろが改ページの図（表紙のロゴ）の「図の題がない」。
-- **記録:** スライドと同じ `../deck-build/log/lint_runs.jsonl` に残し、`lint.py --stats` で数える（dreaming の 5）。名前に tmp・作業用・テンプレートが入る文書は残さない。
+- **List of headings and first sentences of paragraphs:** Lays out the headings by level and lists the first sentence of each paragraph. Check that the story holds with headings alone, and that reading the first sentences in order gives a summary (visual_doc.md §3). It also prints the **body character count** and **characters per line**.
+- **`要修正` (exit 1):** emoji, long dashes, leftover placeholders, replacement tags, fonts other than the theme's font (default Noto Sans JP) (monospace fonts for code pass), Japanese in the monospace font, text under 9pt, paper that is not A4, links with tracking markers (`utm_source=`), Japanese periods (「。」) in headings (including mid-sentence ones), and headings and titles that end in 「〜ください」「〜します」 (visual_doc.md §2).
+- **`要確認`:** the same text rules as for slides (empty phrases, fear-mongering, missing spaces between Japanese and Latin text, spaces around punctuation marks, leftover 「要確認」 or TBD, confidentiality labels, and so on) and source lines without links. Document-only ones (values and sources in visual_doc.md):
+  - Sentences: mixed writing style (「です・ます」 and 「だ・である」 at sentence ends in body paragraphs. Reports the less frequent one), sentences over 100 characters, paragraphs of 9 or more sentences, a page area with more than 40 characters per line
+  - Headings: skipped levels, level 4 or deeper, only one child, duplicates, bold inside headings, headings with no content, bold paragraphs used instead of headings, titles ending in 「について」, a first chapter that is not a summary, a trailing 「まとめ」
+  - Tables and figures: missing table or figure titles, figures wider than the body, sections (per H1 and H2) whose numbers have no source link
+  - Habits typical of AI-made documents (Docs 1-15): too much bold (more than 3 places per 1,000 body characters), bullets that start with bold and a colon, sentences that end in a colon, lists with only one item, mixed use of periods across bullets, runs of empty paragraphs
+- Slide-only rules (「です・ます」, 8 body lines, conclusion band, notes, section dividers) are not checked.
+- [doc-build-005] **Do not report what the template or theme decides** (it would appear every time and people would learn to skip it): 「冒頭に要旨がない」 for documents written from a template and for template samples (doc.md header has `template:` or `source:`) (the template decides the section order), 「1 行の字数が多い」 for themes on paper other than A4 (`page` in `themes/docs/<name>.json`), and 「図の題がない」 for a figure directly followed by a page break (the cover logo).
+- **Log:** Written to the same `../deck-build/log/lint_runs.jsonl` as for slides, and counted with `lint.py --stats` (dreaming step 5). Documents whose names contain tmp, 「作業用」, or 「テンプレート」 are not logged.
 
-## 4. 画像で測るもの（doc_layout.py）
+## 4. What is measured on images (doc_layout.py)
 
-JSON では、どこで改ページされ、どこで行が折り返すかが分からない。Google が描いた PDF で測り、「要確認（画像で測った）」に出す。
+The JSON does not tell where pages break or where lines wrap. These are measured on the Google-rendered PDF and reported as 「要確認（画像で測った）」.
 
-- **ページの末尾の見出し:** 見出しは「次の段落と分離しない」スタイルにしてあるので、出たら書式が外れている。
-- **行頭の約物:** Google Docs は前の字ごと次の行に追い出すので、ふつうは出ない。出たら書体か段落の書式を疑う。
-- **1〜2 字だけの最終行:** 見出し・図表の題・表のセルなど、短い段落（80 字まで）だけを見る。本文の段落の最終行は直さない（visual_doc.md の 5）。
-- **余白へのはみ出し:** 左右の余白（30 mm）に描かれたもの。幅を決めた表、大きな図、左の線。
-- **下が空いたページ:** 本文の領域の下 3 割以上が空いたページ（最後のページと、次のページが H1 で始まるページは除く）。次のページに送られた表や図を疑う。
+- **Heading at the end of a page:** Headings use the "keep with next" style, so if this appears, the formatting has come off.
+- **Punctuation at the start of a line:** Google Docs pushes it to the next line together with the preceding character, so it usually does not appear. If it does, suspect the font or the paragraph formatting.
+- **Last lines of only 1–2 characters:** Only short paragraphs (up to 80 characters) such as headings, figure and table titles, and table cells are checked. Do not fix the last line of body paragraphs (visual_doc.md §5).
+- **Overflow into the margins:** Anything drawn in the left or right margin (30 mm). Tables with fixed widths, large figures, the left line.
+- **Pages with empty space at the bottom:** Pages where the bottom 30% or more of the body area is empty (except the last page and pages whose next page starts with H1). Suspect a table or figure pushed to the next page.
 
-## 5. 結果の見方
+## 5. Reading the results
 
-- **画像:** 組んだら、全ページの画像を自分で開いて見て、直す。見るところは、表の列の幅と折り返し、図の大きさ、図と題・表と題が別のページに分かれていないか、段落の間の空き、ページの末尾に残った見出し。仕上がりは Google が描いたこの画像で判断する。
-- **テキスト:** 抜けや順番の誤りがないか、`text.md` を読む。
-- **lint:** 要修正は 0 にする。要確認は 1 件ずつ見て、直すか、残す理由を言えるようにする（例: 顧客の発言の引用に だ・である が残るのはよい）。
-- **返す前:** 新しく作った文書は、ユーザーに返す前に `/deck-review <Google Docs の URL>`（`../deck-review/SKILL.md`）で全体をレビューする。返したあとの直しでは、`../deck-practices/SKILL.md` の deck-practices-017 で決めた範囲だけを回す。
-- 確認が済んだら `/tmp/docs_<ID>/` は消してよい。資料のフォルダには残さない。
+- **Images:** After building, open and look at the images of all pages yourself, and fix. Look at table column widths and wrapping, figure sizes, whether a figure and its title or a table and its title are split across pages, spacing between paragraphs, and headings left at the end of a page. Judge the finish by these Google-rendered images.
+- **Text:** Read `text.md` for missing content or wrong order.
+- **lint:** Bring `要修正` to 0. Check each `要確認` one by one, and either fix it or be able to say why it stays (example: 「顧客の発言の引用に だ・である が残るのはよい」).
+- **Before delivering:** Review a newly made document as a whole with `/deck-review <Google Docs URL>` (`../deck-review/SKILL.md`) before returning it to the user. For fixes after delivery, run only the scope decided by deck-practices-017 in `../deck-practices/SKILL.md`.
+- When checking is done, you may delete `/tmp/docs_<ID>/`. Do not keep it in the material's folder.
 
-## 6. 納品物と Drive
+## 6. Deliverables and Drive
 
-- **Google Docs の URL で渡す。PDF は作らない。** 相手が Word を求めたときだけ、`docs.py export` で docx に書き出して渡す（Drive の Google Docs が正本。書き出した docx は直さない）。
-- [doc-build-006] **置き場所・名前・名前の変え方・共有は、スライドと同じ**（`../deck-build/SKILL.md` の「Drive に置く」）。顧客向けは共有ドライブの `10_Customers` の顧客のフォルダ（`references_index.md` の「Google Drive の置き場所」）、顧客に紐づかないもの（社内向け）は `factory.toml` の `drive.docs`（AI Deck Factory の中の Docs）のテーマのフォルダ（スライドの Slides とは分ける）。名前は `YYYYMMDD_<資料名>`。作った資料は `references_index.md` の「Google Drive の置き場所」に足し、URL を構成案と報告に書く。
-- **画面で直さず、doc.md を直して組み直す。** 組み直すと画面での直しは消える。画面で直されていたり、未解決のコメントがあったりすれば、`docs.py build` が止まる。直しとコメントへの対応を doc.md に入れてから `--force` で組み直す。
-- [doc-build-007] **画面で直し始めた資料は、組み直しをやめる。** 顧客や同僚と画面で直し合う段階になったら、以後は画面で直す（`build/` を消したスライドと同じ扱い）。構成案に「<日付> から画面で直す」と書く。
-- `build/doc.md` は、組み直す見込みがなくなるまで消さない（`../deck-practices/SKILL.md` の「残すもの」）。
+- **Deliver as a Google Docs URL. Do not make PDFs.** Only when the counterpart asks for Word, export to docx with `docs.py export` and give that (the Google Docs on Drive is the source of truth. Do not edit the exported docx).
+- [doc-build-006] **Location, name, renaming, and sharing are the same as for slides** ("Placing files on Drive" in `../deck-build/SKILL.md`). Customer-facing ones go in the customer's folder under the shared drive's `10_Customers` (「Google Drive の置き場所」 in `references_index.md`); ones not tied to a customer (internal) go in a topic folder under `drive.docs` in `factory.toml` (Docs inside AI Deck Factory), separate from the Slides folder for slides. The name is `YYYYMMDD_<material name>`. Add the materials you made to 「Google Drive の置き場所」 in `references_index.md`, and write the URL in the outline and the report.
+- **Do not edit in the UI; edit doc.md and rebuild.** Rebuilding erases edits made in the UI. If someone edited in the UI, or there are unresolved comments, `docs.py build` stops. Put the edits and the responses to comments into doc.md, then rebuild with `--force`.
+- [doc-build-007] **Stop rebuilding a material once people start editing it in the UI.** When it reaches the stage where you edit it together with the customer or colleagues in the UI, edit in the UI from then on (same as slides whose `build/` was deleted). Write 「<日付> から画面で直す」 in the outline.
+- Do not delete `build/doc.md` until there is no prospect of rebuilding ("What to keep" in `../deck-practices/SKILL.md`).
 
-## 7. Docs API の落とし穴
+## 7. Docs API pitfalls
 
-2026-10-09 に試して確かめたもの（Docs は、ワークスペースの `Research/deck_research/log/20261009_en_gdocs_generation.md`）。
+Things we tried and confirmed on 2026-10-09 (for Docs, the workspace's `Research/deck_research/log/20261009_en_gdocs_generation.md`).
 
-- **名前付きスタイル:** `updateNamedStyle` の `fields` に `namedStyleType` を入れる（ないと 400「Named style type is required」）。テンプレートの文書は要らない。
-- **字下げ:** 1 行目の位置は `indentFirstLine`（左端からの位置）で、`indentStart` は 2 行目から。1 行の段落は `indentStart` だけでは動かない。両方に入れる。
-- **左の線（`borderLeft`）:** 文字の左端から `padding` と線の太さの分だけ左に描かれる。字下げをその分取らないと、余白にはみ出す（`d.quote` は 11pt 字下げて、線を本文の左端に置く）。
-- **書式の受け継ぎ:** 入れた文字と段落は、入れた場所の書式を受け継ぐ。docs.py は段落ごとに段落と文字の書式を入れ直す（`P_FIELDS`・`T_FIELDS`。書かない項目は名前付きスタイルに戻る）。
-- **表:** `insertTable` は表の前に改行を 1 つ入れる。docs.py はその段落を表の題にする。セルの位置は入れたあとの JSON で取り、後ろのセルから埋める（前のセルの位置がずれない）。
-- **段落の中の改行は `\v`。** コードの塗りが行の間で切れない。
-- **塗り（`shading`）には内側の余白がない。** 塗りと同じ色の枠線を付け、その `padding` で余白を取る。枠は字下げの分だけ外に出るので、`indentStart`・`indentFirstLine`・`indentEnd` に padding と線の太さを入れて本文の端にそろえる（`d.code`）。
-- **文字の位置は UTF-16 の単位**（`slides.py` の `u16`）。
-- **行間:** 行送りは「字の 1.88 倍 × 行間の %」（Noto Sans JP。11 行の段落を 70・85・100% で組んで PDF で測った）。120% では 2.3 倍で間延びした。
-- **行頭の約物:** 文字に言語の項目はない（`TextStyle` に `language` がない）が、Google Docs は前の字ごと次の行に追い出す。
-- **箇条書きの記号と番号は Arial で描かれる。** リストの書式を変える要求がない。
-- **ページ番号と目次は API で入れられない。** ページ番号が要るなら画面で「挿入 > ページ番号」を入れる。docs.py は、あるフッターを触らないので、組み直しても残る（入れたあとの最初の `build` は画面での直しとして止まるので `--force`）。目次は、Google Docs の左のアウトラインで足りることが多い。
-- **画面での直しは、本文の指紋で見る。** `revisionId` は「24 時間しか有効でなく、内部の理由でも変わる」と公式に書いてあり、直していないのに止まる。docs.py は組んだ直後の本文（`documents.get` の body）の指紋を appProperties に残して比べる。組んだ時刻（`modifiedTime`）は、指紋を残す書き込みそのもので進むので比べられない。書式だけの直しも指紋が変わるので止まる。
-- **コメント:** 全部消して組み直すと、コメントは付け先を失い、未解決のまま残る（Docs 1-1）。`docs.py build` は未解決のコメントがあれば、付いていた文と中身を出して止まる。
-- **番号の箇条書きを 2 つ続けると、番号がつながることがある**（`createParagraphBullets` は直前の同じ型につなげる。Docs 1-9）。間に普通の段落を置く。
-- **タブ:** docs.py は 1 つ目のタブだけを組み、確かめる。タブを分けた文書は扱わない。
-- **画像:** URL で読めるのは PNG・JPG・GIF。SVG の URL は `png()` で PNG にする。手元の画像は `carry` が一時の URL（30 分）にして貼り、仮のファイルを消す。
+- **Named styles:** Put `namedStyleType` in the `fields` of `updateNamedStyle` (without it, 400 「Named style type is required」). No template document is needed.
+- **Indentation:** The position of the first line is `indentFirstLine` (position from the left edge), and `indentStart` applies from line 2. A one-line paragraph does not move with `indentStart` alone. Set both.
+- **Left line (`borderLeft`):** It is drawn to the left of the text's left edge by `padding` plus the line width. Unless you indent by that amount, it overflows into the margin (`d.quote` indents 11pt and puts the line at the body's left edge).
+- **Inherited formatting:** Inserted text and paragraphs inherit the formatting of where they were inserted. docs.py reapplies paragraph and text formatting per paragraph (`P_FIELDS`, `T_FIELDS`. Fields not written fall back to the named style).
+- **Tables:** `insertTable` inserts one newline before the table. docs.py makes that paragraph the table title. Get cell positions from the JSON after insertion, and fill from the last cell backward (so earlier cell positions do not shift).
+- **A line break within a paragraph is `\v`.** The code background does not break between lines.
+- **Shading (`shading`) has no inner padding.** Add a border of the same color as the shading and get padding from its `padding`. The border sticks out by the indentation, so put padding plus line width into `indentStart`, `indentFirstLine`, and `indentEnd` to align with the body edges (`d.code`).
+- **Text positions are in UTF-16 units** (`u16` in `slides.py`).
+- **Line spacing:** Line pitch is "1.88 × font size × line spacing %" (Noto Sans JP. Measured in the PDF by building an 11-line paragraph at 70, 85, and 100%). At 120% it became 2.3 times and looked loose.
+- **Punctuation at the start of a line:** Text has no language field (`TextStyle` has no `language`), but Google Docs pushes it to the next line together with the preceding character.
+- **Bullet symbols and numbers are rendered in Arial.** There is no request to change list formatting.
+- **Page numbers and tables of contents cannot be inserted with the API.** If page numbers are needed, insert them in the UI with 「挿入 > ページ番号」. docs.py does not touch existing footers, so they survive rebuilds (the first `build` after inserting stops as a UI edit, so use `--force`). For a table of contents, the outline on the left of Google Docs is often enough.
+- **UI edits are detected by a fingerprint of the body.** `revisionId` is officially documented as "valid for only 24 hours and may change for internal reasons", so it stops even without edits. docs.py stores a fingerprint of the body right after building (the body of `documents.get`) in appProperties and compares against it. The build time (`modifiedTime`) cannot be compared, because the write that stores the fingerprint itself advances it. Formatting-only edits also change the fingerprint, so it stops.
+- **Comments:** If you delete everything and rebuild, comments lose their anchors and remain unresolved (Docs 1-1). `docs.py build` stops if there are unresolved comments, printing the text they were attached to and their content.
+- **Two numbered lists in a row may continue the numbering** (`createParagraphBullets` joins the immediately preceding list of the same type. Docs 1-9). Put a normal paragraph between them.
+- **Tabs:** docs.py builds and checks only the first tab. Documents split into tabs are not handled.
+- **Images:** Only PNG, JPG, and GIF can be read by URL. Turn SVG URLs into PNG with `png()`. Local images are pasted via a temporary URL (30 minutes) made by `carry`, which then deletes the temporary file.
 
 ## 8. docx
 
-[doc-build-008] 新しいドキュメントを docx で作らない。いまある docx（`Customers/` に 3 本）と、Word で受け取った docx は、Drive に上げて Google Docs に変換してから直す。docx のまま直す道具（docx-js・`check.sh`・LibreOffice での画像化）は外した（控えは ワークスペースの `Archive/docx_pipeline_20261010/`）。PoC の計画書など、会社のテンプレートがある文書は、その章立てに合わせる（テンプレートはワークスペースの `rules/doc-build/templates/`）。2026-10-09 より前の例は顧客向けの資料（docx）。
+[doc-build-008] Do not make new documents as docx. Existing docx files (3 in `Customers/`) and docx received from Word are uploaded to Drive and converted to Google Docs before editing. The tools for editing docx as docx (docx-js, `check.sh`, rendering images with LibreOffice) were removed (the backup is in the workspace's `Archive/docx_pipeline_20261010/`). Documents with a company template, such as PoC plans, follow its chapter structure (templates are in the workspace's `rules/doc-build/templates/`). Examples before 2026-10-09 are customer-facing materials (docx).

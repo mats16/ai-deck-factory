@@ -1,100 +1,100 @@
-# 社内資料の流用
+# Reusing internal materials
 
-[reuse-001] 社内のデッキのページを使うときに読む。4 つの段階はうまくいった流れで、上から順に試す。先に「どの段階でも見ること」を確かめる。
+[reuse-001] Read this when you use pages from internal decks. The four stages are a flow that worked. Try them from the top, in order. First check "Checks at every stage".
 
-スクリプトは `../deck-build/scripts/`。`gslides.py` は元のデッキに書かない（`keep` は複製を作ってから変える）。認証は `gapi.py` が取る（環境変数 `GOOGLE_OAUTH_ACCESS_TOKEN` か、gcloud の ADC のファイル。quota project のヘッダーも付ける）。401・403 になったら factory-doctor で確かめる。
+The scripts are in `../deck-build/scripts/`. `gslides.py` does not write to the source deck (`keep` makes a copy and then changes it). `gapi.py` takes care of authentication (the environment variable `GOOGLE_OAUTH_ACCESS_TOKEN`, or the gcloud ADC file; it also adds the quota project header). On 401 or 403, check with factory-doctor.
 
 ```sh
-G=<deck-build のフォルダ>/scripts   # このスキルのフォルダの ../deck-build/scripts
-python3 $G/gslides.py pages  <URL>                                  # ページ番号と最初の文字の一覧
-python3 $G/gslides.py thumb  <URL> <ページ番号> /tmp/<元>_p<N>.png    # Google が描いた 1600 × 900 の画像
-python3 $G/gslides.py export <URL> /tmp/<元>.pptx                    # pptx で書き出す（元の画像を取り出すとき）。名前と更新日も出る
-python3 $G/gslides.py keep   <URL> <AI Deck Factory のフォルダ> <YYYYMMDD_資料名_差し替え用> <ページ番号 ...>   # 複製して、使うページだけ残す
-python3 $G/gslides.py jp     <複製の URL> /tmp/<訳>.json             # 訳（[["英語", "日本語"], …]）を入れ、書体を Noto Sans JP にそろえる
+G=<deck-build folder>/scripts   # ../deck-build/scripts from this skill's folder
+python3 $G/gslides.py pages  <URL>                                  # list of page numbers and the first text on each
+python3 $G/gslides.py thumb  <URL> <page> /tmp/<src>_p<N>.png        # 1600 × 900 image drawn by Google
+python3 $G/gslides.py export <URL> /tmp/<src>.pptx                   # export as pptx (to extract the original images); also prints the name and last updated date
+python3 $G/gslides.py keep   <URL> <AI Deck Factory folder> <YYYYMMDD_資料名_差し替え用> <page ...>   # copy, and keep only the pages you use
+python3 $G/gslides.py jp     <copy URL> /tmp/<translations>.json     # insert translations ([["英語", "日本語"], …]) and set the font to Noto Sans JP
 ```
 
-ページの要素（種類・位置・大きさ・文字）は、Slides API の `presentations.get` で直接読める（`gslides.py check` が `/tmp/slides_<ID の頭 8 字>/` に出す JSON。段階 3 で使う）。写しは置かず、URL を `references.md` で管理する（materials.md の「台帳」）。書き出した pptx や画像は `/tmp` の作業用で、使い終わったら消す。
+The page elements (type, position, size, text) can be read directly with the Slides API `presentations.get` (the JSON that `gslides.py check` writes to `/tmp/slides_<first 8 chars of the ID>/`; used in Stage 3). Do not keep copies; manage URLs in `references.md` (materials.md "Ledger"). Exported pptx files and images are working files in `/tmp`; delete them when you are done.
 
-## 目次
+## Contents
 
-1. 探す
-2. どの段階でも見ること
-3. 4 つの段階
-4. 構成案に書くこと
-5. 仕上げで確かめること
+1. Search
+2. Checks at every stage
+3. Four stages
+4. What to write in the outline
+5. Checks at the finish
 
-## 1. 探す
+## 1. Search
 
-- 探す前に、作業フォルダの直下の `references_index.md`（過去に使った資料の全体の索引）と、資料のフォルダの `references.md` を見る。前に見た資料があれば、その URL とページから読み直す（元の更新日が確かめた日より新しければ、内容が変わっていないかも見る）。
-- 社内の横断検索で探し、ファイルの置き場所・チャット・wiki で中身を確かめる（[materials.md](materials.md) の「社内の資料」）。見た資料は、使わないと決めたものも含めて `references.md` に足す。Google Slides の中身を読むときは、WebFetch ではなく社内の検索の道具で要約させるほうが失敗しにくい（社内 6）。ページを選ぶときは `gslides.py pages` と `thumb` で見る。
-- [reuse-002] **製品のいちばんの特徴（アーキテクチャなど）を描くページは、自分で描く前に、見栄えのよい図を探す。** 製品のピッチや Field Kit 以外の社内デッキ、docs の図、公式ブログと製品ページの図を見て、段階 1〜3 で使う。意味が伝わるだけの自作の箱の図で済ませない。
-- **日本語版を先に探す。** グローバルのデッキのページは、Japan の SME が日本語にしていることが多い（社内の wiki の日本語の資料の一覧など）。日本語版があれば、訳さずにそれを使う（SIEM の例）。
-- 同じ図がいくつものデッキにあるときは、製品チームの元のデッキ（Pitch Deck、Field Kit など）の新しい版を選ぶ。社内の公式デッキの一覧があれば、ワークスペースの `rules/deck-practices/reuse.md` に書く。
+- Before searching, look at `references_index.md` at the top of the working folder (the overall index of materials used before) and `references.md` in the material's folder. If you have seen a material before, reread it from that URL and page (if the source's last updated date is newer than the date you checked it, also check whether the content has changed).
+- Search with the internal cross search, and check the contents in file storage, chat, and the wiki ([materials.md](materials.md) "Internal materials"). Add every material you looked at to `references.md`, including ones you decided not to use. To read the contents of Google Slides, having the internal search tool summarize it fails less often than WebFetch （社内 6）. To choose pages, look with `gslides.py pages` and `thumb`.
+- [reuse-002] **For pages that depict the product's main feature (architecture and so on), search for a good-looking figure before drawing your own.** Look at internal decks other than the product pitch and Field Kit, figures in the docs, and figures in the official blog and product pages, and use them in Stages 1–3. Do not settle for a self-made box diagram that only gets the meaning across.
+- **Search for a Japanese version first.** Pages of global decks have often been put into Japanese by Japan SMEs (for example, the list of Japanese materials in the internal wiki). If a Japanese version exists, use it instead of translating (SIEM example).
+- When the same figure appears in several decks, choose the newest version of the product team's source deck (Pitch Deck, Field Kit, and so on). If there is a list of official internal decks, write it in the workspace's `rules/deck-practices/reuse.md`.
 
-## 2. どの段階でも見ること
+## 2. Checks at every stage
 
-- [reuse-003] **社外に出せるか**（顧客向け・コミュニティ向け）。Internal Only・Confidential・社外秘の表示、ロードマップ、公開されていない顧客の名前やロゴ、公開の裏づけのない数字があるページは使わない。数字だけ公開の出典で取り直せるなら、段階 3 か 4 にする（SIEM の例では、裏づけのない数字を使わなかった）。社内向けなら使ってよいが、そのページに「Internal Only」と書く（AGENTS.md）。社内で共有された動画（デモ・製品の紹介）は、同じものが YouTube・自社のサイトなど公開の場に出ていれば、顧客に見せてよい。公開の URL を出典にし、社内の Drive の URL は構成案と社内メモにだけ書く。公開先が見つからなければ見せない。
-- [reuse-004] **新しいか。** 元のデッキの更新日を見る。提供ステージ（GA・Preview など）は docs で今の状態を確かめる。古い画面のスクリーンショットは使わない。試しの名前（test など）や手書きの印が焼き込まれた画面も使わず、中身が構造（カタログの木など）なら図形で描き直す。撮り直さずに済み、直しやすい。
+- [reuse-003] **Can it go outside the company** (customer-facing, community-facing)? Do not use pages with an Internal Only, Confidential, or 「社外秘」 label, a roadmap, the names or logos of customers that are not public, or numbers without public backing. If only the numbers can be re-sourced from a public source, use Stage 3 or 4 (in the SIEM example, numbers without backing were not used). For internal materials you may use them, but write 「Internal Only」 on that page (AGENTS.md). A video shared internally (demo, product introduction) may be shown to the customer if the same video is published in a public place such as YouTube or the company's own site. Use the public URL as the source, and write the internal Drive URL only in the outline and the internal memo. If you cannot find a public copy, do not show it.
+- [reuse-004] **Is it current?** Look at the source deck's last updated date. Check the release stage (GA, Preview, and so on) against the current state in the docs. Do not use screenshots of old screens. Also do not use screens with trial names (test and so on) or hand-drawn marks baked in; if the content is a structure (such as a catalog tree), redraw it with shapes. That needs no re-shooting and is easy to fix.
 - **聞き手に合うか。** 社内のピッチ資料は営業色が強いことが多い。主語が自社の売り込みのページは、顧客の IT 部門などにはそのまま使わない（段階 3 か 4 で、聞き手の問いから書き直す）。AGENTS.md の「いい資料の考え方」に合わせる。
-- **言いたいことが同じか。** 構成案のそのページの見出しと言えること（言い切りかリード）と、元のページの言いたいことが同じかを確かめる。違えば、その段階は使えない。
+- **Is the message the same?** Check that the heading and the claim (the assertion or the lead) of that page in the outline say the same thing as the source page. If not, that stage cannot be used.
 - [reuse-005] **製品のメッセージの柱にそろえる。** まとめや提案の要素の並べ方は、社内と公開の製品のメッセージの柱にそろえる（柱の例はワークスペースの `rules/deck-practices/reuse.md`）。訳語は公開の日本語版に合わせ、柱は「<自社> の整理」と出典を付けて引く。社内の資料にある強い言い方（業界唯一、ロックインなし、知能はもう十分）は使わず、「乗り換え」のように聞き手のいまの基盤を否定して聞こえる言い方は「足す・替える」にする。
 
-## 3. 4 つの段階
+## 3. Four stages
 
-### 段階 1: ページをそのまま使う（書体と言語だけ変える）
+### Stage 1: Use the page as is (change only the font and language)
 
-**使うとき:** ページ全体が 2 をすべて満たし、変えたいのが書体と言語（訳）だけのとき。図だけを使うなら段階 2。
+**When to use:** the whole page meets everything in §2, and only the font and language (translation) need to change. If you use only the figure, use Stage 2.
 
-1. 日本語版があれば、元のデッキのそのページを使う（訳さない）。5 に進む。
-2. 英語のページは、`gslides.py keep` で、そのページだけの複製（差し替え用）を、AI Deck Factory のフォルダの直下（My Drive。URL は `factory.toml` の `drive.factory`。テンプレートの Templates には入れない）に作る。名前は `<YYYYMMDD_資料名>_差し替え用`。顧客のフォルダには作らない（複製の版の履歴に元のデッキの全ページが残り、編集できる人は戻せる。前の方式でも、差し替え用はローカルにだけ置いた）。
-3. 訳を `[["英語の文", "日本語の文"], …]` の JSON に書き、`gslides.py jp` で入れる（文字の書式はそのまま、書体は Noto Sans JP になる）。製品名は英語の正式名のまま、訳語は社内の日本語資料と製品の公式ドキュメントの日本語版に合わせる（AGENTS.md の「書き方」）。置き換えは文の単位で書く（短い語だと、ほかの箇所にも当たる）。
-4. `gslides.py check <差し替え用の URL>` で画像にし、訳した文字が枠からはみ出していないかを見る。元のページの文字の大きさと配置は変えない（名前に「差し替え用」が入ると、lint は 11pt の下限と表紙を見ない）。
-5. 本編には、そのページの画像をスライド全面に貼る。JSON のページでは書けない（部品は本文の枠の中にしか置けない。ページの画像の URL は 30 分で切れるので、組むたびに `thumb_url` で取り直す）ので、このページだけ pages.py の関数で書く（`deck.json` を置かずに pages.py を書き、`make` の中で JSON のページを `d.spec` で順に呼ぶ。`../deck-build/slides.md` の 2 の「JSON の部品で書けないページ」）。`s = d.slide(foot=False)` で、フッターとページ番号のないページを作り、`d.image(s, thumb_url(<URL>, <ページ番号>), 0, 0, 13.333, 7.5)`（訳したときは差し替え用の URL の 1 枚目、日本語版をそのまま使うときは元の URL とページ）。札は付けない。スピーカーノートは日本語で書く。差し替え用の URL は、構成案の「流用元」に書く。
-6. [reuse-006] 差し替えを待つページを残さない。人には Drive の URL で渡し、差し替える人はいない（`../deck-build/SKILL.md` の「納品物」）。文字を直すときは、差し替え用を直して本編を組み直す（`slides.py build`。画像を取り直す）。lint は「差し替え：」の札が残っていたら要修正で止める。
+1. If a Japanese version exists, use that page of the source deck (do not translate). Go to step 5.
+2. For an English page, use `gslides.py keep` to make a copy with only that page (the replacement copy) directly under the AI Deck Factory folder (My Drive; the URL is `drive.factory` in `factory.toml`; do not put it in the template's Templates). Name it `<YYYYMMDD_資料名>_差し替え用`. Do not make it in the customer's folder (the copy's version history keeps every page of the source deck, and anyone who can edit can restore them; in the earlier method too, replacement copies were kept only locally).
+3. Write the translations as JSON `[["英語の文", "日本語の文"], …]` and insert them with `gslides.py jp` (text formatting stays as is; the font becomes Noto Sans JP). Keep product names as their official English names, and match terms to internal Japanese materials and the Japanese version of the product's official docs (「書き方」 in AGENTS.md). Write replacements at the sentence level (a short word also matches other places).
+4. Render it with `gslides.py check <replacement copy URL>` and check that the translated text does not overflow its boxes. Do not change the text size or placement of the source page (when the name contains 「差し替え用」, lint skips the 11pt minimum and the cover).
+5. In the main deck, paste that page's image over the full slide. JSON pages cannot do this (components can only go inside the body frame, and page image URLs expire in 30 minutes, so fetch them again with `thumb_url` on every build). So write only this page as a pages.py function (write pages.py without a `deck.json`, and call the JSON pages in order with `d.spec` inside `make`; `../deck-build/slides.md` §2, "Pages the JSON components cannot express"). With `s = d.slide(foot=False)`, make a page with no footer and no page number, then `d.image(s, thumb_url(<URL>, <page>), 0, 0, 13.333, 7.5)` (when you translated, the first page of the replacement copy's URL; when you use the Japanese version as is, the source URL and page). Do not add a tag. Write speaker notes in Japanese. Write the replacement copy's URL in the outline's 「流用元」.
+6. [reuse-006] Leave no pages waiting for replacement. People receive it as a Drive URL, and nobody replaces pages (`../deck-build/SKILL.md` "Deliverables"). To fix text, fix the replacement copy and rebuild the main deck (`slides.py build`; it fetches the image again). lint stops with `要修正` if a 「差し替え：」 tag remains.
 
-元のページに誤字を見つけたら、差し替え用で直し、構成案に書く。
+If you find a typo on the source page, fix it in the replacement copy and note it in the outline.
 
-### 段階 2: 図などを切り取って使う
+### Stage 2: Crop figures and similar parts
 
-[reuse-007] **使うとき:** 図（構成図、製品の画面、グラフ）は合うが、ページのほかの部分（見出し、文、並べ方）が合わないとき。図の中の文字は、そのままで聞き手に通じるもの（製品名、英語の図でよい場合）に限る。図が、そのページの主張（見出しと本文の項目）をそのまま描いているときに限る。図が主張の一部しか描いていない（例: 4 段の守りのページに、ログインの流れだけの図）、図の番号と本文の番号がずれる、ときは段階 3 か 4 で描き直す（図と主張が合わず、分かりにくい）。
+[reuse-007] **When to use:** the figure (architecture diagram, product screen, chart) fits, but the rest of the page (heading, text, arrangement) does not. Limit this to figures whose text the audience understands as is (product names, or cases where an English figure is fine). Limit it to figures that depict the page's claim (the heading and the body items) as it stands. When the figure depicts only part of the claim (example: a figure of only the login flow on a page about four layers of defense), or the figure's numbers and the body's numbers do not line up, redraw it in Stage 3 or 4 (the figure and the claim do not match, which is confusing).
 
-1. 元のデッキに画像として入っている図は、元の画像ファイルを使う。`gslides.py export` で `/tmp` に pptx を書き出し、`unzip -p /tmp/<元>.pptx ppt/slides/_rels/slide<N>.xml.rels` で `media/` を探し、`unzip -j` で `build/assets/` に取り出す。解像度が落ちない。
-2. 図形で組まれた図は、`thumb` の画像（`/tmp`）から切り取る。`sips -c <高さ> <幅> --cropOffset <上> <左> <入力.png> --out <出力.png>`（px。上が先）。元のページのタイトルの帯、ページ番号、著作権表示は切り落とす。
-3. 画像は `build/assets/` に置き、JSON の `image`（`{"type": "image", "src": "assets/<名前>.png"}`。ページのファイルからのパス）で貼る（`../deck-build/slides.md` の 2 の「画像」）。このフォルダの型のページに貼り、見出し・リード・出典は日本語で書く。縦横の比を変えない。
-4. 元のページより縮めて貼らない。`thumb` の画像は 1 in あたり 120 px なので、貼る幅（in）は、切り取った幅（px）÷ 120 以上にする。縮めると図の中の文字が元より小さくなり、lint では見つけられない。入らないなら、図を絞って切り取るか、段階 3 にする。
+1. For a figure embedded in the source deck as an image, use the original image file. Export the pptx to `/tmp` with `gslides.py export`, find `media/` with `unzip -p /tmp/<src>.pptx ppt/slides/_rels/slide<N>.xml.rels`, and extract it to `build/assets/` with `unzip -j`. The resolution does not drop.
+2. For a figure built from shapes, crop it from the `thumb` image (`/tmp`): `sips -c <height> <width> --cropOffset <top> <left> <input.png> --out <output.png>` (px; top comes first). Cut off the source page's title band, page number, and copyright notice.
+3. Put the image in `build/assets/` and paste it with JSON `image` (`{"type": "image", "src": "assets/<name>.png"}`; the path is relative to the page file) (`../deck-build/slides.md` §2, "Images"). Paste it on a page in this folder's style, and write the heading, lead, and source line in Japanese. Do not change the aspect ratio.
+4. Do not paste it smaller than on the source page. The `thumb` image is 120 px per inch, so the pasted width (in) must be at least the cropped width (px) ÷ 120. Shrinking makes the text in the figure smaller than the original, and lint cannot detect it. If it does not fit, crop the figure tighter or use Stage 3.
 
-画像の中の文字は、誤字も訳も直せない（AI 実践 1-8）。英語の図で読み方が要るときは、図の横に日本語の読み方のパネルを足す（AWS SA の例）。誤字があったり、日本語で直す必要があったりするなら、段階 1 か 3 にする。
+Text inside an image cannot be corrected or translated （AI 実践 1-8）. When an English figure needs a reading guide, add a panel with the Japanese reading next to the figure (AWS SA example). If there are typos, or it needs fixing in Japanese, use Stage 1 or 3.
 
-### 段階 3: レイアウトを保ち、このフォルダの型で作り直す
+### Stage 3: Keep the layout and rebuild in this folder's style
 
-**使うとき:** 構図（並べ方、流れ、比べ方）は合うが、訳すだけでは済まないとき。数字を新しくする、聞き手に合わせて言い方を変える、営業色を抜く、図の中の文字を日本語で直せるようにする、などの場合。
+**When to use:** the composition (arrangement, flow, comparison) fits, but translation alone is not enough. For example: updating numbers, changing the wording for the audience, removing the sales tone, or making the text in the figure fixable in Japanese.
 
-1. 元のページの構造を読む。`presentations.get` の要素の一覧（`gslides.py check` の JSON か、書き出した pptx の XML）と `thumb` の画像から、要素ごとに、役割（見出し・カード・矢印・アイコン・ラベル）、並び（何列・何段、どの順に読むか）、まとまりを書き出す（研究 1-5）。
-2. visual.md の図解の型とページの型の関数に当てはめ、このフォルダの色・書体・余白で組み直す。座標はそのまま写さない（版面と余白が違う）。並び、読む順、まとまりを保つ。
-3. アイコンとロゴは、URL で貼れるもの（Iconify など）、直下の `assets/`、元のデッキの画像（段階 2 の 1 の取り出し方）の順に取る（出どころは `../deck-build/assets/README.md`、貼り方は `../deck-build/slides.md` の 6）。
+1. Read the structure of the source page. From the element list of `presentations.get` (the JSON from `gslides.py check`, or the XML of the exported pptx) and the `thumb` image, write out for each element its role (heading, card, arrow, icon, label), arrangement (how many columns and rows, in which order it reads), and groupings （研究 1-5）.
+2. Map it to the diagram patterns and the page-pattern functions in visual.md, and rebuild it with this folder's colors, fonts, and margins. Do not copy the coordinates as is (the page area and margins differ). Keep the arrangement, reading order, and groupings.
+3. Take icons and logos in this order: those that can be pasted by URL (Iconify and so on), the top-level `assets/`, and images from the source deck (the extraction in Stage 2 step 1) (sources are in `../deck-build/assets/README.md`; how to paste is in `../deck-build/slides.md` §6).
 
-### 段階 4: 意図だけ汲んで新しく作る
+### Stage 4: Take only the intent and make it new
 
-**使うとき:** 1〜3 のどれも合わないとき。聞き手や問いが違う、古い、社外に出せない、営業色が強すぎる、などの場合。
+**When to use:** none of Stages 1–3 fits. For example: the audience or the question differs, the page is old, it cannot go outside the company, or the sales tone is too strong.
 
-元のページの言いたいこと、論の立て方、用語と言い回し（メッセージング）だけを借りる。content.md と visual.md で新しく作る。数字は公開の出典で取り直す。
+Borrow only the source page's message, line of argument, and terms and phrasing (messaging). Make it new following content.md and visual.md. Re-source the numbers from public sources.
 
-## 4. 構成案に書くこと
+## 4. What to write in the outline
 
-`構成案.md` の末尾の「流用元」に、ページごとに書く。
+In 「流用元」 at the end of `構成案.md`, write one row per page.
 
 | 本編のページ | 流用元（資料名・URL・ページ・更新日） | 段階 | したこと | 社外に出せるか（確かめ方） |
 |---|---|---|---|---|
 
-- 段階 4 は「考え方を借りたもの」として、別の箇条書きにしてよい（SIEM の例）。
-- 顧客向けの資料では、社内資料の名前と URL は、構成案と社内メモにだけ書く。スライドの出典の行とノートには書かない（公開の出典か、自社の名前を書く）。
-- 仕上げたら、使った資料を `references_index.md` に足す。観点には、どの段階で使ったかと、その理由を一言で書く（例:「日本語版があり段階 1 で差し替え」「英語の図を段階 2 で画像に。読み方のパネルを足した」）。
-- 本編の半分を超えるページを、1 つの社内デッキから段階 1 で使うことになったら、作り直す前にユーザーに聞く。そのデッキを Google Slides で複製して直すほうが早いことがある。
+- Stage 4 may go in a separate bullet list as 「考え方を借りたもの」 (SIEM example).
+- In customer-facing materials, write the names and URLs of internal materials only in the outline and the internal memo. Do not write them in the slide's source line or notes (write a public source or the company's own name).
+- When finished, add the materials you used to `references_index.md`. As the point of view, note in a few words which stage you used and why (examples: 「日本語版があり段階 1 で差し替え」「英語の図を段階 2 で画像に。読み方のパネルを足した」).
+- If more than half of the main deck's pages would come from one internal deck via Stage 1, ask the user before rebuilding. Copying that deck in Google Slides and editing it can be faster.
 
-## 5. 仕上げで確かめること
+## 5. Checks at the finish
 
-- lint の「差し替えの仮ページ」（札の残り）が 0。構成案の流用元の段階 1 の行と、画像を貼ったページが合っている。
-- 顧客向けなら、lint の「社外秘の表示」が 0。
-- 段階 2 の画像に、元のタイトルの帯・ページ番号・著作権表示・誤字が残っていない。
-- 段階 1 の差し替え用で、訳した文字が枠からはみ出していない。
-- 段階 3 と 4 のページは、ほかのページと同じ lint とレビュー（`../deck-review/SKILL.md`）を通す。
+- lint's 「差し替えの仮ページ」 (leftover tags) is 0. The Stage 1 rows in the outline's 「流用元」 match the pages where images were pasted.
+- For customer-facing materials, lint's 「社外秘の表示」 is 0.
+- Stage 2 images have no leftover source title band, page number, copyright notice, or typos.
+- In Stage 1 replacement copies, the translated text does not overflow its boxes.
+- Stage 3 and 4 pages go through the same lint and review (`../deck-review/SKILL.md`) as the other pages.

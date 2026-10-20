@@ -1,108 +1,108 @@
 ---
 name: deck-build
-description: 日本語のスライドを Slides API で Google Slides に直接組み、仕上げて確かめる。slides.py（部品・テンプレートの複製・変えたページの組み直し・組まずに手元でかける lint）と gslides.py check（presentations.get の JSON への lint・テキスト・Google が描いた変えたページの画像）、AI Deck Factory のテンプレートとテーマ、Slides API の落とし穴、Drive への置き方（スライドとドキュメントで共通）。ドキュメント（Google Docs）は doc-build。スライドを書き始める前と、渡す前に必ず使う。
+description: Build Japanese slides directly in Google Slides with the Slides API, then finish and check them. Covers slides.py (components, copying templates, rebuilding only changed pages, a local lint that runs without building), gslides.py check (lint on the presentations.get JSON, text, and Google-rendered images of changed pages), AI Deck Factory templates and themes, Slides API pitfalls, and how to place files on Drive (shared by slides and documents). Documents (Google Docs) are doc-build. Always use before you start writing slides and before you deliver them.
 ---
 
-# 日本語のスライドを作って仕上げる
+# Build and finish Japanese slides
 
-スライドは Google Slides を Slides API で直接組む（2026-10-07 に pptx から切り替えた）。pptx の方式に戻すときは ワークスペースの `Archive/pptx_pipeline_20261007/README.md`。ドキュメント（Google Docs）は `../doc-build/`。`scripts/` はドキュメントと共有する（`gapi.py`・`lint.py`・`sheet.py`・`drive_put.py` と、ドキュメントの `docs.py`・`doc_layout.py`）。
+Slides are built directly in Google Slides with the Slides API (switched from pptx on 2026-10-07). To go back to the pptx method, see the workspace's `Archive/pptx_pipeline_20261007/README.md`. Documents (Google Docs) are in `../doc-build/`. `scripts/` is shared with documents (`gapi.py`, `lint.py`, `sheet.py`, `drive_put.py`, and the document scripts `docs.py` and `doc_layout.py`).
 
-| 作るもの | 書き始める前に読む |
+| What you make | Read before you start writing |
 |---|---|
-| スライド | [slides.md](slides.md)（コマンド、ページの書き方〔JSON〕、テンプレートとテーマ、図形と文字の組み方、Slides API の落とし穴）と `../deck-practices/visual.md`（このフォルダの見た目の決まり） |
-| ドキュメント | `../doc-build/SKILL.md`（Google Docs） |
-| 残りのページを子に分けて書く | [prompt_pages.md](prompt_pages.md)（子への依頼文。分けるかは `../deck-practices/SKILL.md` の「作業の始め方」の 7 の deck-practices-016） |
-| 社内資料の流用 | `../deck-practices/reuse.md`（`scripts/gslides.py` で Google Slides のページの一覧・画像を取り、`keep`・`jp` で差し替え用のページを作る） |
+| Slides | [slides.md](slides.md) (commands, writing pages [JSON], templates and themes, laying out shapes and text, Slides API pitfalls) and `../deck-practices/visual.md` (this folder's visual rules) |
+| Documents | `../doc-build/SKILL.md` (Google Docs) |
+| Splitting the remaining pages among child agents | [prompt_pages.md](prompt_pages.md) (the request to the child agents. Whether to split is deck-practices-016 in "How to start" §7 of `../deck-practices/SKILL.md`) |
+| Reusing internal materials | `../deck-practices/reuse.md` (use `scripts/gslides.py` to get the page list and images of a Google Slides deck, and `keep` and `jp` to make replacement pages) |
 
 ```sh
-K=<deck-build のフォルダ>/scripts   # deck-build の SKILL.md のあるフォルダ。ほかのスキルからは、そのスキルのフォルダの ../deck-build/scripts
-cd <フォルダ>/build
-# スライド
-python3 $K/slides.py new <Drive のフォルダの URL> <YYYYMMDD_の名前>   # 初めて組むとき。出た URL をすぐユーザーに伝える（下の「Drive に置く」）。--theme <テーマ>（slides.py themes の名前）で会社の色
-python3 $K/slides.py lint <URL>                                     # 直すたびに、組まずに手元で lint（前に回したときから変わったページ。下の「確かめ方の 3 つの層」）
-python3 $K/slides.py build <URL>                                    # 区切りで組む（変えたページだけ作り直す。URL は変わらない。画面で直されていたら止まる。slides.md の 1）
-python3 $K/gslides.py check <URL>                                   # 組んだら。変えたページの画像と lint。LT など話す資料は末尾に --talk。全ページの画像は --all
+K=<deck-build folder>/scripts   # the folder that holds deck-build's SKILL.md. From other skills, ../deck-build/scripts relative to that skill's folder
+cd <folder>/build
+# Slides
+python3 $K/slides.py new <Drive folder URL> <YYYYMMDD_name>   # first build. Tell the user the printed URL right away ("Placing files on Drive" below). --theme <theme> (a name from slides.py themes) for company colors
+python3 $K/slides.py lint <URL>                                     # after every edit, lint locally without building (pages changed since the last run. "Three layers of checks" below)
+python3 $K/slides.py build <URL>                                    # build at checkpoints (rebuilds only changed pages. The URL does not change. Stops if someone edited in the UI. slides.md §1)
+python3 $K/gslides.py check <URL>                                   # after building. Images and lint of changed pages. Add --talk at the end for talks such as LTs. --all for images of every page
 ```
 
-## 確かめ方の 3 つの層
+## Three layers of checks
 
-[deck-build-005] 確かめは、テストの層のように 3 つに分ける。組むのと画像を取るのは遅く、1 分 60 枚の上限もあるので、直すたびには組まず、手元の lint で済むものは手元で見る。組むのは区切りだけにし、ページをまたぐものは区切りに 1 回まとめて見る。工程のどこが区切りかは `../deck-practices/SKILL.md` の「全体の流れ」。
+[deck-build-005] Split checks into 3 layers, like test layers. Building and taking images are slow, and there is a limit of 60 images per minute, so do not build after every edit; check locally whatever the local lint can catch. Build only at checkpoints, and check things that span pages once per checkpoint. Which steps are checkpoints is in "Overall flow" of `../deck-practices/SKILL.md`.
 
-| 層 | いつ | 何で | 見るもの |
+| Layer | When | With | What it checks |
 |---|---|---|---|
-| unit | 直すたび | `slides.py lint <URL>`（組まない。53 枚で 2〜7 秒） | 組む要求を手元で presentations.get の形にした JSON への lint と、組むときの警告（`frame` の図の位置。矢印の線が部品の上を通る、矢じりが 1 点に集まる、部品が一部だけ重なる。slides.md の slides-038）。既定は前に回したときから変わったページと、要修正が残ったページ（デッキか lint の規則が変わったら全ページ。`--pages 3,5`・`--all`）。デッキ全体の規則（表紙・扉・結論バンドの数など）とワークスペースの点検は、いつも全ページを見る |
-| e2e | 区切りで組んだとき | `slides.py build` → `gslides.py check` | 変えたページだけを組み、そのページの画像を取って、画像で箱の余白を測る（box_pad）。変えたページ・画像・指摘を `changed.json` に書く |
-| 全体 | 区切りに 1 回（`/deck-review` の前など） | `gslides.py check --all`、一覧の画像（`sheet.py`）、`deck.md` | ページをまたぐもの: 同じ型の部品の大きさと位置、呼び方の揺れ、見出しの流れ |
+| unit | After every edit | `slides.py lint <URL>` (no build. 2–7 seconds for 53 pages) | Lint on JSON that turns the build requests into the presentations.get shape locally, and build warnings (positions of `frame` diagrams: an arrow line passes over a component, arrowheads gather at one point, components partly overlap. slides-038 in slides.md). By default, pages changed since the last run and pages that still had `要修正` (all pages if the deck or the lint rules changed. `--pages 3,5`, `--all`). Deck-wide rules (number of covers, section dividers, conclusion bands, and so on) and the workspace check always look at all pages |
+| e2e | When you build at a checkpoint | `slides.py build` → `gslides.py check` | Builds only changed pages, takes images of those pages, and measures the padding inside boxes on the images (box_pad). Writes the changed pages, images, and findings to `changed.json` |
+| whole | Once per checkpoint (before `/deck-review`, and so on) | `gslides.py check --all`, the contact sheet (`sheet.py`), `deck.md` | Things that span pages: size and position of components of the same type, inconsistent naming, the flow of headings |
 
-- **unit:** 指摘に「（見積もり）」と付くもの（見出しかリードの 2 行、本文の行数、文節の途中の折り返し、枠からはみ出した文字の重なり、空き）と組むときの警告（`slides.md` の 1 の表）は、組むときと同じ字幅の見積もりなので、画像で確定する。ほかは JSON で決まり、組んだあとの lint と同じ指摘が出る。画像で測る箱の余白と、Google が描いた折り返し・画像の枠は、手元では分からない。ページを書く子も、自分のファイルにかけてよい（`slides.py lint pages_<担当>.json <URL>`。組まない）。
-- **区切り:** 代表の 3 枚を組むとき、全体を初めて組むとき（子のページを合わせたときも、ここで 1 回）、ひとまとまりの直し（レビューの 1 ラウンドの直しなど）を入れ終えたとき。区切りのあいだは組まず、unit の要修正を 0 にしてから組む。
-- **画像は親が 1 か所で取る。** 子に `gslides.py check` を回させない。ページの画像は 1 人 1 分 60 枚まで（同じ分の枠で、自分の会話・子・ほかの会話の分を合わせて数える）で、超えると 429 で枠が明けるまで止まる。`gslides.py` は、この機械で直前の 1 分に取った枚数を数え、上限の手前で待つ。
-- **変えたページを見る（e2e）:** 変えたページが 1〜3 枚なら、子を立てずに親が `changed.json` の画像を開いて見る。4 枚以上なら、数ページのまとまり（章ごとか、同じ型のページ）で子に分けて見せてよい。1 ページに 1 本の子にはしない（子 1 本ごとに立ち上がりとスキルの読み込みがかかり、モデルの API のレート制限もある）。子に渡すのは、担当のページの `changed.json` の項目（`image` の画像、`lint` と `box_pad` の指摘）、`deck.md`（全文。前のページの略語や数字を知らないと的外れな指摘を出す）、構成案、`../deck-practices/visual.md`。起動のしかたと返させ方は `../deck-review/SKILL.md` の「頼み方」のページ担当と同じ。子は組まず、画像も取らない。ページをまたぐ疑いは「全体へ」と書いて返させ、全体の層で見る。
-  - **全体を初めて組んで、そのまま `/deck-review` に入るときは、** 変えたページを 1 枚ずつ原寸で開かない。原寸の画像は 1 ラウンド目のレビューの子（ページで分けたらページ担当）が見る（`../deck-review/SKILL.md` の「頼み方」）。親が見るのは次の 3 つで、直してから `/deck-review` に入る。原寸で開くのは、1 と 3 で引っかかったページだけにする（`sips -c` で切り出してよい）。原寸の画像は、要約するまで親の文脈に残るため（下の「根拠」）。
-    1. 組むときの警告と、`gslides.py check --all` の要修正・要確認（画像で測った余白を含む）
-    2. 子に分けて書いたデッキは、`build/*.json` の検索で子どうしの揺れ（同じ型の部品の `h`・`size`、カードの字数、「書き方の決め」の呼び方、ノートの調子）
-    3. 全ページの一覧の画像（`sheet.py`）で、同じ型の部品の大きさと位置、密度、色
-- **box_pad** は子に測らせず、`gslides.py check` が取ったページを並べて測る。
+- **unit:** Findings marked 「（見積もり）」 (a heading or lead on 2 lines, the number of body lines, a line break inside a phrase, overlapping text that overflows its frame, empty space) and build warnings (the table in `slides.md` §1) use the same character-width estimate as the build, so confirm them on the images. Everything else is fixed by the JSON and produces the same findings as the lint after building. The padding in boxes measured on images, and the line breaks and image frames that Google renders, cannot be known locally. Child agents that write pages may also run it on their own files (`slides.py lint pages_<owner>.json <URL>`. No build).
+- **Checkpoints:** when you build the three representative pages, when you build the whole deck for the first time (also once here when you merge the child agents' pages), and when you finish a batch of fixes (such as the fixes from one review round). Do not build between checkpoints. Bring the unit `要修正` to 0 before you build.
+- **The parent agent takes the images in one place.** Do not let child agents run `gslides.py check`. Page images are limited to 60 per person per minute (the same per-minute quota counts your conversation, child agents, and other conversations together). Over the limit you get 429 and stop until the quota frees up. `gslides.py` counts the images this machine took in the last minute and waits before the limit.
+- **Checking changed pages (e2e):** If 1–3 pages changed, the parent agent opens the images in `changed.json` itself without starting child agents. If 4 or more changed, you may split them into groups of a few pages (by chapter, or pages of the same type) and show them to child agents. Do not make one child agent per page (each child agent costs startup and skill loading, and the model API has rate limits). Give the child agent the `changed.json` entries for its pages (the `image`, and the `lint` and `box_pad` findings), `deck.md` (the full text. Without knowing abbreviations and numbers from earlier pages, it gives off-target findings), the outline, and `../deck-practices/visual.md`. How to start them and how they reply is the same as the page owners in "How to ask" of `../deck-review/SKILL.md`. Child agents do not build and do not take images. Have them return suspicions that span pages marked 「全体へ」, and check those in the whole layer.
+  - **When you build the whole deck for the first time and go straight into `/deck-review`,** do not open the changed pages one by one at full size. The first round's review child agents (the page owners, if split by page) look at full-size images ("How to ask" in `../deck-review/SKILL.md`). The parent agent checks the following 3 things and fixes them before entering `/deck-review`. Open at full size only the pages caught by 1 and 3 (you may crop with `sips -c`). This is because full-size images stay in the parent agent's context until summarized ("Basis" below).
+    1. Build warnings, and the `要修正` and `要確認` from `gslides.py check --all` (including padding measured on images)
+    2. For decks split among child agents, inconsistencies between child agents found by searching `build/*.json` (`h` and `size` of components of the same type, character counts of cards, names from the 「書き方の決め」 section, tone of the notes)
+    3. On the contact sheet of all pages (`sheet.py`), size and position of components of the same type, density, and color
+- **box_pad:** Do not let child agents measure it. Measure it by laying out the pages that `gslides.py check` took.
 
-根拠: 資料づくりの時間の 2 割が組む・確かめるで、1 本で組む回数の中央値は 24 回だった（2026-10-15。ワークスペースの `Internal/deck_speed_20261015/`）。手元の lint で組んだあとと同じ指摘が出ることを、過去のデッキ 5 本（計 234 件）で確かめた（2026-10-15）。原寸の画像は 1 枚 1,500 トークン前後（25 枚で 16 枚を開くと約 2.5 万、一覧 2 枚なら約 3 千。推測）。
+Basis: 20% of the time spent making materials went to building and checking, and the median number of builds per deck was 24 (2026-10-15. The workspace's `Internal/deck_speed_20261015/`). We confirmed on 5 past decks (234 findings in total) that the local lint gives the same findings as after building (2026-10-15). A full-size image costs about 1,500 tokens (opening 16 of 25 pages costs about 25,000; 2 contact sheets about 3,000. An estimate).
 
-## gslides.py check がすること
+## What gslides.py check does
 
-1. `presentations.get` の JSON を `/tmp/slides_<ID の頭 8 字>/deck.json` に書く
-2. ページごとの文字とノートを `deck.md` に書き出す（レビューに渡すテキスト）
-3. `lint.py`（下）を JSON にかける
-4. 前に取ったときから変わったページの画像（Google が描いたサムネイル、1600 × 900）を `p-NN.png` に取る（6 本並列。1 分 60 枚の手前で待つ）。ページは objectId で見る（`slides.py build` は中身の変わったページだけを新しい ID で作るので、ID が同じなら中身も同じ）。ほかのページは前の画像を残し、番号がずれたものは移す（右下のページ番号だけ古い）。前に組んだあとに画面で直されていたら全ページ。`--all` で全ページ、`--pages 3,5` でそのページだけ
-5. `box_pad.py` が、取った画像で（ページごとに並べて測る）、塗りの箱の中の上寄せの 2 行以上の文字と箱の下端の間を測り、1 字分より狭いものを「要確認（画像で測った）」に出す（visual.md の 4。行の高さは JSON では見積もれないので画像で測る。2026-10-09）。白いカードの下端の真上の文字は、1 行の札（「2 回まで」など）でも 1 字分を見る（2026-10-14）。1 つだけで置く淡色のパネルの上寄せの文字で、下の空きが上より 0.25 in 以上大きいものも出す（中央に置くか縮める。2026-10-10）
+1. Writes the `presentations.get` JSON to `/tmp/slides_<first 8 chars of the ID>/deck.json`
+2. Writes the text and notes of each page to `deck.md` (the text you pass to reviews)
+3. Runs `lint.py` (below) on the JSON
+4. Takes images (Google-rendered thumbnails, 1600 × 900) of pages changed since the last run into `p-NN.png` (6 in parallel. Waits before 60 per minute). Pages are identified by objectId (`slides.py build` creates only pages whose content changed, with new IDs, so the same ID means the same content). Other pages keep their previous images; images whose page number shifted are moved (only the page number at the bottom right is old). If someone edited in the UI after the last build, all pages. `--all` for all pages, `--pages 3,5` for only those pages
+5. `box_pad.py` measures, on the images it took (laying out each page), the gap between top-aligned text of 2 or more lines inside a filled box and the bottom edge of the box, and reports gaps narrower than one character as 「要確認（画像で測った）」 (visual.md §4. Line height cannot be estimated from the JSON, so it is measured on images. 2026-10-09). For text right above the bottom edge of a white card, it checks for one character even for a 1-line tag (such as 「2 回まで」) (2026-10-14). It also reports top-aligned text in a single standalone light panel where the space below is 0.25 in or more larger than the space above (center it or shrink the panel. 2026-10-10)
 
-6. 取ったページの番号・画像のパス・そのページの lint と box_pad の指摘を `changed.json` に書く（`slides.py build` も、作り直したページを同じファイルに書く）。工程ごとの秒と 429 の待ちを標準エラーに 1 行で出す（build も）
+6. Writes the page numbers it took, the image paths, and that page's lint and box_pad findings to `changed.json` (`slides.py build` also writes the pages it rebuilt to the same file). Prints the seconds per step and the 429 waits on one line to standard error (build does too)
 
-lint の要修正があれば、画像まで取ったうえで exit 1 を返す。
+If the lint has `要修正`, it returns exit 1 after taking the images.
 
-## lint.py がすること
+## What lint.py does
 
-書いたルールは守られにくいので、機械で見られるものはここで数える（標準ライブラリだけ。単体でも `python3 lint.py <deck.json>` で動く）。ルールの中身と出典は `deck-practices`。テーマの色は、デッキのマスターの配色で実際の色に直して見る。
+Written rules are easy to break, so whatever a machine can check is counted here (standard library only. It also runs alone as `python3 lint.py <deck.json>`). The content and sources of the rules are in `deck-practices`. Theme colors are resolved to actual colors with the deck master's color scheme.
 
-- **見出しの一覧:** 各ページでいちばん大きい文字を順に出し、リードがあればその下に字下げで出す。1 行に収まらない見込みなら「2 行の見込み」と付ける。これを通して読み、話が通るかを見る（`deck-practices` の content.md）。
-- **本文の字数:** ページごとに、見出し・リード・出典・フッターを除いた字数を出す。`--talk`（LT など話す資料）のときは、125 字を超えるページを要確認に出す（content.md の 2）。
-- **要修正（exit 1）:** 絵文字、長いダッシュ（—）、置き換え忘れ（TODO、〇〇、lorem など）、社内資料の差し替えの仮ページの札（「差し替え：」）、スライドの 11pt 未満の文字（塗りのある図形の中の文字は 9pt 未満〔visual-037。カードの本文のように別の図形の塗りに重ねた文字は 11pt 未満〕、著作権フッターと同じ行の秘密区分も 9pt 未満。名前に「差し替え用」が入ったデッキは、元のページの大きさのままなので見ない）、Noto Sans JP でない書体（英数字だけの Cascadia Mono は通す）、Cascadia Mono（等幅）の和文、見出しの句点（文の途中のものも）、「〜ください」「〜します」「〜しましょう」で終わる見出し（頼みごとはリードか本文で言う。content.md の 6）。
-- **要確認:** 空疎な言い回し（「〜を実現する」など）、不安をあおる言い方、英語の大文字のラベル（等幅のコードの行は数えない）、和欧間のスペースの抜け、約物の前後のスペース、「要確認」「TBD」の残り、社外秘の表示（Internal Only・Confidential など。フッターのものは 1 件にまとめる）、スライドの本文の です・ます、言い切りの見出しが 3 枚を超えるデッキ（読点があり、動詞・形容詞らしい仮名で終わる見出しを数える。扉と表紙は数えない。content.md の 4）、1 つの枠の箇条書きの句点の混在、ノートの だ・である、ノートのないページ、出典の行がないページの数字、リンクのない出典の行、8 行を超える本文（どちらも等幅のコードの箱は数えない。`source:` を出典の行と見ない）、見出しかリードが 2 行の見込み、自動の折り返しが文節の途中に入る見込み（組むときと同じ字幅の見積もりで折り返しの位置を出し、BudouX〔`uv run --with budoux` で別に呼ぶ〕の文節の切れ目にないものを出す。行頭に来ない句読点・閉じ括弧の前と英数字の語の切れ目、表のセル・フッター・等幅だけの段落・大きさの分からない文字〔プレースホルダーの継承〕は数えない。見積もりなので 1 字ずれることがあり、画像で確かめる。uv か BudouX が使えなければ数えない。visual-013）、両側の箱の上下の中央にない横の矢印（同じ 2 つの箱の間に 2 本以上あれば、ずらすのが意図なので数えない）、枠の下からはみ出し、下の文字の枠の文字に届く文字（高さを決め打ちにした見出しの枠が折り返したとき。lint-025）、線で組んだ格子（上端と長さの同じ縦線が 3 本以上。細い四角も線に数える。矢印と、角丸の囲みのグループの中の線は数えない。表にする）、本文の下の空き（結論バンドか 6.60 in まで 1.0 in 以上）、中身より大きい箱（塗りの箱の、文字より下が 0.6 in 以上。角丸を組む部品や枠線のような文字のない図形は中身に数えない）、本文の中ほどの穴（要素と要素の間・結論バンドの上が 0.65 in 以上、本文の上が 1.0 in 以上。表の下は数えない）、数字だけの大きな段落（28pt 以上で単位がない）、隣り合う列の白いカードの上端・下端のずれ（0.03〜1.0 in）、Google 標準の丸みの点線の角丸（中のカードと曲率が合わない。JSON は `box` に `"shape": "round_rectangle"` と `"dash": true`）、本文の 3 分の 1 を超える結論バンド、1 枚目が表紙（濃紺の地）でないデッキ、12 枚を超えるのに章の扉（濃紺の地）がないデッキと、扉のあとが 1 枚だけ（か 1 枚もない）の章。
-- **見積もりと確定:** 字幅と行の高さの見積もりから出す指摘（見出しかリードが 2 行、8 行を超える本文、文節の途中の折り返し、枠からはみ出した文字の重なり、本文の下・箱の中・本文の中ほどの空き）には「（見積もり）」と付ける（`lint.py` の `ESTIMATE`）。Google が描いた画像で確定する。ほかは JSON で決まる。
-- **組むときの警告**（slides.py が出す。一覧と直し方は `slides.md` の 1）も、要確認と同じように 1 件ずつ見る。
-- **文字サイズの分布**と、**コントラストが基準に届かない色の組**（18pt 未満の細字と 11pt 未満の太字は 4.5:1、18pt 以上と 11pt 以上の太字は 3:1。文字の下にある塗りを地として計算する。画像の上の文字は見ない）。
-- ドキュメントの規則（Google Docs）は `../doc-build/SKILL.md` の 3。文章の規則（絵文字から「要確認」の残りまで）は、スライドと共有する。
-- 和文の言語（`ja-JP`）は Slides API で付けられないので、数えない（slides.md の 5）。
-- **記録:** `gslides.py check`・`docs.py check` は、要確認を `log/lint_runs.jsonl` に 1 回 1 行で残す（資料の文は残さず、指摘のハッシュだけ）。`python3 lint.py --stats` が、規則ごとに、出た件数と、その資料の最後の確認まで残った件数を出す（dreaming の 5 で使う）。
+- **List of headings:** Prints the largest text on each page in order, with the lead indented below it if there is one. If it likely does not fit on one line, it adds 「2 行の見込み」. Read it through and check that the story holds (content.md in `deck-practices`).
+- **Body character count:** Prints, per page, the number of characters excluding the heading, lead, source line, and footer. With `--talk` (talks such as LTs), it reports pages over 125 characters as `要確認` (content.md §2).
+- **`要修正` (exit 1):** emoji, long dashes (—), leftover placeholders (TODO, 〇〇, lorem, and so on), the tag on placeholder pages for replacing internal material (「差し替え：」), slide text under 11pt (text inside a filled shape: under 9pt [visual-037. Text layered on another shape's fill, such as card body text: under 11pt]; the confidentiality label on the same line as the copyright footer: also under 9pt. Decks whose name contains 「差し替え用」 keep the original page size, so they are not checked), fonts other than Noto Sans JP (Cascadia Mono with only alphanumerics passes), Japanese text in Cascadia Mono (monospace), Japanese periods (「。」) in headings (including mid-sentence ones), and headings that end in 「〜ください」「〜します」「〜しましょう」 (say requests in the lead or body. content.md §6).
+- **`要確認`:** empty phrases (such as 「〜を実現する」), fear-mongering phrasing, uppercase English labels (monospace code lines are not counted), missing spaces between Japanese and Latin text, spaces around punctuation marks, leftover 「要確認」 or 「TBD」, confidentiality labels (Internal Only, Confidential, and so on. Those in the footer are combined into 1 finding), 「です・ます」 in slide body text, decks with more than 3 assertive headings (counts headings that contain a Japanese comma (「、」) and end in kana that look like a verb or adjective. Section dividers and the cover are not counted. content.md §4), mixed use of periods across bullets in one frame, 「だ・である」 in notes, pages without notes, numbers on pages without a source line, source lines without links, body text over 8 lines (neither counts monospace code boxes. `source:` is not treated as a source line), a heading or lead likely on 2 lines, automatic line breaks likely inside a phrase (it computes the break positions with the same character-width estimate as the build and reports those not at a phrase boundary from BudouX [called separately with `uv run --with budoux`]. It does not count breaks before punctuation or closing brackets that cannot start a line, breaks between alphanumeric words, table cells, footers, paragraphs that are only monospace, or text of unknown size [inherited from placeholders]. Being an estimate, it can be off by one character, so check on the images. Not counted if uv or BudouX is unavailable. visual-013), horizontal arrows not at the vertical center of the boxes on both sides (if there are 2 or more between the same 2 boxes, the offset is intended and is not counted), overflow below the frame, text that reaches the text in the frame below (when a heading frame with a fixed height wraps. lint-025), grids made of lines (3 or more vertical lines with the same top and length. Thin rectangles count as lines. Arrows and lines inside a group of rounded enclosures are not counted. Use a table), empty space below the body (1.0 in or more down to the conclusion band or 6.60 in), boxes larger than their content (0.6 in or more of a filled box below its text. Shapes without text, such as the components that make rounded corners or frame lines, do not count as content), holes in the middle of the body (0.65 in or more between elements or above the conclusion band, 1.0 in or more above the body. Below tables is not counted), large paragraphs of only a number (28pt or more with no unit), misaligned top or bottom edges of white cards in adjacent columns (0.03–1.0 in), Google's default dotted rounded rectangle with round corners (its curvature does not match the cards inside. In JSON, `box` with `"shape": "round_rectangle"` and `"dash": true`), conclusion bands taller than one third of the body, decks whose first page is not a cover (navy background), decks of more than 12 pages without section dividers (navy background), and chapters with only 1 page (or none) after the section divider.
+- **Estimated and confirmed:** Findings derived from estimates of character width and line height (a heading or lead on 2 lines, body text over 8 lines, a line break inside a phrase, overlapping text that overflows its frame, empty space below the body, inside a box, or in the middle of the body) are marked 「（見積もり）」 (`ESTIMATE` in `lint.py`). Confirm them on the Google-rendered images. Everything else is fixed by the JSON.
+- **Build warnings** (printed by slides.py. The list and how to fix them are in `slides.md` §1): check them one by one, like `要確認`.
+- **Distribution of font sizes**, and **color pairs below the contrast threshold** (4.5:1 for regular text under 18pt and bold under 11pt; 3:1 for 18pt and up and bold 11pt and up. The fill under the text is used as the background. Text on images is not checked).
+- Document rules (Google Docs) are in `../doc-build/SKILL.md` §3. The text rules (from emoji to leftover 「要確認」) are shared with slides.
+- The Japanese language tag (`ja-JP`) cannot be set with the Slides API, so it is not counted (slides.md §5).
+- **Log:** `gslides.py check` and `docs.py check` write the `要確認` to `log/lint_runs.jsonl`, one line per run (no text from the material, only hashes of the findings). `python3 lint.py --stats` prints, per rule, how many findings appeared and how many remained until the last check of that material (used in dreaming step 5).
 
-## 結果の見方
+## Reading the results
 
-- **画像:** 組んだら、変えたページの画像（`changed.json`）を開いて見て、直す（上の「確かめ方の 3 つの層」の e2e。全体を初めて組んで、そのまま `/deck-review` に入るときは、原寸はレビューの子が見る。上の deck-build-005）。見るところは、はみ出し（文字は枠から出ても切れない）、重なり、出典やフッターとの衝突、行頭の句読点、1〜2 字だけの最終行、単語や文節の途中での折り返し。仕上がりは Google が描いたこの画像で判断する。
-- **テキスト:** 抜けや順番の誤りがないか、`deck.md` を読む。
-- **lint:** 要修正は 0 にする。要確認は 1 件ずつ見て、直すか、残す理由を言えるようにする（例: 顧客の発言の引用に です・ます が残るのはよい。案内・依頼・注意書きのページ（問い合わせ先、お願い、「ご相談ください」、免責・価格の注記）の です・ます も残してよい。それ以外の説明の文は常体か体言止めに直す。content.md の 6）。
-- **返す前:** 新しく作った資料は、ユーザーに返す前に `/deck-review`（`../deck-review/SKILL.md`）で全体をレビューする。別のサブエージェントの目と、全ページの一覧で見る。返したあとの直しでは、`../deck-practices/SKILL.md` の deck-practices-017 で決めた範囲だけを回す。
-- 確認が済んだら `/tmp/slides_<ID>/` は消してよい。資料のフォルダには残さない。
+- **Images:** After building, open the images of the changed pages (`changed.json`), look at them, and fix (the e2e in "Three layers of checks" above. When you build the whole deck for the first time and go straight into `/deck-review`, the review child agents look at full size. deck-build-005 above). Look for overflow (text is not clipped even when it leaves its frame), overlaps, collisions with the source line or footer, punctuation at the start of a line, last lines of only 1–2 characters, and line breaks inside a word or phrase. Judge the finish by these Google-rendered images.
+- **Text:** Read `deck.md` for missing content or wrong order.
+- **lint:** Bring `要修正` to 0. Check each `要確認` one by one, and either fix it or be able to say why it stays (example: 「顧客の発言の引用に です・ます が残るのはよい。案内・依頼・注意書きのページ（問い合わせ先、お願い、「ご相談ください」、免責・価格の注記）の です・ます も残してよい。それ以外の説明の文は常体か体言止めに直す。」 content.md §6).
+- **Before delivering:** Review a newly made material as a whole with `/deck-review` (`../deck-review/SKILL.md`) before returning it to the user. It looks with a separate subagent's eyes and with the contact sheet of all pages. For fixes after delivery, run only the scope decided by deck-practices-017 in `../deck-practices/SKILL.md`.
+- When checking is done, you may delete `/tmp/slides_<ID>/`. Do not keep it in the material's folder.
 
-## 納品物
+## Deliverables
 
-- **スライドは Google Slides、ドキュメントは Google Docs（`../doc-build/`）を納品する。PDF は作らない。** HTML の資料を PDF にして渡したもの（顧客向けの資料など）は残してある。2026-10-07 より前のスライドは pptx（直し方は slides.md の 7）、2026-10-09 より前のドキュメントは docx（直すときは Google Docs に変換する。`../doc-build/SKILL.md` の 8）。
-- **書体:** スライドとドキュメント（Google Docs）は Google Fonts の Noto Sans JP（スライドは、会社のテンプレートから作ったテーマならその書体。lint はテンプレートのマスターの書体と比べる。`../deck-template/SKILL.md`。ドキュメントは Noto Sans JP のまま）。コードの箱とコマンドの英数字だけは等幅の Cascadia Mono（`slides.py` の `MONO`。`../deck-practices/visual.md` の 2。2026-10-09）。
-- **文字の大きさ:** スライドの文字は 11pt 以上（表紙・扉・出典も。著作権フッターと同じ行の秘密区分と、右下のページ番号だけ 9pt。2026-10-08、ページ番号は 2026-10-13）。塗りのある図形の中の補助の文字（ガントのバーなど）は、本文から 2pt 下の 9pt まで（visual-037）。書体と大きさは lint が止める（ページ番号は読まないので、テンプレートと `slides.py` が 9pt にする）。Google Slides は言語を付けられないので、行頭の句読点は画像で見る（slides.md の 5）。
-- **名前と改訂:** 資料名は `<相手>_<内容>_<日付>`。Drive 上の名前は下の「Drive に置く」。改訂は同じファイル（スライドは同じ URL）に上書きし、前の版は理由があるときだけ `_v2` で残す。`.bak` は作らない（`slides.py merge` が `build/` に残す `pages.py.bak*` は除く。`/deck-review` の手順 7 で返すときに消す）。
-- `slides.py` で組んだデッキは画面で直さず、ページの JSON（前の資料は pages.py）を直して組み直す（画面での直しは消える。画面で直されていたら `slides.py build` が止まる。slides.md の 1）。ドキュメントは `../doc-build/SKILL.md` の 6。
-- `~$` で始まるファイルは PowerPoint や Word のロックファイル。開いている最中に作られるので触らない。
+- **Deliver slides as Google Slides and documents as Google Docs (`../doc-build/`). Do not make PDFs.** Materials that were HTML turned into PDF before delivery (such as customer-facing materials) are kept. Slides before 2026-10-07 are pptx (how to fix them is slides.md §7); documents before 2026-10-09 are docx (convert them to Google Docs to fix them. `../doc-build/SKILL.md` §8).
+- **Fonts:** Slides and documents (Google Docs) use Noto Sans JP from Google Fonts (for slides, a theme made from a company template uses that template's font; the lint compares against the font of the template's master. `../deck-template/SKILL.md`. Documents stay Noto Sans JP). Only the alphanumerics in code boxes and commands use the monospace Cascadia Mono (`MONO` in `slides.py`. `../deck-practices/visual.md` §2. 2026-10-09).
+- **Text size:** Slide text is 11pt or larger (including the cover, section dividers, and source lines. Only the confidentiality label on the same line as the copyright footer and the page number at the bottom right are 9pt. 2026-10-08; page number 2026-10-13). Supporting text inside a filled shape (such as Gantt bars) may go down to 9pt, 2pt below the body (visual-037). The lint stops on font and size (it does not read page numbers, so the template and `slides.py` set them to 9pt). Google Slides cannot set a language, so check punctuation at the start of lines on the images (slides.md §5).
+- **Names and revisions:** The material name is `<counterpart>_<content>_<date>`. The name on Drive is in "Placing files on Drive" below. Overwrite revisions in the same file (for slides, the same URL); keep the previous version as `_v2` only when there is a reason. Do not make `.bak` files (except the `pages.py.bak*` that `slides.py merge` leaves in `build/`. Delete them when you deliver in step 7 of `/deck-review`).
+- Do not edit decks built with `slides.py` in the UI. Edit the page JSON (pages.py for older materials) and rebuild (UI edits are lost. If someone edited in the UI, `slides.py build` stops. slides.md §1). For documents, see `../doc-build/SKILL.md` §6.
+- Files that start with `~$` are PowerPoint or Word lock files. They are created while a file is open, so do not touch them.
 
-## Drive に置く
+## Placing files on Drive
 
-[deck-build-001] スライドとドキュメントで同じ。スライドは Google Slides、ドキュメントは Google Docs として Drive に直接作り（ドキュメントは `docs.py new`。2026-10-09 から）。人には URL で渡す（上の「納品物」）。
+[deck-build-001] Same for slides and documents. Create slides as Google Slides and documents as Google Docs directly on Drive (documents with `docs.py new`. Since 2026-10-09). Give them to people as URLs ("Deliverables" above).
 
-- **置き場所:** 共有ドライブの `10_Customers`（URL は ワークスペースの `factory.toml` の `drive.customers`）→ 社名の頭文字のフォルダ（`00_ABC`、`01_DEF` など）→ 顧客（英語の社名）→ 事業部などのフォルダ。先に `references_index.md` の「Google Drive の置き場所」を見る。載っていなければ中を見て決め、そこに足す。
-- [deck-build-002] **顧客に紐づかない資料（`Internal/`）:** スライドは My Drive の「AI Deck Factory」の中の「Slides」（URL は `factory.toml` の `drive.internal`）、ドキュメント（Google Docs）は同じ中の「Docs」（`drive.docs`）。どちらも共有ドライブではない → テーマごとのサブフォルダ。合うものがなければテーマの名前で作る。個人の資料（テンプレート・社内向けの成果物）は AI Deck Factory の下にまとめ、My Drive の直下に置かない（画像を貼るときの仮のファイルだけは例外で、slides.md の 6）。
-- **名前:** Drive 上は `YYYYMMDD_` で始める（いつのものか分かるように）。日付は会議や提出の日、決まっていなければ初めて作った日。後ろは資料名（上の「納品物」の資料名から、末尾の日付と拡張子を外したもの）。例: `20261007_Acme様_ご説明資料_SIEMの事例と構成`。
-- [deck-build-003] **スライドを作る:** `slides.py new <フォルダ> <名前>` が、テンプレートをそのフォルダに複製して組む。出た URL を構成案（か社内メモ）に書き、その場でユーザーに 1 行で伝える（「作業中の資料: <URL>。組み直すたびに同じ URL が新しくなる」）。仕上がる前から画面で見てもらえるようにするため。返事は待たずに進める。ドキュメントの `docs.py new` も同じ。代表の 3 枚や下書きの段階から、決まりの置き場所（顧客のフォルダ）に作ってよい。仕上げる前から社内の人に見えても問題ない。
-- **更新:** スライドは `slides.py build <URL>` で同じプレゼンを組み直す（URL が変わらない）。html・csv は `drive_put.py` で同じファイルに上書きする。名前の日付は変えない。別にコピーを残すのは、指示があったときだけ。
-- [deck-build-004] **名前を変えるとき:** Drive API の `files.update`（PATCH で `{"name": …}`、`supportsAllDrives=true`）で変える。ID・URL は変わらない。`drive_put.py` で上げるファイルは、先に Drive 上の名前を変えてから、新しい名前で `drive_put.py` を回す（名前で上書き先を探すので、先に変えないと別のファイルがもう 1 つできる）。
-- **html・csv などのファイルの上げ方:** `python3 $K/drive_put.py <ファイル> <フォルダの URL か ID> <Drive 上の名前>`（同じ名前があれば上書き、なければ作る）。
-- 共有の設定は変えない。作った資料は `references_index.md` の「Google Drive の置き場所」に、ローカルのフォルダと組にして足し、URL を報告に付ける。
+- **Location:** The shared drive's `10_Customers` (the URL is `drive.customers` in the workspace's `factory.toml`) → the folder for the company name's initial (`00_ABC`, `01_DEF`, and so on) → the customer (company name in English) → a folder for the business unit or similar. Check 「Google Drive の置き場所」 in `references_index.md` first. If it is not listed, look inside, decide, and add it there.
+- [deck-build-002] **Materials not tied to a customer (`Internal/`):** Slides go in 「Slides」 inside 「AI Deck Factory」 in My Drive (the URL is `drive.internal` in `factory.toml`), and documents (Google Docs) in 「Docs」 in the same folder (`drive.docs`). Neither is a shared drive → a subfolder per topic. If none fits, create one named after the topic. Keep personal materials (templates, internal deliverables) under AI Deck Factory and not directly in the root of My Drive (the only exception is the temporary files used when pasting images, slides.md §6).
+- **Name:** On Drive, start with `YYYYMMDD_` (so it is clear when it is from). The date is the meeting or submission date, or the date you first created it if not decided. After that comes the material name (the material name from "Deliverables" above, without the trailing date and extension). Example: `20261007_Acme様_ご説明資料_SIEMの事例と構成`.
+- [deck-build-003] **Creating slides:** `slides.py new <folder> <name>` copies the template into that folder and builds. Write the printed URL in the outline (or the internal memo) and tell the user on the spot in one line (「作業中の資料: <URL>。組み直すたびに同じ URL が新しくなる」). This lets them watch it in the UI before it is finished. Do not wait for a reply; keep going. The same goes for `docs.py new` for documents. You may create it in the rule-defined location (the customer's folder) from the three representative pages or draft stage. It is fine for internal people to see it before it is finished.
+- **Updating:** For slides, rebuild the same presentation with `slides.py build <URL>` (the URL does not change). Overwrite html and csv in the same file with `drive_put.py`. Do not change the date in the name. Keep a separate copy only when told to.
+- [deck-build-004] **Renaming:** Rename with the Drive API `files.update` (PATCH with `{"name": …}`, `supportsAllDrives=true`). The ID and URL do not change. For files uploaded with `drive_put.py`, rename on Drive first, then run `drive_put.py` with the new name (it finds the file to overwrite by name, so if you do not rename first, a second file is created).
+- **Uploading files such as html and csv:** `python3 $K/drive_put.py <file> <folder URL or ID> <name on Drive>` (overwrites if the same name exists, otherwise creates).
+- Do not change sharing settings. Add the materials you made to 「Google Drive の置き場所」 in `references_index.md`, paired with the local folder, and include the URL in the report.
 
-## Google Slides・Google Docs 以外
+## Formats other than Google Slides and Docs
 
-- **HTML の資料** は頼まれたときだけ作る。1 ファイルで完結させ、画像は同じフォルダの `images/` に置く。手元で見るときは `.claude/launch.json` に `python3 -m http.server` の設定を足す。
+- **HTML materials:** Make them only when asked. Keep each in one self-contained file, with images in `images/` in the same folder. To view locally, add a `python3 -m http.server` entry to `.claude/launch.json`.

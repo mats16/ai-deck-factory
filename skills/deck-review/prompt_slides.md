@@ -1,37 +1,37 @@
-# レビューの依頼文（スライド）
+# Review prompt (slides)
 
-Google Slides のレビューで、レビューの子に渡す依頼文（`SKILL.md` の手順 3）。ドキュメント（Google Docs）は [prompt_doc.md](prompt_doc.md)。`<>` を埋めて、Agent ツールの prompt に渡す。分けて並列に頼むときは、次のように変える。
+The prompt given to the review child for a Google Slides review (step 3 of `SKILL.md`). For documents (Google Docs), see [prompt_doc.md](prompt_doc.md). Fill in the `<>` and pass it as the Agent tool's prompt. When you split and ask in parallel, change it as follows.
 
-- 全体の 1 本: 画像の行を「<画像のフォルダ> の p-* は、ページをまたぐ疑いを確かめるときだけ、3 枚まで開く」にする。頭の「画像は 1 枚ずつ Read で開いてください」は「画像は一覧を開いてください」に、5 の終わりの「（文字は、テキストと 1 枚ずつの画像で見る）」は「（文字はテキストで見る。1 枚の中のこと〔観点 2 の 1 枚の中身と 5〕はページ担当が見るので、挙げない）」に替える。「気になったページだけ」と書くと、1 枚の中の欠陥を探しに行って、ほとんどのページを開く（2026-10-18 の sandbox の 15 枚で 12 枚を開き、1 ラウンド目でいちばん遅い 11 分かかった。ページ担当は 4.5〜5.5 分）。3 枚は目安。
-- ページ担当: 画像の行を「<画像のフォルダ> の p-05〜p-12 を開く（担当のページ）」にし、一覧の行を消す。「見ること」の頭に「担当は p5〜p12。観点 2 の 1 枚の中のことと、5 だけを見る。ページをまたぐもの（話の筋、ページ間の数字、表記ゆれ、略語の初出、同じ型の連続）は、疑いだけを `p<ページ> | 全体へ | <何が気になるか>` と書いて返す」と足す。
+- Whole-material child: change the image line to "Images: open p-* in <image folder> only to confirm a cross-page suspicion, up to 3 images". In the opening, replace "open images one at a time with Read" with "open the contact sheet for images", and at the end of 5, replace "(read text in the text file and the single-page images)" with "(read text in the text file. Single-page matters [aspect 2's content of one page and 5] are covered by page owners, so do not report them)". If you write "only the pages that look suspicious", the child goes looking for single-page defects and opens most pages (on 15 pages in sandbox on 2026-10-18 it opened 12 and was the slowest in round 1 at 11 minutes; page owners took 4.5–5.5 minutes). 3 images is a guideline.
+- Page owner: change the image line to "Images: open p-05 to p-12 in <image folder> (your pages)", and delete the contact sheet line. Add at the start of "What to check": "Your pages are p5 to p12. Check only aspect 2's single-page matters and aspect 5. For cross-page matters (story, numbers across pages, inconsistent notation, first use of abbreviations, runs of the same pattern), return only the suspicion, written as `p<ページ> | 全体へ | <何が気になるか>`."
 
 ```text
-あなたは資料のレビュー担当です。日本語で答えてください。作った人とは別の目で、欠陥だけを挙げてください。点数は付けないでください。ルールからは決まらないもの、どちらとも取れるものは、欠陥と言い切らずに重さを「聞く」にし、迷う理由を書いてください。「読むもの」はすべて開いてから答え、画像は 1 枚ずつ Read で開いてください。開けなかったものは、開けなかったと書いてください。資料とファイルは直さないでください（指摘のファイルを書くときを除く）。
+You are the reviewer of this material. Look with eyes other than the maker's and list only defects. Do not give scores. For things the rules do not decide, or that can be read either way, do not call them defects; set the severity to 「聞く」 and write why you are unsure. Open everything under "What to read" before answering, and open images one at a time with Read. If you could not open something, say so. Do not edit the material or any files (except when writing the findings file).
 
-## 読むもの
-- ルール: <ワークスペース>/AGENTS.md の「社外秘と顧客の情報」「書き方」
-- ルール: <deck-practices のフォルダ>/content.md（0 にどの資料でも同じこと、6 に文体と出典）と visual.md
-- 構成案: <構成案のパス>
-- テキスト: <テキストのパス>（`### Notes:` より下はスピーカーノート）
-- 画像: <画像のフォルダ> の p-* をすべて開く
-- 一覧: <画像のフォルダ> の sheet*.png（全ページを 4 列に並べたもの。各ページの上に番号）
+## What to read
+- Rules: the 「社外秘と顧客の情報」 and 「書き方」 sections of <workspace>/AGENTS.md
+- Rules: <deck-practices folder>/content.md (§0 is what is the same for every material; §6 has 「文体」 and "Sources") and visual.md
+- Outline: <outline path>
+- Text: <text path> (below `### Notes:` are the speaker notes)
+- Images: open all p-* in <image folder>
+- Contact sheet: sheet*.png in <image folder> (all pages in 4 columns, with the number above each page)
 
-## 資料の種類と聞き手
-<顧客向け・社内向け・コミュニティ向け>。聞き手は <部署・役割・技術の水準>。<顧客と認識を合わせる資料（定例の資料、スケジュール、進捗の一覧、宿題のまとめ）なら次の 1 文を足し、ほかの資料なら消す: 顧客と認識を合わせる資料なので、観点 3 で、こちらが紹介・提案しただけのもの（顧客と合意しておらず、顧客が言った・持ち帰ったものでもないもの）が、合意した予定と見分けられない形で本文・表・チャート・宿題に載っていないかも見る（content.md の content-042）。>
+## Material type and audience
+<customer-facing, internal, or community>. The audience is <department, role, technical level>. <If the material aligns understanding with the customer (a regular meeting deck, a schedule, a progress list, a summary of action items), add the following sentence; for other materials, delete it: 「顧客と認識を合わせる資料なので、観点 3 で、こちらが紹介・提案しただけのもの（顧客と合意しておらず、顧客が言った・持ち帰ったものでもないもの）が、合意した予定と見分けられない形で本文・表・チャート・宿題に載っていないかも見る（content.md の content-042）。」>
 
-## 見ること
-文字が多く見えるページを先に挙げる。LT など話す資料なら、`gslides.py check --talk` の本文の字数（125 字まで）も見て、1 枚に言いたいことが 2 つ以上あるページを挙げる。直す案は、言い換え・関係の図解・ページの分割の順で考え、文字を小さくして収めない。読む資料の根拠をどこに残すかは content.md の「読む資料の説明と根拠」に従う。構成案に「書き方の決め」の節があれば、全ページ（見出し・カード・表のセル・ノート）がそれに沿っているかも見る（代表の 3 枚で決めた書き方。ほかのページに当て漏れやすい）。
+## What to check
+List pages that look text-heavy first. For a spoken material such as an LT, also check the body character count from `gslides.py check --talk` (up to 125 characters), and list pages that say two or more things. Consider fixes in this order: rephrase, diagram the relationship, split the page; do not shrink text to fit. Where to keep the basis of a reading material follows "Explanation and evidence in materials meant to be read" in content.md §1. If the outline has a 「書き方の決め」 section, also check that every page (headings, cards, table cells, notes) follows it (it is the writing style decided with the three representative pages, and other pages easily miss it).
 1. 話の筋: [prompt_slides-001] 見出しとリードだけを順に読んで話が通るか。見出しは短い名詞句で、言い切りは判断を頼むページと数字の結論のページの 2〜3 枚だけか（content.md の 4）。見出しに句点や「〜ください」「〜します」がないか。名詞句の見出しのページで、言えること（だから何か）がリードか本文か結論バンドにあるか。冒頭の要約のページが、構成案の聞き手の問いに全部答えているか（content.md の content-040）。どの資料にも付く項目名（「現状」「課題」）だけの見出し。各ページの本文が、言い切り（見出しかリード）の「なぜ」に答えているか。目次・章立てと本編のずれ。「後で話す」と書いて回収していない論点。設定の手順を案内する資料なら、道具が自動でしてくれることと足りないことが手順より先にあるか、図で自動のものと自分で設定するものを見分けられるか。[prompt_slides-002] 聞き手が初めて見る仕組み・層・置き場所の関係を、表やカードの文字だけで説明しているページはないか。あれば、通り道か仕組みの図を足す案を「直す」で返す（content.md の content-045）。
-2. 1 枚の中身: 見出しの数と本文の数の食い違い（「3 つ」と言って 4 つある）。見出しの「だけ」「すべて」が、本文の表や図の範囲より強いもの。本編と Appendix に同じ表があるもの。見出しと図の結論の矛盾。裏づけのない評価語。前のページの焼き直し。同じ 2 つを比べるページの間で、左右（表の列）の順が入れ替わっているもの。数字の不整合（ページ間、構成案の出典の表との違い。出典の表に食い違いが書いてある値を、見出しや大きな数字で片方だけ言っていないか）。出典や注記の抜け。
+2. Content of one page: a count in the heading that does not match the body (says 「3 つ」 but there are 4). 「だけ」 or 「すべて」 in a heading that is stronger than the scope of the table or figure in the body. The same table in the main part and in the Appendix. A heading that contradicts the conclusion of the figure. Evaluative words without support. A rehash of an earlier page. Pages comparing the same two things where left and right (table columns) are swapped. Inconsistent numbers (across pages, or against the source table in the outline; where the source table notes a discrepancy, check that a heading or large number does not state only one side). Missing sources or notes.
 3. 聞き手の目線: 主語が自社や機能になっているページ。営業色。不安をあおる言い方。他社や OSS でできることを、できないように書いていないか。推奨や次の一歩がはっきりしているか。顧客向けなら、個人名・社内の事情・利用額・社内資料の名前・社外秘のページが入っていないか。外に出す資料に、出典の揺れや確かめていないことを見せる言い方（「docs のページで違う」「docs にない」「実測する」）がないか（content.md の 5）。
 4. 言葉: 空疎な言い回し、表記ゆれ、略語の初出、道具・エージェントの名前が聞き手の使う製品の名前か（アダプターや登録簿の表示名になっていないか）、スライドの本文の です・ます（案内・依頼・注意書きのページは除く）、ノートの だ・である、体言止めのリードと言い切りの見出し（誰がするのか、予測か意志かが読めない。名詞句の見出しはそれでよい。content.md の 6）、ひとまとまりの箇条書きや図のラベルで文末がそろっていないもの、口に出して言えない日本語（字を詰めるために略して、何の数か・何の組み合わせかが分からない名詞句。例:「〜の組の点」）。
-5. 見た目: はみ出し・切れ（最初に見る）、重なり、出典やフッターとの衝突、端からの余白（箱の中の最終行と下端の間が、上の余白より狭くないか）、そろっていない列、同格に並べた要素の中で、アイコンと文字の揃え方（左寄せ・中央寄せ）が 1 つだけ違うもの、隣り合う列の箱の上端・下端のずれ（片方の列にだけ小見出しがある）、大きな数字が何の数か（単位と対象が数字のそばにあるか）と、横に並べた説明との揃え、近すぎる要素、中身より大きい箱、文字の小ささとコントラスト、行頭の句読点、1〜2 字だけの最終行、文節の途中での折り返し、意味のない飾り（アイコン・線・影）と、構成図・流れの図のロゴとアイコンの抜け（製品の箱にロゴ、人とログの種類の箱に線画のアイコンがあるか。製品を汎用の線画で代えていないか。同じ製品がページによってロゴと文字だけに分かれていないか。手順だけの箱には要らない。visual.md の 6）、要らないページのキッカー・結論バンド・淡色のパネルの帯（visual.md の 1）、コードの箱の上の塗った見出しと、並べた列で片方だけ塗りの違う見出し（visual.md の 2）、箱の外に浮いていて、どの要素にかかるか分からない提供ステージの札（visual.md の 1）、循環の図で段と段を直線の矢印でつないだもの（visual.md の 6）。
-   仕上がりは、この画像で判断する（Google Slides が描いたもの）。枠いっぱいの文字は「詰まりすぎ」として挙げる。
-   一覧では、ページをまたぐものだけを見る: 同じ型が続きすぎていないか、余白と文字の量のばらつき、結論バンドやキッカーの数、扉の位置、見出しの位置のずれ。一覧の小さな文字は読まない（文字は、テキストと 1 枚ずつの画像で見る）。
+5. Visuals: overflow and clipping (check first), overlap, collision with the source line or footer, margins from the edges (inside a box, is the space between the last line and the bottom edge narrower than the top margin), misaligned columns, one element among peers whose icon-to-text alignment (left or center) differs from the rest, top or bottom edges of boxes in adjacent columns that do not line up (only one column has a subheading), what a large number counts (are the unit and subject next to the number) and its alignment with the explanation beside it, elements too close together, boxes larger than their content, small text and low contrast, 「行頭の句読点」「1〜2 字だけの最終行」「文節の途中での折り返し」, meaningless decoration (icons, lines, shadows), and missing logos and icons in architecture and flow diagrams (does each product box have its logo, and each box for a person or a log type a line icon; is a product replaced by a generic line icon; is the same product a logo on some pages and text only on others; boxes that are only steps do not need one; visual.md §6), kickers, conclusion bands, and light panel bands on pages that do not need them (visual.md §1), filled headers above code boxes and headers where only one of the side-by-side columns has a different fill (visual.md §2), release-stage tags floating outside a box so it is unclear which element they belong to (visual.md §1), and cycle diagrams that connect stages with straight arrows (visual.md §6).
+   Judge the finished look from these images (drawn by Google Slides). Report text that fills its frame as 「詰まりすぎ」.
+   In the contact sheet, check only cross-page matters: too long a run of the same pattern, uneven whitespace and amount of text, the number of conclusion bands and kickers, the position of section dividers, shifts in heading position. Do not read the small text in the contact sheet (read text in the text file and the single-page images).
 
-## 返し方
-最初に、開いた画像ごとに、見たもの（見出しと図の要素）を 1 行ずつ書く。
-そのあと、欠陥ごとに 1 行。`p<ページ> | <出所: 一覧・画像・テキスト> | <観点 1〜5> | <重さ: 直す／見直す／聞く> | <何が起きているか> | <直し方の案>`。ページをまたぐものは、ページを「p3・p5・p7」のように並べる。
-最後に、全体で直したほうがよい傾向があれば 3 行まで。欠陥がない観点は「なし」と書く。
-ここまでを <指摘のファイル> に書き、返事には件数（重さごと）とそのパスだけを書く。（pi の子に頼むときだけ。ほかの子にはこの行を消す）
+## How to reply
+First, for each image you opened, write one line on what you saw (the heading and the figure's elements).
+Then one line per defect: `p<ページ> | <出所: 一覧・画像・テキスト> | <観点 1〜5> | <重さ: 直す／見直す／聞く> | <何が起きているか> | <直し方の案>`. For cross-page items, list the pages like 「p3・p5・p7」.
+Finally, up to 3 lines on tendencies worth fixing across the whole material. For an aspect with no defects, write 「なし」.
+Write all of the above to <findings file>, and in your reply write only the counts (per severity) and that path. (Only when asking a pi child. For other children, delete this line.)
 ```

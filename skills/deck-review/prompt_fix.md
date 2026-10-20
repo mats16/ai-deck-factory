@@ -1,67 +1,67 @@
-# 直しの依頼文（スライドのページ担当）
+# Fix prompt (slide page owners)
 
-[prompt_fix-001] `/deck-review` のラウンドの間で、親が「直す」と決めた行をページの担当の子に渡す依頼文（`SKILL.md` の deck-review-011）。スライドだけ（ドキュメントは親が直す）。担当ごとに 1 本、`<>` を埋めて、同時に頼む。レビューの子とは別の子にする（レビューの子には直させない。作ったときの合意を知らないので、主張・数字・順序や修正の指示とぶつかる）。
+[prompt_fix-001] The prompt that gives the rows the parent marked 「直す」 to the children that own pages, between rounds of `/deck-review` (deck-review-011 in `SKILL.md`). Slides only (the parent fixes documents). Fill in the `<>` once per owner and ask them at the same time. Use a different child from the review child (do not have review children fix; they do not know what was agreed while building, so they conflict with claims, numbers, order, and corrections).
 
-- `<担当の行>` は、手順 4 の表の行を `p<ページ> | <ページのファイル> | <何が起きているか> | <直し方>` の形にしたもの。直し方は親が決めて書く（ページをまたぐ直しを子の行に足すときも、親が決めた直し方を書く）。
-- 担当は、ページのファイル（`build/p<番号>.json`。`../deck-build/slides.md` の slides-031）の単位で決める。子は担当のファイルをそのまま直す。pages.py の資料は、下の「pages.py の資料のとき」の依頼文で頼む。
+- `<your rows>` are the rows of the step 4 table rewritten as `p<ページ> | <ページのファイル> | <何が起きているか> | <直し方>`. The parent decides and writes the fix (also when adding a cross-page fix to a child's rows, write the fix the parent decided).
+- Assign owners by page file (`build/p<number>.json`; slides-031 in `../deck-build/slides.md`). The child edits its files in place. For pages.py decks, ask with the prompt in "When the deck uses pages.py" below.
 
 ```text
-あなたはスライドの直しの担当です。日本語で答えてください。下の「担当の行」だけを直し、担当のページのファイル（<担当のファイル。例: <build>/p05.json・<build>/p06.json>）をそのまま直してください。ほかのページのファイル・deck.json・構成案は書かないでください。組まないでください（slides.py build・new と gslides.py を回さない）。
+You fix slides. Fix only the rows under "Your rows", editing your page files (<your files, e.g. <build>/p05.json, <build>/p06.json>) in place. Do not write other page files, deck.json, or the outline. Do not build (do not run slides.py build or new, or gslides.py).
 
-## 読むもの
-- ルール: <ワークスペース>/AGENTS.md と、<ワークスペース>/rules/ の deck-practices/visual.md・deck-build/slides.md（あれば。プラグインの同じ名前のファイルより優先する）
-- ルール: <deck-practices のフォルダ>/visual.md と <deck-build のフォルダ>/slides.md の slides-034（JSON のページの書き方）と「4. 図形と文字の組み方」
-- 構成案: <構成案のパス>（合意した主張・数字・順序）
-- 修正の指示: `python3 <deck-practices のフォルダ>/scripts/ledger.py list --deck <資料のフォルダ>` の出力（その資料でユーザーから受けた直し。<ワークスペース> で回す）
-- 担当のページの画像: <画像のフォルダ> の <p-05.png など>（直す前に Google が描いたもの）
+## What to read
+- Rules: <workspace>/AGENTS.md, and deck-practices/visual.md and deck-build/slides.md under <workspace>/rules/ (if present; they take priority over the plugin files of the same name)
+- Rules: <deck-practices folder>/visual.md, and slides-034 (writing JSON pages) and "4. Laying out shapes and text" in <deck-build folder>/slides.md
+- Outline: <outline path> (the agreed claims, numbers, and order)
+- Corrections: the output of `python3 <deck-practices folder>/scripts/ledger.py list --deck <material folder>` (the corrections received from the user on this material; run it in <workspace>)
+- Images of your pages: <p-05.png etc.> in <image folder> (drawn by Google before the fix)
 
-## 担当の行
-<担当の行>
+## Your rows
+<your rows>
 
-## 直し方
-- 担当のファイルだけを直す。
-- 本文を直したら、同じページの note の同じ箇所（数・範囲・名前・言い切り）も合わせる。
-- 文字を小さくして収めない（言い換え・図解の順に考える）。部品は JSON の部品（slides-034）を使う。
-- 次の行は直さずに返す: 構成案の主張・数字・順序や修正の指示とぶつかる、見出しや言いたいことが変わる、ページを足す・分ける、担当の外（ほかのページ・deck.json）に触れないと直せない、直し方が決まりとぶつかる。自分で決めない。
-- 書いたら <build> で `python3 <deck-build のフォルダ>/scripts/slides.py lint <担当のファイル>` を 1 つずつ回し、JSON の誤りで止まらず、要修正が 0 になることを確かめる（組まずに、手元で lint をかける。誤りと指摘は場所を付けて出る）。
+## How to fix
+- Fix only your files.
+- When you fix the body, also match the same spot in that page's note (counts, ranges, names, assertions).
+- Do not shrink text to fit (consider rephrasing, then a diagram). Use the JSON components (slides-034).
+- Return the following rows without fixing them: ones that conflict with the outline's claims, numbers, or order or with the corrections, ones that change a heading or what the page says, ones that add or split pages, ones that cannot be fixed without touching anything outside your files (other pages, deck.json), and ones whose fix conflicts with a rule. Do not decide them yourself.
+- After writing, run `python3 <deck-build folder>/scripts/slides.py lint <your file>` in <build> for each file, and confirm that it does not stop on a JSON error and that `要修正` is 0 (this lints locally without building; errors and findings come out with their location).
 
-## 返し方
-返事に、次の形で 1 行ずつ書く。ほかは書かない。
+## How to reply
+In your reply, write one line each in the following form. Write nothing else.
 直した: p<ページ> | <ファイル> | <直したこと>
 返す: p<ページ> | <ファイル> | <行> | <返す理由>（なければ「返す: なし」）
 ```
 
-## pages.py の資料のとき
+## When the deck uses pages.py
 
-前に pages.py で作った資料は、担当をページの関数（`../deck-build/slides.md` の slides-030）の単位で決め、`<担当の行>` の 2 つ目を関数の名前にする。`<担当>` は `a`・`b` のように短く付け、`<build>/fix_<担当>.py` に書かせる（親が `slides.py merge` で合わせる）。
+For decks made earlier with pages.py, assign owners by page function (slides-030 in `../deck-build/slides.md`), and make the second field of `<your rows>` the function name. Give `<owner>` a short name such as `a` or `b`, and have the child write to `<build>/fix_<owner>.py` (the parent merges with `slides.py merge`).
 
 ```text
-あなたはスライドの直しの担当です。日本語で答えてください。下の「担当の行」だけを直し、直したページの関数を <build>/fix_<担当>.py に書いてください。pages.py・構成案・ほかのファイルは書かないでください。組まないでください（slides.py・gslides.py を回さない）。
+You fix slides. Fix only the rows under "Your rows", and write the fixed page functions to <build>/fix_<owner>.py. Do not write pages.py, the outline, or any other file. Do not build (do not run slides.py or gslides.py).
 
-## 読むもの
-- ルール: <ワークスペース>/AGENTS.md と、<ワークスペース>/rules/ の deck-practices/visual.md・deck-build/slides.md（あれば。プラグインの同じ名前のファイルより優先する）
-- ルール: <deck-practices のフォルダ>/visual.md と <deck-build のフォルダ>/slides.md の 2 の「pages.py の書き方」と「4. 図形と文字の組み方」
-- 構成案: <構成案のパス>（合意した主張・数字・順序）
-- 修正の指示: `python3 <deck-practices のフォルダ>/scripts/ledger.py list --deck <資料のフォルダ>` の出力（その資料でユーザーから受けた直し。<ワークスペース> で回す）
-- いまの pages.py: <build>/pages.py（読むだけ。共通の関数・定数・import はここにあるものを使う）
-- 担当のページの画像: <画像のフォルダ> の <p-05.png など>（直す前に Google が描いたもの）
+## What to read
+- Rules: <workspace>/AGENTS.md, and deck-practices/visual.md and deck-build/slides.md under <workspace>/rules/ (if present; they take priority over the plugin files of the same name)
+- Rules: <deck-practices folder>/visual.md, and "Writing pages.py" in §2 and "4. Laying out shapes and text" in <deck-build folder>/slides.md
+- Outline: <outline path> (the agreed claims, numbers, and order)
+- Corrections: the output of `python3 <deck-practices folder>/scripts/ledger.py list --deck <material folder>` (the corrections received from the user on this material; run it in <workspace>)
+- Current pages.py: <build>/pages.py (read only; use the shared functions, constants, and imports found here)
+- Images of your pages: <p-05.png etc.> in <image folder> (drawn by Google before the fix)
 
-## 担当の行
-<担当の行>
+## Your rows
+<your rows>
 
-## 直し方
-- 担当の関数だけを、def から最後の行まで丸ごと書く。直さない関数は書かない。import・定数・make は書かない。slides.py の名前（`card_h` など）で pages.py の import にないものは、そのまま使い、docstring の「import:」の行に書く（親が import に足す）。
-- 本文を直したら、同じページの d.note の同じ箇所（数・範囲・名前・言い切り）も合わせる。
-- 文字を小さくして収めない（言い換え・図解の順に考える）。部品は slides.py にあるものと、pages.py の共通の関数を使う。
-- 次の行は直さずに返す: 構成案の主張・数字・順序や修正の指示とぶつかる、見出しや言いたいことが変わる、ページを足す・分ける、担当の外（共通の関数・定数・ほかのページ）に触れないと直せない、直し方が決まりとぶつかる。自分で決めない。
-- 書いたら `python3 -c "import ast; ast.parse(open('<build>/fix_<担当>.py').read())"` で、文法の誤りがないかだけを確かめる。
+## How to fix
+- Write only your functions, whole, from def to the last line. Do not write functions you do not fix. Do not write imports, constants, or make. For slides.py names (such as `card_h`) that are not in pages.py's imports, use them as they are and list them on the docstring's 「import:」 line (the parent adds them to the imports).
+- When you fix the body, also match the same spot in that page's d.note (counts, ranges, names, assertions).
+- Do not shrink text to fit (consider rephrasing, then a diagram). Use components that exist in slides.py and the shared functions in pages.py.
+- Return the following rows without fixing them: ones that conflict with the outline's claims, numbers, or order or with the corrections, ones that change a heading or what the page says, ones that add or split pages, ones that cannot be fixed without touching anything outside your functions (shared functions, constants, other pages), and ones whose fix conflicts with a rule. Do not decide them yourself.
+- After writing, check only for syntax errors with `python3 -c "import ast; ast.parse(open('<build>/fix_<owner>.py').read())"`.
 
-## 返し方
-<build>/fix_<担当>.py の先頭に、次の形の docstring を書く。
+## How to reply
+At the top of <build>/fix_<owner>.py, write a docstring in the following form.
 """
 直した: p<ページ> | <関数> | <直したこと>（1 行ずつ）
 返す: p<ページ> | <関数> | <行> | <返す理由>（1 行ずつ。なければ「なし」）
 import: <pages.py の import に足す slides.py の名前>（なければ「なし」）
 """
-返事には、直した行と返す行の件数と、ファイルのパスだけを書く。
+In your reply, write only the counts of fixed rows and returned rows, and the file path.
 ```

@@ -1,20 +1,20 @@
-# 中身: 構成案と 1 枚の書き方
+# Content: the outline and writing one page
 
-構成案を書く前に読む。0 に、どの資料でも同じこと（ユーザーの鉄則と 6 つ。AGENTS.md の「いい資料の考え方」の詳しい版）、1 から後に、資料の種類ごとの違いと、作りながら確かめられる形を書く。ドキュメント（Google Docs）にも当てはまる。ドキュメントの見た目は visual_doc.md。
+Read this before writing the outline. §0 covers what is the same for every material (the user's iron rule and six principles; a detailed version of 「いい資料の考え方」 in AGENTS.md). §1 onward covers what differs by material type, in forms you can check while making the material. It also applies to documents (Google Docs). The look of documents is in visual_doc.md.
 
-## 目次
+## Contents
 
-0. どの資料でも同じこと
-1. 資料の種類で変えること
-2. 目線合わせの厚さは場面で変える
-3. 作る順番
-4. 見出し
-5. 1 枚の中身
-6. 言葉
-7. 構成案と仕上げで確かめること
-8. 参考
+0. Same for every material
+1. What changes by material type
+2. Vary the depth of alignment by situation
+3. Order of work
+4. Headings
+5. Content of one page
+6. Wording
+7. Checks for the outline and the finish
+8. References
 
-## 0. どの資料でも同じこと
+## 0. Same for every material
 
 鉄則は「営業色を出さずに、お客様の目線で情報を整理するところから入る。課題や問題意識について目線をそろえることは、提案の中身より重要」。これを、作りながら確かめられる形に直したのがこの節。顧客向けの提案だけでなく、社内向けの資料にも、顧客も来るコミュニティ向けの技術資料にも当てはめる。AGENTS.md の「いい資料の考え方」は、この節の要点（どの会話でも見えるように、そちらにも置いてある）。
 
@@ -25,67 +25,67 @@
 5. **公平に書く。** 他社の製品や OSS、今の仕組みでできることは、できると書く。重なるところは重なると言う。自社の製品の向かないところや、プレビューのところも書く。問いと課題を整理したページは、結論が自社の製品にならなかったとしても聞き手の役に立つ内容にする。売るための前振りに見えたら逆効果。
 6. **見解ははっきり言う。** 選択肢を並べて終わらせない。推奨か使い分け（「〜なら A、〜なら B」）を、理由と一緒に書く。比べる軸と選択肢は絞る（情報を増やすより、判断を整理する手伝いのほうが役に立つ）。
 
-## 1. 資料の種類で変えること
+## 1. What changes by material type
 
-[content-001] **どの種類でも**
+[content-001] **Every type**
 - 聞き手は、顧客もクラウドベンダー（AWS や Google Cloud の SA など）も、自社の製品の個々の機能はほとんど知らない前提で書く。機能の名前と提供段階を出しただけで通じるとは考えない。
-- [content-002] 聞き手が知らない機能を話すときは、仕組みと、使い始めたときの見え方（何を作ると、どこに、どう見えるか。手順）から 1〜2 枚かけて話す。速さ・課金・制約と使いどころは、そのあとに置く。1〜2 枚で止める。製品群をまとめて紹介するときは、全体の仕組みと製品の地図で止め、製品ごとの手順のページはスキップか Appendix に回す。章の主張から脱線しない。サービスごとの話（比べる、使い分ける、制約）に入る前には、そのサービスが何かが初見で分かる入口の 1 枚を置く（何をするものか、何とつながるか、使い始めの手順）。例: 社内向けの勉強会の資料で、Lakehouse Federation（構造図と 3 段の手順 → 遅く高くなりやすい理由 → 入口に使い、繰り返すクエリは取り込みに移す）。入口の 1 枚は、文字のカードだけで組まず、何とつながるかの図と、製品・つながる先のアイコンで見せる（初学者向けほど、とっつきやすさを優先する）。「〜の互換はない」のような比べる話や制約は入口に入れず、比べるページに回す。顧客向けの提案で推奨が製品のときの書き方は、下の「顧客向けの提案・説明」。
-- [content-043] 前提を知らない人も読む技術の調査レポート（式・閾値・確率の分析など。社内向けも）は、本編の流れと既存のページを変えずに、噛み砕いたページを章の頭に足す。中身は、仕組みの図（何が何の前に入るか）、実データ 1 件での入出力と用語の対応、指標の読み方（logit など）、図の読み方（模式図と明記）、例で見る前後の比較。章の扉で区切る。本編を易しく書き直すと、前提を知っている人が読む筋が崩れる。
-- [content-045] 聞き手が初めて見る機能や仕組みは、文と表だけで説明せず、通り道か仕組みの図を足す（ページが増えてよい）。比べる表や文の多いページも、図（層の積み上げ、流れ、両端を結ぶ線の上の位置、同じ形の 2 つの図を並べた当てはめ）にし、文はノートに移す。番号つきの段に箇条を並べたページ（縦や横の手順のカード）は、ここでいう図に数えない。確かめる仕組み・流れる仕組みは、もの（材料・中間の表・できたもの）を箱にし、誰がどの間を確かめるかを矢印に書き、確かめていない間も点線で描く。「なぜ要るのか」の課題のページ（場面・困りごと）も、文字のカードを並べて終えず、場面と手がかり（原因をたどるのに要るもの）の対応を丸で示す表や、時刻をそろえた例の図にし、場面にはアイコンと影響（出典のある例）を添える。実装の例を話すときは、具体的な例（ポリシーの書き方、設定の値など）を 1 つ添える。聞き手に通じない専門の用語（営業向けの資料の通信の用語など）が要るときは、たとえに置き換え、つながる・つながらないを並べた通り道の図を手順の前に足す。文の決まりだけでは図にならず、図解を後から頼まれることが多かった（レビューの観点 1 で見る）。
-- [content-046] 道具・スキル・仕組みの中の動きを解説する資料は、本編の半分以上を図（もの・担い手の箱と矢印、分かれ道、時間の流れ、前後の対比）にする。構成案の段で、ページごとに図の型を決めてから書く。表と番号つきのカードは、一覧として引くページ（引数・道具の表、報告の読み方）だけに残す。最初に担い手（誰が何を持ち、何を確かめるか）の全体の図を 1 枚置き、後ろの図は同じ箱の名前と色で描く。手順や判定の決まり（段・条件）を説明したページには、続けて 1 つの通しの例（架空なら「模式」と書く）を置き、入力が段ごとにどう変わるかを、説明のページと同じ段の番号と箱の色で描く。例の元は資料のフォルダに md で残す。
-- [content-047] 道具や製品の手軽さ（エージェントで作れる、など）を示すページは、実際に作らせた本物の画面と実測（指示の回数・時間・費用・人が書いたコード）で見せ、作り物の画面を使わない。デモは、聞き手が使う道具を、聞き手と同じ準備（スキルを入れたフォルダなど）で起動して作る（あとから読ませると、準備が効いた画面にならない）。人が頼んだことと、道具が決めたことを分けて書く。
-- [content-048] 記事・発表・リリースを解説する資料は、表紙の次（問いのページの前）に「取り上げる発表」のページを置き、何を元にした資料か（媒体・発信者・日付・題・要点 1 行、リンク）と、資料で足すこと（元にない解説・推測）を見せる。ノートに原文の要点を書く。元の記事に出てくる固有名詞（会社・製品・チーム・前の製品）が、聞き手に初めてで、話の筋（誰が作った・何を置き換える）に関わるなら、注記で済ませず、それが何か・いつ・どう関係するかを 1 枚か図の 1 段で説明する。名前だけ出して「同じチーム」「置き換え先」と書かない。
-- [content-003] 設定や使い始めの手順を案内する資料は、道具（公式の CLI など）が自動でしてくれることと足りないことを先に 1 枚で見せてから、自分で設定する手順に入る。設定の全体図や一覧では、自動で作られるものと、自分で設定するもの（手順の番号）を、列の名前や手順の番号の札で見分けられるように描く。どちらか分からない図にしない。
-- [content-044] AI の道具（エージェント、資料を作る道具など）の使い方を、使うだけの人（営業など）に案内する資料には、推奨のモデルと使い分けの 1 枚を入れる。どれを選ぶか（ふだん・急ぐとき・費用を抑えるとき）を言い切り、時間・費用・質を、測った条件（題・枚数・回数・定価か）と一緒に数字で書く。安いモデルの弱いところ（質の点、誤り）も同じページに書く。切り替え方（会話の中の操作、どの道具で使えるか）も書く。「圧倒的に」のような言い切りは、数字の比に言い換える。使うだけの人は、モデルを選ぶ基準を自分では持っていない。
-- [content-049] 貼るだけで使い始められる道具（プロンプトをエージェントに渡すと入る、など）の使い方ガイドは、表紙のすぐ後の 1 枚目に、そのプロンプト（初めての人のものと、入れてある人のもの）と「これを貼れば始まる。読むのはそのあと」を置く。仕組みや手順の説明から入らない（ガイドを順に読み込んで、貼るところにたどり着けない人がいた）。
-- [content-050] 使うだけの人に向けたガイドのページは、1 枚の本文を短い札と言葉（1 つの箱に 1〜2 行）にし、説明は図（通り道、前後の対比、位置の図、アイコンと短い札）で見せ、文はノートに移す。番号つきの段に説明文を並べたページ、文の多いカードを 3 枚並べたページで終えない。プロンプトのような貼るもの・一覧として引く表は残してよいが、セルは短くする。
-- [content-051] 道具・仕組みを説明する資料を直すときは、前に確かめた版（構成案に書いた commit やリリース）から今の版までの変更（`git log`、リリースノート、README の決めたこと）を先に洗い、変わった実装（書き方・ファイルの形・コマンド・数・入れるときに聞くこと）が出てくるページを、言われていないページも含めて全部直す。確かめた版を、構成案と出典の行の日付に書き直す。
-- [content-004] 1 つの資料に、聞き手の違う章を足すとき（例: 自分用の分析の冒頭に、営業向けの「迷ったらこれ」の章）は、その章だけ読めば分かるように書く。ほかの章の用語や数字の言い方（「2 pt」「勝率」「段」など）は、その聞き手に通じる言葉に言い換える。根拠は「2 章を参照」とせず、根拠の数字があるページを直接指す（例: 「p.7（長い作業）・p.8（1 回で答える作業）」）。章の推奨と、ほかの章の推奨が食い違っていないか、見出しの「〜だけ」の範囲まで確かめる。聞き手の道具の設定（既定の値、変え方）は、その聞き手の道具で確かめてから書き、確かめていないものは「確かめていない」と書く。表紙の副題と章の扉で、どの章が誰向けかを示す。
+- [content-002] When you talk about a feature the audience does not know, spend 1–2 pages on how it works and what it looks like once they start using it (what they build, where it appears, how it looks; the steps). Put speed, billing, constraints, and where to use it after that. Stop at 1–2 pages. When introducing a product family together, stop at the overall mechanism and a map of the products, and skip the per-product step pages or move them to the Appendix. Do not drift from the chapter's claim. Before going into per-service topics (comparison, choosing between them, constraints), put one entry page that lets a first-time viewer understand what the service is (what it does, what it connects to, the steps to start). Example: in an internal study-session material, Lakehouse Federation (architecture diagram and 3-step procedure → why it tends to get slow and expensive → use it as the entry point, and move repeated queries to ingestion). Do not build the entry page from text cards only; show it with a figure of what it connects to and icons of the product and the things it connects to (the more beginner-oriented, the more approachability comes first). Do not put comparisons or constraints such as 「〜の互換はない」 on the entry page; move them to the comparison pages. How to write it when the recommendation in a customer-facing proposal is a product is in "Customer-facing proposals and explanations" below.
+- [content-043] For technical research reports that people without the background also read (analyses of formulas, thresholds, probabilities, and so on; internal ones too), add explanatory pages at the head of the chapter without changing the main flow or the existing pages. Their contents: a diagram of the mechanism (what comes before what), the input and output for one real data item mapped to the terms, how to read the metrics (logit and so on), how to read the figures (state clearly that they are schematic), and a before/after comparison on an example. Separate them with a section divider. Rewriting the main part in simpler terms breaks the line of reading for people who know the background.
+- [content-045] For features and mechanisms the audience sees for the first time, do not explain with text and tables only; add a path diagram or a mechanism diagram (more pages are fine). Turn comparison tables and text-heavy pages into figures too (stacked layers, flow, positions on a line between two ends, two figures of the same shape side by side for mapping), and move the text to the notes. Pages that list bullets in numbered steps (vertical or horizontal step cards) do not count as figures here. For checking mechanisms and flowing mechanisms, draw the things (inputs, intermediate tables, outputs) as boxes, write on the arrows who checks between which, and draw the unchecked gaps with dotted lines too. "Why it is needed" problem pages (scenes and pain points) also must not end as a row of text cards: make them a table that marks with circles which clues (what you need to trace the cause) correspond to which scene, or a figure of an example with aligned timestamps, and add icons and the impact (an example with a source) to each scene. When talking about an implementation example, add one concrete example (how to write a policy, a setting value, and so on). When specialist terms the audience will not understand are needed (such as networking terms in a material for sales), replace them with an analogy, and add before the steps a path diagram that lays out what connects and what does not. Text rules alone did not produce figures, and figures were often requested afterwards (checked by review aspect 1).
+- [content-046] In materials that explain how tools, skills, or mechanisms work inside, make at least half of the main pages figures (boxes and arrows for things and actors, branches, time flow, before/after contrast). At the outline stage, decide the figure type for each page before writing. Keep tables and numbered cards only for pages used as lookup lists (tables of arguments and tools, how to read reports). Put first one overall figure of the actors (who holds what and checks what), and draw later figures with the same box names and colors. After a page that explains a procedure or a decision rule (steps, conditions), put one running example (if fictional, write 「模式」), and draw how the input changes at each step, using the same step numbers and box colors as the explanation page. Keep the source of the example as md in the material's folder.
+- [content-047] Pages that show how easy a tool or product is (it can be built with an agent, and so on) show real screens from actually having it build something, with measurements (number of instructions, time, cost, code written by people); do not use mock screens. For a demo, start the tool the audience uses, with the same setup as the audience (a folder with the skills installed, and so on) (if you have it read things afterwards, the screens do not reflect the setup). Write separately what the person asked for and what the tool decided.
+- [content-048] In materials that explain an article, talk, or release, put a 「取り上げる発表」 page right after the cover (before the question page), showing what the material is based on (medium, author, date, title, a one-line summary, link) and what the material adds (explanation and guesses not in the source). Write the main points of the original in the notes. When proper nouns in the source article (companies, products, teams, earlier products) are new to the audience and matter to the storyline (who built it, what it replaces), do not settle for a footnote: explain on one page or one step of a figure what it is, when, and how it relates. Do not only show the name and write 「同じチーム」 or 「置き換え先」.
+- [content-003] Materials that guide through setup or getting started first show on one page what the tool (the official CLI and so on) does automatically and what it does not, and then go into the steps you set up yourself. In an overall setup diagram or list, draw what is created automatically and what you set up yourself (step numbers) so they can be told apart by column names or step-number tags. Do not make a figure where you cannot tell which is which.
+- [content-044] Materials that guide people who only use AI tools (agents, material-making tools, and so on), such as sales, include one page on the recommended models and when to use which. State firmly which to choose (normally, when in a hurry, when keeping costs down), and write time, cost, and quality as numbers together with the measurement conditions (topic, page count, number of runs, list price or not). Write the weaknesses of the cheaper models (quality scores, errors) on the same page. Also write how to switch (the action in the conversation, which tools support it). Replace firm wording such as 「圧倒的に」 with numeric ratios. People who only use the tools do not have their own criteria for choosing a model.
+- [content-049] In a usage guide for a tool you can start just by pasting (it installs when you give a prompt to an agent, and so on), put on the first page right after the cover that prompt (one for first-timers and one for people who already have it installed) and 「これを貼れば始まる。読むのはそのあと」. Do not start from the explanation of the mechanism or steps (some people read the guide in order and never reached the part to paste).
+- [content-050] On guide pages for people who only use the tool, make the body of each page short tags and words (1–2 lines per box), show the explanation with figures (paths, before/after contrast, position diagrams, icons and short tags), and move the text to the notes. Do not end with a page of explanatory text in numbered steps or a page of three text-heavy cards. Things to paste, such as prompts, and tables used as lookup lists may stay, but keep the cells short.
+- [content-051] When updating a material that explains a tool or mechanism, first go through the changes from the version you checked before (the commit or release written in the outline) to the current version (`git log`, release notes, 「決めたこと」 in the README), and fix every page where a changed implementation appears (how to write it, file formats, commands, counts, what is asked at install time), including pages you were not told about. Update the checked version in the outline and in the dates of the source lines.
+- [content-004] When you add a chapter for a different audience to one material (example: a 「迷ったらこれ」 chapter for sales at the start of an analysis for yourself), write it so that reading only that chapter is enough. Replace the other chapters' terms and ways of stating numbers (「2 pt」「勝率」「段」 and so on) with words that audience understands. For the evidence, do not write 「2 章を参照」; point directly to the pages with the supporting numbers (example: 「p.7（長い作業）・p.8（1 回で答える作業）」). Check that the chapter's recommendation does not contradict the other chapters' recommendations, down to the scope of 「〜だけ」 in the headings. Check the audience's tool settings (default values, how to change them) in that audience's tool before writing them, and write 「確かめていない」 for anything not checked. Show which chapter is for whom with the cover subtitle and the section dividers.
 
-**顧客向けの提案・説明**（提案書、PoC の計画書、IT 本部や役員への説明）
+**Customer-facing proposals and explanations** (proposals, PoC plans, explanations to IT departments or executives)
 - 聞き手の問い: 自分たちは何をすべきか、何を決めればよいか。
 - 答えは先に出す。冒頭の 1〜2 枚で、問いと答えの要約を見せる（SCQA: 状況 → 何が問題か → 問い → 答え）。役員向けほど先に出す。
 - 営業色は抜くが、推奨は 1 つに絞って言う。次の一歩は、小さく始められて途中でやめられる形にする（範囲、期間、続けるかを決める基準）。
 - [content-005] 推奨が製品のときは、名前と提供ステージだけで終わらせない。まず公式の位置づけ（製品を一言で何と呼ぶか。例: Lakewatch は「レイクハウスネイティブで、AI エージェントネイティブな SIEM」）を、製品を説明するページの見出しかリードに出し、その言葉の意味を本文で説明する。言い方は日本語の製品ページとプレスリリースにそろえる。そのうえで、その製品が何をするか（機能の全体像）と、聞き手の環境（データの置き場所、今の取り込み、運用の形）でどう動くかを、1〜3 枚で、本文だけで読めるように書く。向かないところも同じページに書く。材料は、製品の社内資料（materials.md の「社内の資料」の Japan SME の一覧など）を先に調べて構成と言い方を借り、事実は公開の docs で書く。
-- 載せるのは、公開情報と、その顧客自身の情報。社内の事情は入れない（AGENTS.md の「社外秘と顧客の情報」）。
+- Include only public information and the customer's own information. Do not include internal matters (「社外秘と顧客の情報」 in AGENTS.md).
 - [content-006] 顧客が依頼のときに伝えてきた、検討中のプロジェクト・チーム・領域（例:「横断 DX」「全社システム再構築」と、その中のテーマ）は、聞き手の問いの中心として使う。目線合わせのページにその名前のまま載せ、使いどころ・比べ方・次の一歩のページで、それぞれのテーマに当てはめる。製品の一般論だけで組まない。
 - 顧客の IT 本部や調達向けは、営業色を抜いて、レイクハウスやオープンテーブルフォーマットの考え方の説明に寄せる。重なるところは重なると言う。検証の提案や利用料の話は Appendix か口頭に回す。
 - 役員向けは、冒頭の 1 枚に、推奨、決めてほしいこと、費用、効果、期限を置く。技術の話は、何が変わるか・いくらかかるか・だから何か に置き換える。費用やリスクと、できるようになることの両方を書く（中身 1-9）。
 - 初めての提案の前は、調べた範囲の課題の仮説を 1 枚にして見せ、違っていたら教えてほしいと頼む。提案書より前に置く（中身 1-14）。2 の表の「相手に確かめる問い」の形の 1 つ。
 - [content-007] 話を聞くための資料（ヒアリング）は、聞くだけの構成でもよい。聞き手の関心の領域の業界の潮流を、特定の製品に寄せずにまとめて冒頭に手土産として置く案は、構成案を確かめるときにユーザーに出してよい（必須ではない。0 の 4・5）。
-- [content-008] 業界の潮流をまとめるときは、仕様や製品を並べた表だけにせず、陣営（例: 公開の仕様・OSS の側と、各社のマネージドの製品の側）ごとの位置を 1 枚で見せる勢力図を入れる。層や種類を行に、陣営を列に置くと、どこで陣営がつながり、どこで分かれるかが読める。
-- **読む資料の説明と根拠:** メールやチャットで送り、単独で読んでもらう資料は、本編を短い主張・図・判断に必要な根拠に絞る。詳しい説明、条件、出典は Appendix に置き、本編から参照先を示す。スピーカーノートを見ずに、受け取った人が自分の上司に説明できるかで確かめる。ノートは話すための補足とし、判断に必要な根拠をノートだけに置かない。文を減らしても、図の意味と結論を読み取るための説明は残す（中身 1-10）。
+- [content-008] When summarizing industry trends, do not stop at a table that lists specs or products; include a landscape map that shows on one page where each camp stands (example: the open spec and OSS side, and each vendor's managed-product side). With layers or kinds as rows and camps as columns, you can read where the camps connect and where they split.
+- **Explanation and evidence in materials meant to be read:** For materials sent by email or chat and read on their own, limit the main part to short claims, figures, and the evidence needed for the decision. Put detailed explanation, conditions, and sources in the Appendix, and point to them from the main part. Check it by asking whether the recipient could explain it to their own manager without the speaker notes. Notes are supplements for speaking; do not put evidence needed for the decision only in the notes. Even when you cut text, keep the explanation needed to read the meaning of the figures and the conclusion （中身 1-10）.
 - 提案の型の「Why change → Why now → Why <自社>」は、ここと同じ向き。ただし Why now は、期限・規制・サポート終了などの事実があるときだけ使い、なければ不安をあおらないほうを取る（社内 3）。
 - [content-042] **顧客と認識を合わせるための資料（定例の資料、スケジュール、進捗の一覧、宿題のまとめなど）に載せるのは、顧客と合意したことと、顧客が言った・持ち帰ったことだけにする。** チャートだけでなく、本文・表・赤字の宿題も同じ。こちらが紹介・提案しただけの機能や案（プレビューの新機能、使い方の案など）は、ノートか社内メモに置く。未定でも、こちらの期待値として進みを追いたいものは載せてよいが、合意した予定と見分けられる形（構想・継続のバー、「時期未定」「<自社> から提案中」など）にする。前の版から写した行も、回ごとにこの目で見直す（紹介しただけのものが混ざると、合意の記録として使えなくなる）。提案資料など、こちらの考えや狙いを伝える資料には当てない。どちらかは資料の用途で決める。見出しの決め方は content-017。レビューの観点 3 で見る。
 - [content-052] 製品・機能（とくに監視・運用・ガバナンスなど、それ自体が目的にならない機能）を顧客に紹介する資料は、機能の説明に入る前に「なぜそれが要るのか」の章を冒頭に置く。聞き手の運用で起きること（困る場面と、その影響）から入り、機能はその答えとして出す（0 の 1・3）。顧客向けの資料には、社内向けの「顧客にどう案内するか」の問いを入れない。
 - [content-053] 聞き手が内製（自社で作る）を検討しているときは、内製を否定せず、層ごとに「自社で持つ・製品の機能を借りる・組み合わせる」を並べ、どちらにも未成熟なところを書き、決め方（同じ問いで並べて、質・立ち上げの時間・保つ手間を比べる）を次の一歩に入れる（0 の 5）。聞き手と別の組織の人の意向は、名前も意向も資料とノートに入れず、社内メモに書く。
-- [content-054] 顧客向けの定期のアップデート（週・月の製品の更新のまとめ）は、サービス・製品ごとに扉で章を分け、扉に章のページの目次を置く。こちらの見立ての重さ（対応が要る・試す価値・様子見）で分けない。1 項目だけでもサービスが違えば章を分ける（visual-012 の「1 枚だけの章は前後とまとめる」より優先。lint の 1 枚だけの章は、この理由で残してよい）。
+- [content-054] For periodic updates to the customer (weekly or monthly summaries of product updates), split chapters by service or product with section dividers, and put a table of contents of the chapter's pages on each divider. Do not split by the weight of our assessment (needs action, worth trying, wait and see). Even a single item gets its own chapter if the service differs (this takes priority over visual-012's "merge a chapter with only one page after its divider into the one before or after"; lint's single-page chapters may stay for this reason).
 - [content-055] 顧客向けのスライドに、こちらの評価や勧めの強さのラベル（「試す価値あり」「知っておく」「おすすめ」など）を書かない。キッカーや札にも置かない。キッカーは事実（提供ステージ・製品・日付）だけにする。聞き手にどう効くかは、項目ごとの本文（「〜なら、〜できる」）で言う。
 - [content-056] 自社のアカウントチーム（営業・海外のチームなど）から「会議で確かめてほしい」と頼まれたことは、表紙の次に「最初に確かめたいこと」の 1 枚にして、冒頭で聞く。確かめる理由が聞き手にも分かっているなら（前回の会議で伺いきれなかったなど）、リードとノートで率直に言う。頼んだ人の名前と社内のやり取りはページに書かない。英語を話すチームも見るなら、そのページは英語を併記する。
 - [content-057] 顧客に共有する議事録のアクションアイテムには、議事録を作る・送ること自体を入れない（送るのはユーザー）。将来の検討課題（PoC の範囲の外で時間をかける話など）は外し、本文に「将来の検討課題で、長い時間軸で考える」と書く。載せるなら、時間軸が長いことを項目に書く。相談・依頼の宛先（自社のアカウントチーム、グループ会社など）は会議の言葉で確かめ、取り違えない。
 
-**社内向け**（勉強会、イネーブルメント、アカウントの状況整理）
+**Internal** (study sessions, enablement, account status summaries)
 - 聞き手の問い: 顧客に何を言えばよいか、どこでつまずくか、自分は何を頼まれているか。
 - 状況整理は、結論と依頼（決めてほしいこと、手伝ってほしいこと）を先に出す。勉強会は、冒頭で持ち帰れること（顧客への言い方、判断の基準、デモの手順など）を言い、あとは聞き手が知っていることから新しいことへ積み上げる。
 - 営業色はそもそも要らない。弱いところ、競合に負けるところ、まだ解けていないことも率直に書く。
-- 社内の情報を使ってよい。顧客向けに流用されることがあるので、社外秘のページには「Internal Only」と書く。
+- Internal information may be used. Because pages may be reused for customers, write 「Internal Only」 on confidential pages.
 - [content-009] ユーザー以外に共有する資料では、ユーザーが個人で使っている道具（T3 Code など）の名前を出さない。読み手が使う道具（pi・Claude Code・Codex など）の言葉で書き、要るときは「Codex 向けのサードパーティのツール」のように一般化する。ただし、SA の勉強会のような比較的くだけた会の資料では、実例として出してよい（実例があるほうが分かりやすい）。
-- [content-010] 隔離・サンドボックスなどの守りを勧めるときは、その守りが閉じ込める範囲と、外に残るもの（同じプロセスで動く部品、資格情報、ネットワーク）まで書く。作り手の脅威モデル（SECURITY.md など）を先に読み、作り手が分けている守りの形をそのまま分けて見せる。
-- [content-011] 顧客の事例を社内で紹介する資料（All hands・Meetup など、その顧客を知らない人も聞くもの）は、本題の前に、顧客のサービス（何をしている会社・事業か）と、自社の製品の利用状況（消費の金額と、顧客の中での立ち位置。例: 全社の基盤は他社の製品で、自社の製品は事業部から入った）の 1 枚を置く。製品の利用が伸びた理由を話す資料では、理由の前に、その製品を何に使っているか（アプリや用途ごとに、何をするか・製品に置いているもの・消費の割合）の 1 枚も置く。レビューの観点 1 で見る。
+- [content-010] When recommending a protection such as isolation or a sandbox, write the scope the protection contains and what stays outside it (components running in the same process, credentials, network). Read the builder's threat model (SECURITY.md and so on) first, and show the protections split the same way the builder splits them.
+- [content-011] In materials that introduce a customer case internally (All hands, Meetup, and so on, where people who do not know the customer also listen), put one page before the main topic on the customer's service (what the company or business does) and how it uses our products (consumption amount and the position within the customer; example: the company-wide platform is another vendor's product, and our product came in through a business unit). In materials about why product usage grew, also put, before the reasons, one page on what the product is used for (per app or use: what it does, what is placed on the product, the share of consumption). Checked by review aspect 1.
 - [content-012] アカウントワークの振り返りでは、SA の定常業務（定例での進捗確認など）や、まだ手を打てていない課題を「工夫」に入れない。顧客が実際につまずいたこと（ハマりどころ）も、解消したもので、資料の主題に関係するものだけを載せる。
-- [content-013] OSS やツールの技術調査は、文書とコードを読むだけで終わらせず、手元で動かせるものは動かして、資料の主張を確かめる。動かす前に、何をどこで動かすかをユーザーに知らせる（承認は待たない）。/tmp の使い捨てのフォルダに入れ、バージョンを上げる操作と外への送信は止めて動かす。リスクのある操作（資格情報を渡す、外へ送る、課金される、手元の設定や共有のものを変える）が要るときは、先に確かめる。動かせなかったところは、その範囲を資料に「動かして確かめていない」と書く。
-- [content-014] 自分たちの仕組み（ハーネス、スキル、設定など）を直すための調べものは、見つけた方式を並べるだけにせず、いまの実際の使い方に当てはめて相性を見る。当てはめる先は、手元のデータや履歴（ログの形式など）、いまの設定、使っている道具など。どこまで当てはめるかは、依頼の問いに効くものを選んで決める。
+- [content-013] For technical research on OSS or tools, do not stop at reading documents and code; run what can be run locally and check the material's claims. Before running, tell the user what you will run and where (do not wait for approval). Install it in a throwaway folder under /tmp, and run it with version upgrades and outbound sending blocked. When a risky operation is needed (passing credentials, sending outside, incurring charges, changing local settings or shared things), confirm first. For what you could not run, write the scope in the material as 「動かして確かめていない」.
+- [content-014] When researching to improve our own mechanisms (harness, skills, settings, and so on), do not just list the approaches you found; apply them to the actual current usage and check the fit. Apply them to local data and history (log formats and so on), the current settings, the tools in use, and so on. Decide how far to apply them by choosing what bears on the request's question.
 - [content-058] 依頼の見立て（「〜の不具合がある気がする」など）を確かめる調査で、見立てが外れて別の原因が分かったら、資料は見立ての検証の報告にせず、分かった事実（本当の不具合・仕組み）を主題にして書く。題・要旨・章立てに外れた見立てを据えず、見立てが外れたことは「経緯」に 1 段落で書く。社内に共有する不具合の資料は、症状・条件・再現・影響・回避策・報告先の順にし、読んだ人がすぐ当てはめられるようにする。
 - [content-059] 社内の道具の「〜すると困る」「使わない」は、ふだんそう使っている人の経験と合うかを確かめてから書く。仕組みの上の欠点だけで言い切らず、ほかの道具が補っていないか、実際に困るのはどんな場面かまで書き、「動くが、〜が変わる」の形にする。聞き手が知りたい用語は、関わる仕組みのページで 1 枚にする。
 
-**コミュニティ向けの技術資料**（ミートアップ、OSS の勉強会、顧客も聞く登壇）
+**Community-facing technical materials** (meetups, OSS study sessions, talks that customers also attend)
 - 聞き手の問い: 自分の課題にどう効くか、本当に動くか、何が難しいか。
 - 冒頭で、何の話か、何を持ち帰れるかを言う。そのあとは「問題 → なぜ難しいか → 試したこと（失敗も）→ 分かったこと → 使い分け」と話を進めてよく、結論は最後でよい。コード、デモ、測った数字で見せる。
 - 営業色はいちばん強く抜く。製品は実装の 1 つとして、OSS やほかの選択肢と並べる。会社と製品の紹介は、自己紹介か最後の 1 枚まで。購入や問い合わせには誘導しない。多くのカンファレンスは CFP で製品の宣伝を禁じているので、イベントの登壇の決まりを先に読む。
-- 公開情報だけを使う。顧客の事例は、顧客の了解と、公開してよい範囲を確かめる。ロードマップは出さない。
+- Use only public information. For customer cases, confirm the customer's consent and the scope that may be made public. Do not show roadmaps.
 - 聞き手が明日取る行動から逆算する。話さないことを先に決める。苦労と回避策を入れ、成功談だけにしない。冒頭で、聞き手の技術水準も言う。1 枚の文字は 5 行以内（中身 1-13）。
 
-## 2. 目線合わせの厚さは場面で変える
+## 2. Vary the depth of alignment by situation
 
 | 場面 | 目線合わせ |
 |---|---|
@@ -94,20 +94,20 @@
 | RFP、質問票、技術的な問い合わせへの回答 | 入れない。聞かれたことに直接答える |
 | 時間が短い（役員への説明、LT） | 問いは 1 枚で見せ、答えは 1 つに絞る。詳細は Appendix に回す |
 
-[content-015] **LT など話す資料で、聞き手が初めて聞く中身のとき**
-- 1 枚に言いたいことは 1 つ。リード（言い切りのページは見出し）で言い切り、本文は図か、大きな数字と短い語で見せる。本文は 5 行（125 字）まで（中身 1-13）。`gslides.py check <URL> --talk` が、超えたページを要確認に出す。
-- ファイル名・パス・コマンド・手順の細部は載せず、ノートか Appendix に回す。仕組みの名前より先に、聞き手から見て何が起きるか（何を頼むと何が出てくるか）を見せる。
-- [content-016] ユーザーが技術の深掘りを頼んだページだけは、ファイル名やスクリプトの名前を出してよい。そのページにもキッカー（「深掘り: …」）で役割を示し、1 枚 1 メッセージと字数は守る。
-- 読む資料（回覧・メールで送るもの）には当てはめない。そちらは 1 の「読む資料の説明と根拠」に従う。
+[content-015] **Materials for talks such as LTs, when the content is new to the audience**
+- One message per page. State it firmly in the lead (the heading on assertion pages), and show the body as a figure, or as large numbers and short words. The body is at most 5 lines (125 characters) （中身 1-13）. `gslides.py check <URL> --talk` reports pages over the limit as `要確認`.
+- Do not put file names, paths, commands, or step details on the page; move them to the notes or the Appendix. Before the name of the mechanism, show what happens from the audience's point of view (what you ask for and what comes out).
+- [content-016] Only on pages where the user asked for a technical deep dive may file names and script names appear. Those pages also show their role with a kicker (「深掘り: …」), and still keep one message per page and the character limit.
+- Do not apply this to materials meant to be read (circulated or sent by email). Those follow "Explanation and evidence in materials meant to be read" in §1.
 
-## 3. 作る順番
+## 3. Order of work
 
-- 次の順に決める。聞き手に取ってほしい行動 → そのとき聞き手がどんな状態になっているか → 聞き手の期待と知識 → 主張と、それを支える 3〜4 の論点 → スケルトン（ページ番号・見出し・要旨）→ 図表。**図表から作らない**（中身 1-7）。
-- 主張と論点は仮説として先に置き、裏づけの有無を構成案に書く。裏づけが弱い論点は、直すか「仮説」と書く（中身 1-7）。
+- Decide in this order: the action you want the audience to take → what state the audience is in at that time → the audience's expectations and knowledge → the claim and the 3–4 points that support it → the skeleton (page numbers, headings, summaries) → figures and tables. **Do not start from figures and tables** （中身 1-7）.
+- Put the claim and points down first as hypotheses, and write in the outline whether each has support. Fix weakly supported points or write 「仮説」 for them （中身 1-7）.
 - 構成案の「聞き手」の欄に、聞き手の型を書く。結果を見るか過程を見るか、自分で決めるかほかの人の意見で決まるか。過程を見て自分で決める人には、最小限の中身と、見方を揺さぶるデータ。ほかの人の意見で決まる人には、事例とほかの判断者の根拠（中身 1-8、書評経由）。
-- 読む資料にするか、見せる資料にするかは、使われ方で決める。メールで送る・社内で回覧される資料は、単独で読んで判断できるように書く。文章で済むならドキュメント（Google Docs）にする（中身 1-10）。
+- Decide whether to make a material to be read or a material to be shown by how it will be used. Materials sent by email or circulated internally are written so that they can be read and decided on alone. If prose is enough, make it a document (Google Docs) （中身 1-10）.
 
-## 4. 見出し
+## 4. Headings
 
 - [content-041] **本文のページの見出しは、短い名詞句にする。言い切りの文にするのは、判断を頼むページと数字の結論のページの 2〜3 枚だけ。** 名詞句は、そのページだけの話が分かる形にする（「問い合わせの一次回答の推移」。「現状」「課題」「まとめ」のような、どの資料にも付く項目名にしない）。主語は聞き手の業務・データ・判断にする（AGENTS.md）。名詞句の見出しのページでは、言えること（だから何か）をリードか本文か結論バンドで言う。言い切りのページは、構成案の型の欄に「言い切り」と書く（SKILL.md の 5）。全ページを主張の文にすると、どのページも同じ強さで言い切って要の主張が埋もれ、見出しが長くなる。主張の文の見出し（中身 1-1）は、聞き手に判断を頼むところと数字で言えるところに絞る。文末と句点は 6 の「文体」。
 - [content-017] **定例のたびに使う資料（スケジュール、進捗の一覧など）は、ページの見出しを回ごとに変えない。** 「プロジェクトスケジュール 1/2　ML とデータ基盤」のように、資料の名前と範囲で決め、その回の要点（何が増えたか、次の一歩）はスピーカーノートで話す。毎回同じ見出しなので、画面で同じページを探しやすい。
@@ -118,7 +118,7 @@
 - 結論バンドは、要るページにだけ置く（visual.md の 1）。置くときは見出しやリードの言い換えにしない。見出しかリードが「何が言えるか」なら、結論バンドは「だから何をするか」か、決めてほしいことにする（中身 2 節）。
 - [content-019] 表紙の副題・説明・図は、本編を改訂したら合わせて直す。表紙に出す製品名は、聞き手のいまの環境と会話に出ているものだけにする（例: 聞き手が使っていない他社の製品を表紙に出さない）。本編の比較には、公平さのために入れてよい。
 
-## 5. 1 枚の中身
+## 5. Content of one page
 
 - 事実を並べたページには、「だから何か」を 1 文足す。課題や懸念を出したら、対応を同じページか次のページに置く（中身 1-4）。
 - 「十分」「限定的」「大幅に」のような評価語は、そのページに裏づけがあるときだけ使う（中身 1-3）。
@@ -129,28 +129,28 @@
 - [content-060] 接続・認証・API の出し方などで推奨の方式を描くときは、選べるほかの方式（トークンとパスワードなど）を、違い（期限・管理・使える機能）と使い分けとあわせて 1 枚で書き、推奨の理由（安全の面など）も書く。推奨の方式だけを描くと、聞き手がほかの選択肢を知らないままになる（0 の 5・6）。
 - 数字は、起点と比べる先を書く（「前年比」「9 月時点」「割引後」）。数字が概算なら概算と書く（中身 1-9）。
 - [content-024] 出典の中で値が食い違うとき（docs のページの間、事例のページの見出しの数字と本文）は、強いほうの値だけを見出しや大きな数字にしない。どの出典とも食い違わない安全な側で言い切るか（数百ミリ秒と数秒なら「数秒以内」）、本文の値で書き、見出し・大きな数字・表・ノートと、ほかのページの同じ数字を同じ言い方にそろえる。食い違いは構成案の出典の表に書き、資料には書かない。外に出す資料（顧客・パートナー向け）に「docs のページで違う」「docs にない」「実測する」のような、出典の揺れや確かめていないことを見せる言い方を書かない。言える範囲を言い切り、言えないことは言わない。
-- [content-025] LLM のモデルの料金・窓の大きさ・性能を書くときは、各社の最新の世代で確かめる（例: 2026-10 時点で GPT は 6 系、Claude は 5.5 系）。最新の世代は、手元のモデルの一覧（`~/.pi/agent/models.json` や社内のゲートウェイのエンドポイント）と各社の公式の料金表で確かめ、前の世代の値を書くときは、前の世代と分かるように書く。社内の案内（Confluence など）の料金は古いことがあるので、公式の表で確かめ直す。モデルを比べる表や試しでは、各社の最新の主力のモデル（2026-10 時点で GPT-6.1 Sol、Claude Opus 5.5・Sonnet 5.5）を比べる相手から落とさない。安いモデル（Luna・Haiku など）だけをその会社の代表にしない。
-- [content-026] モデルを使って測る・試すページ（トークン数、応答の秒数、要約の質など）は、ユーザーがメインで使うモデルで測る。ほかのモデルは比べる相手として足す。どれをメインにするかは、作る前の確かめで聞き、構成案の前提に書く。
-- [content-027] 製品の提供の地域・処理の場所・提供ステージは、docs の表の記号（⥂・‡ など）の凡例と脚注の原文を読み、その範囲で書く。「cross-Geo の設定が要る」を「国外で処理される」のように、条件や結果を足して言い換えない。条件付きの記述（「when you disable cross-Geo processing」）は条件ごと書く。
-- [content-028] 東京にない機能のために海外のリージョンを候補に出すときは、近さで選ばない。使う機能が、docs のリージョンごとの提供状況の表ですべてそろうリージョン（多くは US）を出し、確かめた表を出典に書く。
-- 10 枚を超えるデッキは、章の頭で全体の地図に現在地を出す。「後で話す」と書いた論点は回収する（中身 1-5）。
+- [content-025] When writing prices, context window sizes, or performance of LLM models, check them against each vendor's latest generation (example: as of 2026-10, GPT is the 6 series and Claude is the 5.5 series). Check the latest generation in the local model list (`~/.pi/agent/models.json` or the internal gateway's endpoints) and each vendor's official price list; when you write values of an earlier generation, write them so it is clear they are the earlier generation. Prices in internal guides (Confluence and so on) can be old, so recheck them against the official tables. In tables and trials that compare models, do not drop each vendor's latest flagship models (as of 2026-10, GPT-6.1 Sol, Claude Opus 5.5 and Sonnet 5.5) from the comparison. Do not let only a cheap model (Luna, Haiku, and so on) represent that vendor.
+- [content-026] Pages that measure or test with models (token counts, response seconds, summary quality, and so on) measure with the model the user mainly uses. Add other models as comparisons. Ask which one is the main model during the check before making the material, and write it in the outline's assumptions.
+- [content-027] For a product's available regions, processing location, and release stage, read the legend of the symbols in the docs tables (⥂, ‡, and so on) and the original footnotes, and write within that scope. Do not rephrase by adding conditions or consequences, such as turning 「cross-Geo の設定が要る」 into 「国外で処理される」. Write conditional statements (「when you disable cross-Geo processing」) together with their conditions.
+- [content-028] When proposing an overseas region for a feature not available in Tokyo, do not choose by proximity. Propose a region where every feature you use is available in the docs' per-region availability table (usually US), and cite the table you checked as the source.
+- Decks over 10 pages show the current position on an overall map at the head of each chapter. Pick up every point marked 「後で話す」 later in the material （中身 1-5）.
 - 終わりは要約で締めず、次の一歩の 1 枚にする。顧客向けなら、決めてほしいこと、小さく始める範囲・期間、続けるかを決める基準（中身 2 節）。
-- 本編は 5〜9 枚が目安。想定される質問の答えは Appendix に置く（中身 1-6）。
-- [content-029] 話す人が「このページは口頭で話す」と決めたページは、消さずに、話しながら映すページにする。見出しと要点（3 つほどの段）だけを残し、話す中身はノートに移す。
-- [content-030] 本編と Appendix に同じ表を置かない。本編は図と判断に絞り、細目の一覧は Appendix に置いて本編から指す。コマンド・API・設定の項目の一覧も同じで、本編には流れ（3 段の手順など）と例を 1 つだけ置き、一覧は Appendix に移して本編から指す。
-- [content-031] 題・時期・対象を足して、同じ比べ方をもう一度載せるときは、前のぶんにある図（棒グラフなど）も同じ形で足す。表だけで済ませない。
-- [content-032] 複数の題・部・時期を比べる資料では、各題が何か（題材・聞き手・長さ・条件）を、題の名前が最初に出るページ（結論や比べ方）に書き、題ごとに章の扉を置く。題をまたぐまとめ（言えないこと・次の一歩）にも扉を置く。「1 題目」「2 題目」のような番号だけで呼ばない。
-- [content-061] 2 つ以上の軸（時間と費用など）で調べてと頼まれた資料では、どの軸も同じ厚さで書く。時間なら、工程ごとの合計だけでなく、工程 × 時間の種類（モデル・子を待つ・組む・人を待つ）の内訳と、1 本の時間割の帯（visual.md の visual-045）も置く。片方の軸の細かい中身に寄せると、全体の内訳が読めなくなる。
+- The main part is about 5–9 pages. Put answers to expected questions in the Appendix （中身 1-6）.
+- [content-029] Pages the speaker decided to "cover orally" are not deleted; make them pages shown while talking. Keep only the heading and the main points (about 3 steps), and move what is said to the notes.
+- [content-030] Do not put the same table in both the main part and the Appendix. Limit the main part to figures and decisions, put detailed lists in the Appendix, and point to them from the main part. The same goes for lists of commands, APIs, and setting items: put only the flow (a 3-step procedure and so on) and one example in the main part, move the list to the Appendix, and point to it from the main part.
+- [content-031] When you add topics, periods, or targets and show the same comparison again, also add the figures from the earlier part (bar charts and so on) in the same form. Do not settle for a table only.
+- [content-032] In materials that compare several topics, parts, or periods, write what each topic is (subject, audience, length, conditions) on the page where the topic's name first appears (the conclusion or the comparison method), and put a section divider for each topic. Also put a divider before summaries that span topics (what cannot be said, next steps). Do not call them only by numbers such as 「1 題目」「2 題目」.
+- [content-061] In materials asked to examine two or more axes (time and cost, and so on), cover every axis with the same depth. For time, put not only the total per step but also a breakdown of step × kind of time (model, waiting for child agents, building, waiting for people) and a single timeline band (visual.md visual-045). Leaning toward the details of one axis makes the overall breakdown unreadable.
 
-## 6. 言葉
+## 6. Wording
 
 - **文体:** 書くところで分ける。和欧間のスペースと製品名の書き方は AGENTS.md の「書き方」。
   - 見出し: 表紙の題・章の扉・図表のタイトル・カードや表の項目名と、本文のページの見出し（4）は、短い名詞句（体言止め）。言い切りにする 2〜3 枚の見出しと、名詞句の見出しのページのリードは、主語と述語のある常体の文で言い切る（「問い合わせの一次回答が 3 割減っている」「夜間の集計を新しい基盤に移す」）。言えることを体言止めにすると、誰がするのか、予測なのか意志なのかが消える。「だ」「である」で終える必要はない。見出しに句点を付けず、「〜ください」「〜します」で終えない。頼みごとはリードか本文で言う（lint が「見出しの句点」「見出しが「ください・します」で終わる」を要修正、「言い切りの見出しが多い」を要確認に出す）。
   - 箇条書きと図のラベル: 体言止めでよい。ひとまとまり（1 つの箱の箇条書き、1 つの図のラベル、見出しの並び）の中では、文末（体言止め・常体・敬体）と句点の有無をそろえる（lint が「箇条書きの句点の混在」）。名詞だけで終えない（下の「箇条書きを名詞だけで終えない」）。
   - 本文: 敬体か常体のどちらかにそろえる。スライドは常体か体言止めにする。スライドの です・ます は、案内・依頼・注意書きのページ（問い合わせ先、アンケートのお願い、「ご相談ください」、免責・価格の注記）では残してよい（lint の「スライドに です・ます」は、それ以外のページに出たものを直す）。
   - 顧客向けのドキュメントは です・ます調。スピーカーノートは話し言葉（です・ます）。社内メモは だ・である調でよい。
-- 英語で作るときは、見出しを sentence case にし、ノートも英語で書く。
-- [content-033] **出典:** 数字には出典を付ける（スライドはページ下の出典の行、ドキュメントは脚注か本文の括弧）。出典に挙げたブログ・講演・docs・調査には、元のページへのリンクを付け、引いたページから飛べるようにする。Appendix の出典の一覧だけにリンクを置かない（lint がリンクのない出典の行を出す）。顧客向けに付けるのは公開の URL だけで、顧客との会議は出典に書かない（AGENTS.md の「社外秘と顧客の情報」）。
+- When making the material in English, use sentence case for headings and write the notes in English too.
+- [content-033] **Sources:** Attach a source to every number (on slides, the source line at the bottom of the page; in documents, a footnote or parentheses in the body). Give every blog, talk, doc, or study cited as a source a link to the original page, so that it can be reached from the page that cites it. Do not put links only in the source list in the Appendix (lint reports source lines without links). For customer-facing materials, attach only public URLs, and do not cite meetings with the customer as sources (「社外秘と顧客の情報」 in AGENTS.md).
 - [content-063] プレビューやベータの機能は、提供ステージ（Private Preview・Public Preview・Beta）を書く。「本番向けではない」「本番では使えない」と添えない。どこまで使えるかの判断は聞き手に任せる（本文もノートも、ほかのページも同じ）。スライドのラベルの付け方と、控えるページは visual.md の 1。
 - 1 つの資料で 1 つのものには 1 つの言葉を使う。最後に表記ゆれを全文で探す。略語は初出で正式名を書く（中身 1-11）。
 - [content-034] 道具・エージェントは、聞き手がふだん使っている製品の名前で書く（Claude Code、Codex CLI など）。ACP のアダプターや登録簿の表示名（Claude Agent、Codex など）は、アダプターそのものや登録簿の一覧を指すときだけ使い、そのページで製品の名前との対応を一度書く。レビューの観点 4 で見る。
@@ -161,38 +161,38 @@
 - 「社内」「外部」「既存」のような相対語は、誰から見てかを書く（中身 1-11）。
 - 口に出して言える日本語にする。会社名や製品名を入れ替えてもそのまま通る文は、中身がない（見た目 1-9）。
 - [content-036] **字を詰めるために語を略さない。** 「〜の組の点」「Grok Build の点は」のように、何の数か・何と何の組み合わせかを略した名詞句にしない。数字は何を測った値か（「端末の作業を解けた割合」）、組み合わせは「〜と〜を組み合わせた成績」と書き、ノートと同じ言い方で口に出して通じるかで確かめる。短くするなら、文を分けるか、要らない語を消す。レビューの観点 4 で見る。
-- 資料にない事実（社内の運用、製品の挙動、数字）を補って書かない。分からないことは「要確認」と書き、納品の前に解く（AI 実践 1-7）。
-- [content-037] **計算した数字は元のデータから出す。** 合計・平均・比・倍率は、元の値（表・JSON・記録）から計算し、丸めた値どうしを足したり割ったりしない。表に丸めた値を出すときも、計算は丸める前の値で行う（丸めた値どうしで計算すると、合計がずれる）。
-- [content-038] **比べる対象を途中で足したら、言い切りの語を全ページで探し直す。** 「最も」「だけ」「すべて」「どれも」「N 本・N 社・N つ」と、略した名前（同じモデル・製品が 2 つになったときの「Sonnet」など）を、見出し・本文・表・パネル・ノートで探し、足した対象でも成り立つかを確かめる（足したあとは、言い過ぎや名前の取り違えが起きやすい）。
+- Do not fill in facts that are not in the materials (internal operations, product behavior, numbers). Write 「要確認」 for what you do not know, and resolve it before delivery （AI 実践 1-7）.
+- [content-037] **Compute numbers from the source data.** Compute totals, averages, ratios, and multiples from the original values (tables, JSON, records); do not add or divide rounded values. Even when a table shows rounded values, compute with the values before rounding (computing with rounded values makes the totals drift).
+- [content-038] **When you add a comparison target midway, search all pages again for assertion words.** Search the headings, body, tables, panels, and notes for 「最も」「だけ」「すべて」「どれも」「N 本・N 社・N つ」 and for abbreviated names (such as 「Sonnet」 once there are two of the same model or product), and check that they still hold with the added target (after adding, overstatement and mixed-up names are common).
 
-## 7. 構成案と仕上げで確かめること
+## 7. Checks for the outline and the finish
 
-[content-039] 構成案の冒頭には、資料の種類（顧客向け・社内向け・コミュニティ向け）、聞き手（部署・役割、技術の水準）、聞き手の問い（出典を付けて）、読んだあと・聞いたあとに聞き手ができること・決められること、の 4 つを書く。書けても、作り始める前にユーザーに確かめる（`SKILL.md` の「作業の始め方」の 5）。仕組みや取り組みを紹介する資料（自分たちで作った仕組み、チームの取り組みの LT など）は、作り手の意図（何を作りたかったか）、力を入れたところ、このあとどうしたいか（誰に広げたいか）も聞く。できたものの説明から組むと、主題と着地がずれる。
+[content-039] At the top of the outline, write four things: the material type (customer-facing, internal, community-facing), the audience (department and role, technical level), the audience's questions (with sources), and what the audience can do or decide after reading or listening. Even if you can write them, confirm them with the user before starting to make the material (`SKILL.md` "How to start" step 5). For materials that introduce a mechanism or an effort (a mechanism we built ourselves, an LT on a team's effort, and so on), also ask for the builder's intent (what they wanted to build), where they put effort, and what they want next (whom they want to spread it to). Building from a description of the finished thing makes the theme and the landing drift apart.
 
 - [ ] 枚数や時間を削るときは、製品の説明から削り、目線合わせを残している（2 の表で「すぐ本題に入る」場面は除く）
 - [ ] 問いと課題を整理したページに、自社の製品の機能の話が入っていない（聞き手の今の環境として名前が出るのはよい）
-- [ ] 聞き手が知らない機能に、仕組みと使い始めたときの見え方（手順）のページがある。名前と提供段階だけで終わっていない
-- [ ] 課題の項目には、どれも出典か「仮説」が付いている
+- [ ] Features the audience does not know have pages on how they work and what they look like once in use (the steps). They do not end at the name and release stage
+- [ ] Every problem item has a source or 「仮説」
 - [ ] 見解（推奨か使い分け）がはっきりしている。顧客向けなら、推奨が 1 つで、次の一歩が小さい
-- [ ] [content-040] 冒頭の結論（要約）のページに、構成案の聞き手の問いのすべてに答えがある
+- [ ] [content-040] The opening conclusion (summary) page answers every one of the audience's questions in the outline
 - [ ] 不安をあおる言い方がない。他社や OSS でもできることを、できないように書いていない
-- [ ] コミュニティ向けなら、公開情報だけを使い、会社と製品の紹介が最後の 1 枚に収まっていて、イベントの登壇の決まりに合っている
+- [ ] For community-facing materials: only public information is used, the company and product introduction fits on the last page, and it follows the event's speaker rules
 - [ ] 見出しとリードを順に読んで、紙芝居のように話せる。どの資料にも付く項目名だけの見出しが 0、言い切りの見出しは 2〜3 枚
 - [ ] 各ページの本文が、言い切り（見出しかリード）の「なぜそう言えるか」に答えている
-- [ ] 図表のあるページに「見出し」「データの名前」「出典」がそろっている
+- [ ] Pages with figures or tables have all of 「見出し」「データの名前」「出典」
 - [ ] キッカーと結論バンドが、要るページにだけある。結論バンドが見出しと同じことを言っていない
-- [ ] スライドの数字が、構成案の出典の表にある
+- [ ] Every number on the slides is in the outline's source table
 - [ ] 評価語に、そのページの裏づけがある
 - [ ] 比較に、相手が勝つ軸がある
 - [ ] 最後のページが、次の一歩（決めること・範囲・期間・基準）になっている
 - [ ] 表記ゆれがない。略語の初出に正式名がある
-- [ ] 本文を直したところで、同じページのノートも同じに直っている（数・範囲・名前・言い切り）
-- [ ] 比べる対象を途中で足したなら、「最も」「だけ」「N つ」が足した対象でも成り立つ
+- [ ] Wherever the body was fixed, the notes on the same page are fixed to match (counts, scope, names, assertions)
+- [ ] If a comparison target was added midway, 「最も」「だけ」「N つ」 still hold with the added target
 
-## 8. 参考
+## 8. References
 
-2026-10-05 に確認: ピラミッド原則と SCQA（Barbara Minto）、聴き手が主人公（Nancy Duarte『Resonate』）、大型商談では課題の影響を聞く質問が効く（Neil Rackham『SPIN Selling』）、顧客の見方を組み替える洞察（Dixon・Adamson『The Challenger Sale』）、失注の 40〜60% は顧客が決めきれないことによるもので、現状維持の害を説くのを強めると 84% で逆効果、推奨をはっきり言いリスクを下げると効く（Dixon・McKenna『The JOLT Effect』、HBR 2022）、判断を進める情報を受け取った買い手は購買が楽になる見込みが 2.8 倍（Gartner の 2018 年の B2B 購買調査）、解くべき問いを先に見極める（安宅和人『イシューからはじめよ』）、コミュニティのカンファレンスは製品の宣伝を CFP で禁じていることが多い（KubeCon + CloudNativeCon、JJUG CCC、CEDEC）。
+Checked on 2026-10-05: the Pyramid Principle and SCQA (Barbara Minto); the audience as the hero (Nancy Duarte, *Resonate*); in large deals, questions about the impact of problems work (Neil Rackham, *SPIN Selling*); insight that reframes the customer's view (Dixon and Adamson, *The Challenger Sale*); 40–60% of lost deals come from customers failing to decide, pushing harder on the harm of the status quo backfires in 84% of cases, and stating a clear recommendation and lowering risk works (Dixon and McKenna, *The JOLT Effect*, HBR 2022); buyers who receive information that moves their decision forward are 2.8 times as likely to find buying easy (Gartner's 2018 B2B buying survey); identify the question to solve first (安宅和人『イシューからはじめよ』); community conferences often ban product promotion in their CFP (KubeCon + CloudNativeCon, JJUG CCC, CEDEC).
 
-2026-10-06 の調査（日本語圏の発信が中心）は、本文の括弧の略称で引いた。略称の対応は SKILL.md の表。
+The 2026-10-06 research (mainly Japanese-language sources) is cited by the short names in parentheses in the body. The short names are mapped in the table in SKILL.md.
 
 2026-10-13 に確認（6 の「文体」）: 本文は敬体と常体を混ぜない、見出しは常体か体言止めで句点を付けない、ひとまとまりの箇条書きでは文末を混ぜない（JTF 日本語標準スタイルガイド 第 4.0 版の 1.1、https://www.jtf.jp/pdf/jtf_style_guide.pdf ）、1 つの文書の中で文末を混ぜないが、箇条書きの部分に違う文末が出るのはよい（文化審議会建議「公用文作成の考え方」の解説 Ⅲ-1、https://www.bunka.go.jp/seisaku/bunkashingikai/kokugo/hokoku/pdf/93651301_01.pdf ）、体言止めにすると主語が抜けて責任や因果が曖昧になり、予測か意志かも分からなくなる（杉野幹人『超・箇条書き』、https://diamond.jp/articles/-/338937 、https://diamond.jp/articles/-/382251 ）。

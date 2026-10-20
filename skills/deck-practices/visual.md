@@ -1,172 +1,172 @@
-# 見た目: このフォルダの型、和文の組み方、AI っぽさを避ける決まり
+# Visual: this folder's style, Japanese typesetting, and rules to avoid looking AI-made
 
-スライドを書き始める前に読む。1 がこのフォルダの見た目の決まり（色・配置・文字サイズの正本）。2 から後は、その上で守る組み方。Slides API での組み方（slides.py の部品）は `../deck-build/slides.md`。
+Read this before you start writing slides. §1 is this folder's visual rules (the source of truth for colors, positions, and text sizes). §2 onward are the layout rules to follow on top of it. For building with the Slides API (the `slides.py` components), see `../deck-build/slides.md`.
 
-## 目次
+## Contents
 
-1. このフォルダの型
-2. 文字
-3. 色
-4. 図形
-5. 表とグラフ
-6. 図解の型
-7. AI が作った資料に出やすい癖
-8. AI がよく出すデザイン案で使わないもの
+1. This folder's style
+2. Text
+3. Color
+4. Shapes
+5. Tables and charts
+6. Diagram patterns
+7. Habits typical of AI-made materials
+8. AI design suggestions not to use
 
-## 1. このフォルダの型
+## 1. This folder's style
 
-[visual-001] 公式スキルのデザイン案（デッキごとに配色を選ぶ、白地、幅いっぱいの帯を使わない、タイトルは 36pt 以上、など）より、こちらを優先する。濃紺の扉、淡い Oat の本文面、赤のアクセント。色は Databricks の公式ブランドのパレット（2025 年版の社内テンプレート）に寄せ、文字の色は地とのコントラストが 4.5:1 以上になるものにする。
+[visual-001] This style takes priority over the official skill's design suggestions (pick a palette per deck, white background, no full-width bands, titles at 36pt or larger, and so on). Navy section dividers, a light Oat body surface, red accents. Colors follow Databricks' official brand palette (the 2025 internal template). Text colors must have a contrast of 4.5:1 or more against their background.
 
-- 版面は 13.33 × 7.5 in（AI Deck Factory のテンプレート。`../deck-build/slides.md` の 3）。左右の余白は 0.6 in。
-- [visual-002] **文字は 11pt 以上にする**（表紙・扉・出典を含む）。著作権フッターと同じ行の秘密区分と、右下のページ番号だけは 9pt とし、本文を邪魔しない大きさにする。著作権フッターの例外は lint が区別して止める。ページ番号は lint が読まないので、大きさはテンプレートと `slides.py` が書く。
-- [visual-037] **図の中の補助の文字（ガントのバー、図の中のラベルなど、塗りのある図形に入れる短い言葉）は、本文と同じ大きさか、本文から 2pt 小さく（本文が 11pt なら 9pt）する。** 本文と同じ大きさだと枠いっぱいで窮屈に見える。1pt だけ下げてもメリハリが効かないので、下げるなら 2pt。見出し・本文・表のセル・出典は 11pt のまま。lint は、塗りのある図形の中の文字（文字の枠と塗りが 1 つの図形か、`d.label` のように 1 つのグループ）だけ 9pt まで通す。カードの本文や背景の四角の上の出典のように、別の図形の塗りに重ねた文字は 11pt で止める。
-- [visual-003] 色は Google Slides のテーマの色で持つ。ページの JSON（pages.py）には役割の名前（下の表の 2 列目）で書き、テンプレートのテーマが値を決める（`../deck-build/slides.md` の 2・3）。既定のテーマは `visual`（このフォルダの色）。`company` は 2026 年の公式テンプレートの色で、役割のコントラストに届かないものだけを暗くした。括弧の中は公式ブランドの色の名前。ほかの会社のテンプレートから作るテーマも、役割は同じで、値が会社の色になる（`../deck-template/SKILL.md`。組ごとのコントラストは `slides.py lint <テーマのファイル>` が測る）。
+- The page area is 13.33 × 7.5 in (the AI Deck Factory template; `../deck-build/slides.md` §3). Left and right margins are 0.6 in.
+- [visual-002] **Text is 11pt or larger** (including the cover, section dividers, and source lines). Only the confidentiality label on the same line as the copyright footer and the page number at the bottom right are 9pt, a size that does not get in the way of the body. lint tells the copyright footer exception apart and stops the rest. lint does not read the page number, so its size is set by the template and `slides.py`.
+- [visual-037] **Supporting text inside a figure (short words placed in a filled shape, such as Gantt bars or labels inside a diagram) is either the same size as the body or 2pt smaller than the body (9pt when the body is 11pt).** At the body size it fills the frame and looks cramped. Going down by only 1pt gives no visible contrast, so if you go smaller, go 2pt smaller. Headings, body text, table cells, and source lines stay at 11pt. lint lets text down to 9pt pass only inside a filled shape (the text frame and the fill are one shape, or one group as with `d.label`). Text laid over another shape's fill, such as a card's body or a source line on a background rectangle, is stopped at 11pt.
+- [visual-003] Colors are held as Google Slides theme colors. In the page JSON (pages.py), write the role name (the second column of the table below); the template's theme decides the value (`../deck-build/slides.md` §2 and §3). The default theme is `visual` (this folder's colors). `company` uses the colors of the 2026 official template, with only the colors that fall short of a role's contrast made darker. Names in parentheses are the official brand color names. Themes built from another company's template have the same roles, and the values become that company's colors (`../deck-template/SKILL.md`; `slides.py lint <theme file>` measures the contrast of each pair).
 
-  | 用途 | 役割の名前（テーマの枠） | visual | company |
+  | Use | Role name (theme slot) | visual | company |
   |---|---|---|---|
-  | 表紙・扉の地、結論バンド・表の見出しの行・コードの箱の地 | `NAVY`（DARK1） | `1B3139`（Navy 800） | 同じ |
-  | 扉の中のブロック | `NAVY_BLOCK`（ACCENT1） | `303F47`（Gray ナビ） | `1B5162` |
-  | 本文スライドの地 | `BG`（LIGHT1） | `F9F7F4`（Oat Light） | `FFFFFF`（白） |
-  | パネル・表の 1 行おきの地（表の見出しの行は `NAVY`。5） | `PANEL`（LIGHT2） | `EEEDE9`（Oat Medium） | 同じ |
-  | 補助の文字とフッター | `SUB`（ACCENT5） | `5A6F77`（Gray 文字） | `506F7A`（公式の `618794` を暗くした） |
-  | アクセント（図形の塗り・番号・太い線・18pt 以上の文字） | `RED`（HYPERLINK） | `FF3621`（Lava 600） | 同じ |
-  | 赤の文字（キッカー・強調など 18pt 未満） | `RED_TEXT`（ACCENT3） | `CC2B17` | `D61400`（Lava 600 を暗くした） |
-  | 扉の小見出し・副題 | `RED_ON_NAVY`（DARK2） | `FF5F46`（Lava 500） | 同じ |
-  | 提供ステージのラベルの塗り | `GA`（ACCENT2）・`PREVIEW`（ACCENT4。Beta・Private Preview）・`OSS`（ACCENT6）。Public Preview はテーマに入れない `PUBLIC_PREVIEW` | `00A972`（Green 600）・`FFAB00`（Yellow 600）・`2272B4`（Blue 600）・`99DDC7`（Green 600 を 4 割にした色） | `00A972`・`FFAB00`・`4359FF`・`99DDC7` |
-  | テーマに入れない色（`TEXT`・`RULE`・`RED_SOFT`・`STAGE_TEXT`・`DECOR` は、ほかの会社のテーマで替えられる。`../deck-template/SKILL.md`） | `TEXT`・`RULE`・`RED_SOFT`・`STAGE_TEXT`・`WHITE` | 本文 `303F47`、罫線とカードの枠線 `DCE0E2`（Gray 罫線）、淡い赤 `FFECE8`、札の文字 `0B2026`（Navy 900）、白 | 同じ |
-  | 名前で書く役割（テーマで替えられる。書かなければ右の色。本文の地が暗いテーマで分ける。`../deck-template/SKILL.md` の「暗い本文のテーマ」） | `HEAD`（本文のページの見出し・カードの見出し・`d.label` の文字・表の 1 列目）・`CARD`（カードと表のセルの地）・`SUB_ON_NAVY`（濃紺の上の補足・表紙と扉のフッター）・`ON_RED`（`RED` の塗りの上の文字。番号の丸） | `NAVY` と同じ・`FFFFFF`・`RULE` と同じ・`FFFFFF` | 同じ |
+  | Cover and section divider background; conclusion band, table header row, and code box background | `NAVY` (DARK1) | `1B3139` (Navy 800) | Same |
+  | Blocks inside a section divider | `NAVY_BLOCK` (ACCENT1) | `303F47` (Gray nav) | `1B5162` |
+  | Body slide background | `BG` (LIGHT1) | `F9F7F4` (Oat Light) | `FFFFFF` (white) |
+  | Panels and alternate table rows (the table header row is `NAVY`; §5) | `PANEL` (LIGHT2) | `EEEDE9` (Oat Medium) | Same |
+  | Supporting text and footer | `SUB` (ACCENT5) | `5A6F77` (Gray text) | `506F7A` (the official `618794` made darker) |
+  | Accent (shape fills, numbers, thick lines, text at 18pt or larger) | `RED` (HYPERLINK) | `FF3621` (Lava 600) | Same |
+  | Red text (kicker, emphasis, and other text under 18pt) | `RED_TEXT` (ACCENT3) | `CC2B17` | `D61400` (Lava 600 made darker) |
+  | Section divider small heading and subtitle | `RED_ON_NAVY` (DARK2) | `FF5F46` (Lava 500) | Same |
+  | Fill of release stage labels | `GA` (ACCENT2), `PREVIEW` (ACCENT4; Beta and Private Preview), `OSS` (ACCENT6). Public Preview is `PUBLIC_PREVIEW`, which is not in the theme | `00A972` (Green 600), `FFAB00` (Yellow 600), `2272B4` (Blue 600), `99DDC7` (Green 600 at 40%) | `00A972`, `FFAB00`, `4359FF`, `99DDC7` |
+  | Colors not in the theme (`TEXT`, `RULE`, `RED_SOFT`, `STAGE_TEXT`, and `DECOR` can be replaced in another company's theme; `../deck-template/SKILL.md`) | `TEXT`, `RULE`, `RED_SOFT`, `STAGE_TEXT`, `WHITE` | Body `303F47`, rules and card borders `DCE0E2` (Gray rule), light red `FFECE8`, tag text `0B2026` (Navy 900), white | Same |
+  | Roles written by name (replaceable in the theme; if not written, they take the colors on the right; they differ in themes with a dark body background; the "Dark body themes" section of `../deck-template/SKILL.md`) | `HEAD` (body page headings, card headings, `d.label` text, first table column), `CARD` (card and table cell background), `SUB_ON_NAVY` (notes on navy; cover and section divider footer), `ON_RED` (text on a `RED` fill; numbered circles) | Same as `NAVY`, `FFFFFF`, same as `RULE`, `FFFFFF` | Same |
 
-  - [visual-004] 本文ページの濃紺の箱の中に群（コンピュートとストレージの段など）を置くときは、淡色（`PANEL`・`CARD`）の箱に `HEAD` の文字にする。`NAVY_BLOCK` は扉（濃紺の地）の中のブロック用で、濃紺の箱の上では地との差が小さく、群の境が見えない。lint が要確認に出す。
-  - 本文のページの見出しの文字は `HEAD`、カードの地は `CARD`、カードの枠線と罫線は `RULE`（ページの JSON でも pages.py でも `NAVY`・`WHITE` と書かない。暗い本文のテーマで読めなくなる。JSON の `label`・`card` は書かなければ `HEAD`・`CARD`）。
-  - 濃紺の上の文字は `WHITE`、補足は `SUB_ON_NAVY`。`RED` の塗りの上の文字は `ON_RED`。提供ステージのラベルの文字は、GA・Public Preview・Beta・Private Preview が `STAGE_TEXT`、OSS が `WHITE`。
+  - [visual-004] When you place groups (such as compute and storage tiers) inside a navy box on a body page, use light boxes (`PANEL`, `CARD`) with `HEAD` text. `NAVY_BLOCK` is for blocks inside a section divider (navy background); on a navy box it differs too little from the background, and the group boundaries do not show. lint reports it as `要確認`.
+  - On body pages, heading text is `HEAD`, card background is `CARD`, and card borders and rules are `RULE` (do not write `NAVY` or `WHITE` in either the page JSON or pages.py; they become unreadable in dark body themes. In JSON, `label` and `card` default to `HEAD` and `CARD` when not written).
+  - Text on navy is `WHITE`, and notes on navy are `SUB_ON_NAVY`. Text on a `RED` fill is `ON_RED`. Release stage label text is `STAGE_TEXT` for GA, Public Preview, Beta, and Private Preview, and `WHITE` for OSS.
 
-  - 赤の文字 `CC2B17` だけは公式のパレットにない。公式の Lava 600 は小さな文字では 3.4:1 で届かず、Maroon 600 `98102A` では赤のアクセントに見えないので、Lava 600 を暗くした色にした（visual）。company も Lava 600 を暗くした `D61400`（公式のテンプレートは 16pt の小見出しも Lava 600。赤の文字を置くいちばん暗い地の `PANEL`（Oat Medium）の上で 4.5:1 に届くところまで。4.53:1、白の上では 5.30:1）。
-  - company の `SUB` は、公式のテンプレートの ACCENT5 `618794` が白の上で 3.89:1、Oat Medium の上で 3.32:1 で届かないので、色相を保って暗くした（`template.py check`〔今は `slides.py lint <テーマのファイル>`〕の案。2026-10-13）。ほかの枠は、表の組み合わせで基準を満たす。
-  - [visual-005] 赤の塗り `FF3621` に白い文字を載せるのは、11pt 以上の太字だけにする（3.62:1。visual-039）。細字の赤いラベルと 9pt の札は、淡色 `FFECE8` の地に赤の文字（`RED_TEXT`）にする。図の中の正円の番号の S（0.3 in・11pt 太字。4）も、太字の 11pt なので 3:1 で届く。
-  - Lava 500 `FF5F46` は濃紺 `1B3139` の上でだけ使う（4.52:1）。扉の中のブロック `303F47` の上では 3.62:1 で届かないので、そこでは `FFFFFF` か `DCE0E2` にする。
-  - 公式の緑・黄は、文字の色にすると地に負ける（`00A972` は白の上で 3.0:1）。ラベルの塗りにだけ使う。
-  - [visual-038] 章の扉の章番号は飾りだが、扉の地に大きな文字の基準（3:1）で届く色にする。濃紺の地は `DECOR`（`6B8089`、3.28:1。前の `3E5159` は 1.63:1 で読みにくかった）、赤の地は `NAVY`（3.76:1。前は地と同じ赤で見えなかった）、白の地は `DECOR`（3.87:1）。テーマの確かめ（`slides.py lint <テーマのファイル>`）は、テーマの扉のパターンが使う地ごとに測る。濃紺と白の地で届かなければ `DECOR` を動かす案を出し、赤の地では主色も強調の色も動かさず、届かないとだけ出す（2026-10-16）。
-  - 公式の書体は DM Sans だが、和文がないので Noto Sans JP にする（`../deck-build/SKILL.md` の「納品物」）。コードだけは等幅の Cascadia Mono（2）。ほかの会社のテーマは、書体も変えられる（`../deck-template/SKILL.md` の「書体」）。
+  - Only the red text color `CC2B17` is not in the official palette. The official Lava 600 reaches only 3.4:1 for small text, and Maroon 600 `98102A` does not look like the red accent, so we use Lava 600 made darker (visual). company also uses Lava 600 made darker, `D61400` (the official template uses Lava 600 even for 16pt small headings. It is darkened just enough to reach 4.5:1 on `PANEL` (Oat Medium), the darkest background that red text sits on: 4.53:1, and 5.30:1 on white).
+  - company's `SUB` is darkened while keeping the hue, because the official template's ACCENT5 `618794` reaches only 3.89:1 on white and 3.32:1 on Oat Medium (a proposal from `template.py check` 〔now `slides.py lint <theme file>`〕; 2026-10-13). The other slots meet the standard in the pairs listed in the table.
+  - [visual-005] Put white text on the red fill `FF3621` only when it is bold and 11pt or larger (3.62:1; visual-039). Red labels in regular weight and 9pt tags use red text (`RED_TEXT`) on the light `FFECE8` background. The S size of the numbered circle inside a figure (0.3 in, 11pt bold; §4) is also 11pt bold, so it reaches 3:1.
+  - Use Lava 500 `FF5F46` only on navy `1B3139` (4.52:1). On the section divider block `303F47` it reaches only 3.62:1, so use `FFFFFF` or `DCE0E2` there.
+  - The official green and yellow lose against the background when used as text color (`00A972` is 3.0:1 on white). Use them only as label fills.
+  - [visual-038] The chapter number on a section divider is decoration, but use a color that reaches the large-text standard (3:1) against the divider background. On navy use `DECOR` (`6B8089`, 3.28:1; the earlier `3E5159` was 1.63:1 and hard to read), on red use `NAVY` (3.76:1; earlier it was the same red as the background and invisible), and on white use `DECOR` (3.87:1). The theme check (`slides.py lint <theme file>`) measures against each background used by the theme's section divider patterns. If navy or white backgrounds fall short, it proposes moving `DECOR`. On a red background it does not move the main color or the emphasis color; it only reports that the color falls short (2026-10-16).
+  - The official font is DM Sans, but it has no Japanese glyphs, so use Noto Sans JP (the "Deliverables" section of `../deck-build/SKILL.md`). Only code uses the monospace Cascadia Mono (§2). Other companies' themes can also change the fonts (the "Fonts" section of `../deck-template/SKILL.md`).
 
-- 本文ページの配置（上端の位置は in）
+- Body page positions (top edge in inches)
 
-  | 要素 | 上端 | 文字 |
+  | Element | Top | Text |
   |---|---|---|
-  | キッカー（要るページだけ） | 0.40 | 11pt 太字、赤の文字（`RED_TEXT`） |
-  | タイトル | 0.62 | 24pt 太字、濃紺、1 行 |
-  | リード | 1.20 | 12pt、本文色、1 文 |
-  | 本文 | 1.78（リードなしは 1.62） | カードの見出し 12pt 太字、本文 11pt |
-  | [visual-006] 結論バンド（要るページだけ） | 下端を 6.60 に固定し、中身に合わせて上へ伸ばす | 本文幅いっぱいの四角。1 文目 13pt 太字白、補足 11pt。内側の余白は左右 0.25 in・上下 0.2 in（4 の「1 字分」より大きめ。元の pptx 版に合わせる） |
-  | 出典 | 6.68 | 11pt、補助色、1 行に収める（長ければ短くするか、ノートに回す）。名前に元のページへのリンクを付ける（content.md の 6 の「出典」） |
-  | フッター | 7.08 | 著作権表示もページ番号も 9pt（上端と高さをそろえる）。Noto Sans JP、通常の太さ。著作権表示を左、ページ番号を右。明るい地は `SUB`、濃紺の地は `RULE` |
+  | Kicker (only on pages that need it) | 0.40 | 11pt bold, red text (`RED_TEXT`) |
+  | Title | 0.62 | 24pt bold, navy, one line |
+  | Lead | 1.20 | 12pt, body color, one sentence |
+  | Body | 1.78 (1.62 without a lead) | Card headings 12pt bold, body 11pt |
+  | [visual-006] Conclusion band (only on pages that need it) | Fix the bottom edge at 6.60 and grow upward to fit the content | A rectangle the full width of the body. First sentence 13pt bold white, notes 11pt. Inner padding is 0.25 in left and right and 0.2 in top and bottom (larger than the "one character" of §4; matches the original pptx version) |
+  | Source line | 6.68 | 11pt, supporting color, fits on one line (if it is long, shorten it or move it to the notes). Link the name to the original page (content.md §6, content-033) |
+  | Footer | 7.08 | Both the copyright notice and the page number are 9pt (same top edge and height). Noto Sans JP, regular weight. Copyright notice on the left, page number on the right. `SUB` on light backgrounds, `RULE` on navy |
 
-- [visual-007] **フッターは資料名ではなく著作権表示にする**。表紙・章の扉・本文の左下に著作権表示（`factory.toml` の `[brand] copyright`。例: `© 2026 Acme, Inc. All rights reserved.`）を置く。社内向けは `｜Internal Only`、秘密扱いは `｜Confidential` を末尾に残す。表紙にはページ番号を置かない。年は初公表年に合わせ、既存資料の年を現在年へ自動更新しない。長いダッシュは使わず、法人名のあとはピリオドで区切る。流用元をそのまま画像で使う `foot=False` のページは、元の権利表示・クレジットを維持し、自社の表示を重ねない。第三者素材の出典やクレジットは共通フッターとは別に書く。
+- [visual-007] **The footer is a copyright notice, not the material's name.** Put the copyright notice (`[brand] copyright` in `factory.toml`; example: `© 2026 Acme, Inc. All rights reserved.`) at the bottom left of the cover, section dividers, and body pages. Keep `｜Internal Only` at the end for internal materials and `｜Confidential` for confidential ones. Do not put a page number on the cover. Match the year to the year of first publication, and do not auto-update the year of existing materials to the current year. Do not use long dashes, and separate after the legal entity name with a period. Pages with `foot=False` that reuse a source as an image as-is keep the original rights notice and credits, and do not get our own notice laid over them. Write sources and credits for third-party material separately from the shared footer.
 
-- [visual-008] **キッカーと結論バンドは、要るページにだけ置く**。全ページに同じ飾りを置くと、主題と関係のない既定値になり、AI っぽく見える（研究 1-8）。見出しが結論を言っていれば、下の箱は二重になる（中身 2 節）。
-  - キッカーを置くのは、章が 2 つ以上あるデッキで章の名前を示すとき、またはページの役割（「数字で見る」「Appendix」など）を示すとき。見出しを短く言い換えただけのキッカーは置かない。[visual-046] キッカーと地図の行の名前に、作り手の側の言葉（「入口」など）を使わない。章のないはじめのページにはキッカーを付けず、地図では「はじめに」のように聞き手にそのまま通じる言葉にする。
-  - 結論バンドを置くのは、見出しのあとに「だから何をするか」「決めてほしいこと」があるページ（章のまとめ、推奨、次の一歩）。見出しかリードがそのまま結論になっているページには置かない。本文のページの多くはリードで言えることを言えるので、置くのは一部のページになる。
-  - 置かないページは、本文を 6.60 まで使ってよい。キッカーを置かないときも、タイトルの位置（0.62）は変えない。
-  - [visual-009] 本文の下に置く淡色のパネルの帯（「だから」「注意」「仮説」などの頭を付けた 1〜2 行）も同じ。本文で言えることや、ノートで話せばよいことは帯にしない。本文のページの半分を超えて帯が並んだら、要らないものから外す。
-- [visual-010] **提供ステージのラベル**（色は上の表）。塗りは本番で使えるかで分ける。GA は緑、Public Preview は淡い緑（本番で使える）、Beta と Private Preview は黄（本番向けではない。docs の [release types](https://docs.databricks.com/aws/en/release-notes/release-types)）、OSS は青。組むときは `slides.py` の `STAGE_FILL` で引く。札は、かかる要素の箱の中（見出しの右）か、ページ全体にかかるならタイトルの右に置く。箱の外の角に浮かせると、どの箱にかかるか分からない。lint が、札の言葉と塗りが合わないものを要確認に出す。プレビューやベータの機能には、ふつうはラベルを付ける。ただし、関係ができていない顧客向けの資料で、1 枚に Beta・Preview のラベルが並ぶと不安をあおる。そのページではラベルを控え、提供ステージは Appendix の一覧で示し、ノートで口頭で言えるようにする。
-- [visual-011] **どの資料にも表紙を付ける。** 定例のたびに使う資料（スケジュール、進捗の一覧）も同じ（lint が、1 枚目が濃紺の地でないと要確認に出す）。
-- 表紙と章の扉は濃紺の地。表紙は、小見出し（相手と日付）11pt 太字 `FF5F46` → タイトル 34pt 太字白（2 行まで）→ 副題 13pt 太字 `FF5F46`、左下に社名（`[brand] company`）11pt。章の扉は、章番号 88pt 太字 `6B8089`、章タイトル 30pt 太字白、副題 12.5pt 太字 `FF5F46`。
-- **1 枚の型:** キッカー（要るページだけ）→ タイトル（1 行）→ リード（1 文、このページで言えることか問い）→ 本文 → 結論バンド（要るページだけ。言いたいことを 1 文、補足 1〜2 文）→ 出典 → フッター。
-- 全ページにスピーカーノートを書く（`d.note`。lint がノートのないページを出す）。2 人で話すときは `【谷口→ユーザー】`、時間を決めるときは `【ユーザー・2 分】` のように頭に付ける。
-- [visual-012] 章の区切りには暗転の扉を使う。Appendix は本編の後ろにまとめる。本編が 10 枚を超えるデッキは、テーマが切り替わるところに扉を置く（扉がないと切り替わりが唐突になる）。ただし細切れにしない。扉は意味のある単位（聞き手の問いや章）ごとにし、扉のあとが 1 枚だけの章は前後とまとめる（lint が 12 枚を超えて扉がないときと、1 枚だけの章を出す）。扉を置いたデッキでは、最後のまとまり（始め方・判断の材料・次の一歩など）にも扉を置き、扉のある章とない章を混ぜない（レビューの観点 5 の一覧の扉の位置で見る）。
-- [visual-040] **目次・一覧のページは、項目名とページ番号だけにする。** 提供ステージの札、一言の説明、章の副題を同じ行に重ねない（それぞれのページにある。重ねると、どの行も込み入って読みにくい）。章があるときは、章ごとのカードに項目を並べる。章が 6 つ以上あるか、全部で 20 項目を超えるときは、カードに中のページを並べず、1 章 1 行（章の番号・章の名前・扉のページ番号）にする。
+- [visual-008] **Place the kicker and the conclusion band only on pages that need them.** The same decoration on every page becomes a default unrelated to the subject and looks AI-made (研究 1-8). If the heading states the conclusion, a box below it says the same thing twice (中身 2 節).
+  - Place a kicker when it shows the chapter name in a deck with two or more chapters, or when it shows the page's role (「数字で見る」, 「Appendix」, and so on). Do not place a kicker that only rephrases the heading in fewer words. [visual-046] キッカーと地図の行の名前に、作り手の側の言葉（「入口」など）を使わない。章のないはじめのページにはキッカーを付けず、地図では「はじめに」のように聞き手にそのまま通じる言葉にする。
+  - Place a conclusion band on pages where the heading is followed by "so what do we do" or "what we need you to decide" (chapter summaries, recommendations, next steps). Do not place one on pages where the heading or lead is already the conclusion. Most body pages can say what they need to say in the lead, so only some pages get one.
+  - Pages without one may use the body area down to 6.60. Even without a kicker, do not change the title position (0.62).
+  - [visual-009] The same applies to light panel bands placed below the body (one or two lines headed with 「だから」, 「注意」, 「仮説」, and so on). Do not turn into a band what the body can say or what you can say in the notes. If bands appear on more than half of the body pages, remove the least needed ones.
+- [visual-010] **Release stage labels** (colors in the table above). The fill shows whether it is usable in production. GA is green, Public Preview is light green (usable in production), Beta and Private Preview are yellow (not for production; the docs' [release types](https://docs.databricks.com/aws/en/release-notes/release-types)), and OSS is blue. When building, get them from `STAGE_FILL` in `slides.py`. Place the tag inside the box of the element it applies to (to the right of its heading), or to the right of the title if it applies to the whole page. Floating it at an outer corner of a box makes it unclear which box it applies to. lint reports a tag whose word and fill do not match as `要確認`. Usually give features in preview or beta a label. However, in material for a customer with whom the relationship is not yet built, a row of Beta and Preview labels on one page stirs up worry. On that page, hold back the labels, show the release stages in a list in the Appendix, and make sure you can say them aloud from the notes.
+- [visual-011] **Give every material a cover.** The same applies to materials used at every regular meeting (schedules, progress lists) (lint reports it as `要確認` when the first page does not have a navy background).
+- The cover and chapter section dividers have a navy background. The cover is: small heading (audience and date) 11pt bold `FF5F46` → title 34pt bold white (up to two lines) → subtitle 13pt bold `FF5F46`, with the company name (`[brand] company`) at 11pt at the bottom left. A chapter section divider is: chapter number 88pt bold `6B8089`, chapter title 30pt bold white, subtitle 12.5pt bold `FF5F46`.
+- **The pattern of one page:** kicker (only on pages that need it) → title (one line) → lead (one sentence: what this page says, or a question) → body → conclusion band (only on pages that need it; the main point in one sentence, plus one or two sentences of notes) → source line → footer.
+- Write speaker notes on every page (`d.note`; lint lists pages without notes). When two people present, prefix with `【谷口→ユーザー】`; when you set time, prefix like `【ユーザー・2 分】`.
+- [visual-012] Use a dark section divider to separate chapters. Put the Appendix together after the main part. In decks with more than 10 main pages, place a section divider where the theme changes (without one the change is abrupt). But do not cut it into small pieces. Place dividers per meaningful unit (an audience question or a chapter), and merge a chapter with only one page after its divider into the one before or after (lint lists decks over 12 pages without a divider and chapters with only one page). In a deck with dividers, also put a divider before the last group (how to start, decision material, next steps, and so on), and do not mix chapters with and without dividers (check the divider positions on the contact sheet for review aspect 5).
+- [visual-040] **Contents and list pages show only item names and page numbers.** Do not add release stage tags, one-line descriptions, or chapter subtitles on the same line (they are on each page; adding them makes every line crowded and hard to read). When there are chapters, list the items in one card per chapter. When there are six or more chapters, or more than 20 items in total, do not list the pages inside the cards; use one line per chapter (chapter number, chapter name, and the divider's page number).
 
-## 2. 文字
+## 2. Text
 
 - **1 行の字数:** 本文は 1 行 15〜25 字。10 字以下で終わる行を作らない。1 つのボックスの本文は 8 行まで。字数は `幅（in）× 72 ÷ 文字サイズ（pt）` で見積もる（全角 1 字と、矢印・丸数字・× は 1 em。英数字は 0.5〜0.6 em だが、大文字の B・D・N・O・U は 0.66〜0.74 em と広い。スペースは 0.22 em。`slides.py` の `ASCII_EM` が Noto Sans JP Regular の実測。太字は 6〜7% 広く、`ASCII_BOLD_EM` で見込む）。例: 幅 3.0 in・11pt で 19 字（見た目 1-3）。
-- **行間:** 複数行の本文は行間（`d.text` の `spacing`、%）を 125〜135 にする。和文の行間は 0.5〜1.0 em が一般的で、行が長いほど広くする（W3C の日本語組版処理の要件）。2 行の見出しは 110。1 行の枠には指定しない（見た目 1-2）。Google Slides での行送りの実測はしていない。画像で詰まって見えたら広げる。
+- **Line spacing:** Set the line spacing of multi-line body text (`spacing` of `d.text`, in %) to 125–135. Japanese line gaps are generally 0.5–1.0 em, wider for longer lines (W3C Requirements for Japanese Text Layout). Two-line headings use 110. Do not set it on one-line frames (見た目 1-2). Line advance in Google Slides has not been measured. If it looks cramped in the image, widen it.
 - [visual-013] **改行:** 最終行は句読点を入れて 3 字以上にする。単語や文節の途中で折り返さない。「のは」「ので」「には」「によって」は前の行に残す。数字と単位（「1.56 em」「10 倍」）を 2 行に割らない。太字や括弧で強調した語を 2 行に割らない。全角の開き括弧（「（」「「」）の前で手で改行しない（行頭に来ると半字下がって見え、左端がそろわない）。直すときは、文を短くするか、ボックスの幅を変える（見た目 1-4）。Google Slides は和文を 1 字ずつ折り返すので、自動の折り返しが文節の途中に入る見込みを lint が要確認に出す（lint-024。文節は BudouX で分ける。位置は見積もりで 1 字ずれることがあるので、画像で確かめる）。
 - **和欧間:** 半角スペースを入れる（AGENTS.md の「書き方」）。ただし、句読点と閉じ括弧の前、開き括弧の後ろには入れない。和文の中の括弧は全角にする。中黒「・」の前後には入れない（見た目 1-10）。lint が数える。
-- [visual-014] **コードは等幅の書体にする。既定は Cascadia Mono で、テーマで変えられる（`mono`。`../deck-template/SKILL.md` の「書体」）。** コードの箱と、コマンドだけを置く札・表のセル（コマンドの一覧の列）の英数字は等幅にし、和文と地の文の中のコマンド名は Noto Sans JP のままにする。Cascadia Mono は Windows Terminal の既定の書体で、Google Fonts にあり、リガチャがない（`->` が矢印 1 字にならない）。JetBrains Mono・Fira Code・Cascadia Code は、Google Slides でリガチャが描かれ、写す読み手が `→` を打つおそれがあるので使わない。等幅には和文の字形がないので、和文は等幅にしない（JSON の `text`・`label` の `"mono": true` と、`table` の `"mono_cols": [1]`〔列は 1 から数える〕は、ASCII の続きだけを等幅にする）。テーマの `mono` に、リガチャのある書体は書けない（`slides.py` が止める）。lint が、等幅の和文と、テーマの書体（既定は Noto Sans JP・Cascadia Mono）でない書体を要修正で止める（調べた経緯は `Research/monospace_font_google_slides_20261009.md`）。lint が、濃紺の地で SQL・コマンドの語から始まる行が等幅でないものを要確認に出す（コードの箱は JSON の `code` を使い、ページに写さない。写した古い部品は等幅にならず、レビューでも見落としやすい）。
-- **太字:** 見出しと重要な語だけにする。1 つのボックスで 1〜2 か所まで。斜体は使わない（和文に斜体はない）。下線はリンクだけ（見た目 1-11）。
-- [visual-015] **数字の強調:** 数字を大きくし、単位は 1 段小さくする（例: 数字 32pt、単位 16pt）。読む資料なら、大きな数字は 32〜40pt で足りる（見た目 1-11・2 節）。単位を省いて数字だけを置かない（「16」ではなく「16 モデル」）。数字と単位は 1 つの文字の枠に入れて基準線をそろえ、何の数かはそのすぐ下に短く書く。数字の列の横に、行数のそろわない説明を並べる型は使わない（説明の上下の中央が行ごとにずれ、ガタガタに見える）。内訳（55 = 16 + 39）は、内訳ごとのカードの頭に数字を置き、合計はリードで言う。lint が、数字だけの大きな段落を要確認に出す。
-- [visual-016] **揃え方は役割で選ぶ。** 説明文は左寄せ、短い工程名・図のノード・数字のまとまりは中央寄せを基本にする。カードは意味のあるアイコンと文字のまとまりを配置し、余白をそろえる。部品の左寄せ既定を全要素に流さない。移植では元資料の揃え方を確認する。**同格の要素を並べるときは、その中で揃え方を同じにする。** 左寄せか中央寄せかは上の役割で選び、すべてを左寄せにはしない。ただし、同格に並べた箱（「注文 → 中で回る → 出てくるもの」のように、どの箱にもアイコン・見出し・説明が入るもの）の中で、1 つだけを違う揃え方にしない（そこだけ不自然に見える）。レビューの観点 5 で見る。
-- [visual-017] **コードの箱の上の見出しは塗らない。** 濃紺のコードの箱が囲みになるので、見出しは太字の文字にし、札や帯にしない（濃紺の札は箱と二重に見える）。並べた列の見出しは同じ形にし、片方だけ塗りを変えない。片方の列を強調するなら、列の箱ごと変えるか（対比の図で Lakebase の側を濃紺にするなど）、結論バンドの言葉で示す。レビューの観点 5 で見る。
+- [visual-014] **Code uses a monospace font. The default is Cascadia Mono, and the theme can change it (`mono`; the "Fonts" section of `../deck-template/SKILL.md`).** Make the alphanumerics monospace in code boxes and in tags and table cells that hold only a command (a column of a command list). Command names inside Japanese and running text stay in Noto Sans JP. Cascadia Mono is the default font of Windows Terminal, is on Google Fonts, and has no ligatures (`->` does not become a single arrow glyph). Do not use JetBrains Mono, Fira Code, or Cascadia Code, because Google Slides draws their ligatures and a reader copying the code may type `→`. Monospace fonts have no Japanese glyphs, so do not set Japanese text in monospace (`"mono": true` on JSON `text` and `label`, and `"mono_cols": [1]` on `table` 〔columns counted from 1〕, make only the ASCII runs monospace). A font with ligatures cannot be written in the theme's `mono` (`slides.py` stops it). lint stops as `要修正` Japanese text in monospace and fonts that are not the theme's fonts (Noto Sans JP and Cascadia Mono by default) (the research history is in `Research/monospace_font_google_slides_20261009.md`). lint reports as `要確認` lines on a navy background that start with an SQL or command word but are not monospace (use JSON `code` for code boxes and do not copy them onto the page; copied old components do not become monospace and are easy to miss in review).
+- **Bold:** Use it only for headings and important words. At most one or two places per box. Do not use italics (Japanese has no italics). Underline only links (見た目 1-11).
+- [visual-015] **Emphasizing numbers:** Make the number large and the unit one step smaller (example: number 32pt, unit 16pt). For materials meant to be read, 32–40pt is enough for large numbers (見た目 1-11・2 節). Do not drop the unit and place only the number (「16 モデル」, not 「16」). Put the number and unit in one text frame so their baselines align, and write what the number counts briefly right below it. Do not use the pattern of a column of numbers with descriptions of uneven line counts beside them (the vertical center of each description shifts row by row and looks jagged). For a breakdown (55 = 16 + 39), put each number at the head of a card per part, and state the total in the lead. lint reports large paragraphs that contain only a number as `要確認`.
+- [visual-016] **Choose alignment by role.** As a baseline, left-align descriptive text, and center short step names, diagram nodes, and groups of numbers. In cards, arrange meaningful icons and text as a unit and keep the padding even. Do not let a component's default left alignment flow to every element. When porting, check the alignment of the source material. **When you line up peer elements, use the same alignment within them.** Choose left or center by the roles above, and do not left-align everything. But within peer boxes laid out side by side (boxes that each hold an icon, heading, and description, as in 「注文 → 中で回る → 出てくるもの」), do not give only one box a different alignment (it alone looks unnatural). Check this in review aspect 5.
+- [visual-017] **Do not fill the heading above a code box.** The navy code box already acts as an enclosure, so make the heading bold text, not a tag or band (a navy tag looks doubled with the box). Give the headings of side-by-side columns the same form, and do not change the fill of only one. To emphasize one column, change the whole column box (for example, make the Lakebase side navy in a comparison diagram), or show it with the words of the conclusion band. Check this in review aspect 5.
 
-## 3. 色
+## 3. Color
 
-- 使う色は 1 の表から選ぶ。1 枚の中で使う色は、地・文字・メイン・強調の 4 色まで。灰色は数えない（見た目 1-6）。
-- 強調は色だけにせず、太字か囲みと組み合わせる。色の見え方が違う人（日本の男性の 20 人に 1 人）にも伝わるようにする（見た目 1-6）。
-- 赤と緑、赤と黒を、意味を区別する対として使わない。提供ステージの GA（緑）と、赤の強調を並べて区別させない（見た目 1-6）。
-- [visual-039] 文字と地のコントラストは、18pt 未満の細字と 11pt 未満の太字なら 4.5:1 以上、18pt 以上か 11pt 以上の太字なら 3:1 以上にする。太字の境目は、WCAG 2 の 14pt から、本文の大きさの 11pt に下げた（本文の太字は 3:1 あれば読める。2026-10-16 にユーザーが決めた。WCAG 2 の AA とは太字の 11〜14pt で違う）。1 の表の色は、書いてある組み合わせでこれを満たす。表にない組み合わせにしたときは、lint の「コントラストが基準に届かない色の組」を見る。
+- Choose colors from the table in §1. Use at most four colors on one page: background, text, main, and emphasis. Grays do not count (見た目 1-6).
+- Do not emphasize with color alone; combine it with bold or an enclosure, so that people who see color differently (1 in 20 Japanese men) also get it (見た目 1-6).
+- Do not use red and green, or red and black, as a pair that distinguishes meaning. Do not make the reader distinguish the release stage GA (green) from red emphasis placed beside it (見た目 1-6).
+- [visual-039] Text-to-background contrast is 4.5:1 or more for regular text under 18pt and bold text under 11pt, and 3:1 or more for text at 18pt or larger or bold text at 11pt or larger. The bold threshold was lowered from WCAG 2's 14pt to the body size of 11pt (bold body text is readable at 3:1. The user decided this on 2026-10-16. It differs from WCAG 2 AA for bold text at 11–14pt). The colors in the §1 table meet this in the pairs listed. When you use a pair not in the table, look at lint's 「コントラストが基準に届かない色の組」.
 
-## 4. 図形
+## 4. Shapes
 
-- 塗りと枠線の両方に色を付けない。どちらか一方にする。白いカードに薄い罫線（`FFFFFF` + `DCE0E2`）はよい（見た目 1-7）。
-- [visual-018] カード・工程ノード・塗りのラベルは、半径 **0.1 in** の控えめな角丸を既定にする（元の AI Deck Factory の pptx の丸み）。箱が大きくても半径を増やさない。`slides.py` は四角と円を合成してこの丸みを作る。Google 標準の `ROUND_RECTANGLE` の丸みをそのまま使わない。四角が必要な背景・画像の枠などは、JSON の `box`・`text` に `"shape": "rectangle"` を書く。意味のある線画アイコンの内部では必要な形状を組み合わせてよい。
-- [visual-019] 正円の番号は、小 0.3 in・11pt（図の中の印）、中 0.36 in・14pt（カードと手順。既定）、大 0.48 in・18pt（大きな段）の 3 つから選ぶ。中・大は数字の高さが円の 4 割ほどで釣り合う。小は周りの 11pt の文字に合わせて 11pt にする（11pt の太字なので、赤に白の 3.62:1 で届く。visual-039）。円が小さく文字が大きいと「10」が円からはみ出す（JSON の `num` の `"size"` に `small`・`medium`・`large` を書く。`slides.py` の `NUM`）。
-- [visual-020] **番号のバッジは、順番に意味があるもの（手順・段・ページで指す番号）にだけ置く。** 同格の項目のカードにアイコン（製品のアイコン・線画）を置くなら、番号は外してアイコンだけにする。番号とアイコンを両方置くと、行の頭に印が 2 つ並ぶ。
-- 矢印は細くし、本文色か補助色にする。矢印を主役にしない（見た目 1-7）。
-- [visual-021] **年表の軸など、箱の列の間を通す矢印は、上下の箱から 0.2 in 以上離す。** 箱の端に付くほど近いと、矢印が箱の枠に見えて読みにくい。軸は上下の箱の中ほどに引く。
-- [visual-022] **1 枚の中で別の話に移る小見出し（図の下の「いまの〇〇では」など）は、上の図から切り離して見せる。** 上の図との間に細い罫線（`RULE`）か 0.3 in 以上の間を置き、小見出しは図の中の太字のラベル（「比べる軸」の下の言葉など）より 3pt 以上大きくする。色と太さが同じで 1pt しか違わないと、上の図の続きに読める。何を書いた段かを補助色の短い言葉で添えてもよい。小見出しの色や太さが上の図と違っても、間が狭ければ続きに見えるので同じにする。大きく空けなくてよく、罫線と 0.1〜0.2 in の上下の間で足りる。
-- [visual-023] 強調のために範囲を囲むときは、赤（`RED`）の角丸にし、線は 2pt、角は中のカードと同じ半径 0.1 in にする。点線（図の中の範囲。`{"type": "box", "line": "RED", "shape": "round_rectangle", "dash": true}`）でも、実線（表の 1 列。`"dash"` を書かない）でも同じ太さ。`box` は赤の線を既定で 2pt にする（`slides.py` の `EMPH_PT`。ほかの枠線は 0.75pt）。見本はテンプレートの部品のページ（4・5 枚目）。
-- [visual-024] **列を並べるときは、箱の上端と下端を列どうしでそろえる。** 片方の列にだけ小見出し（「MCP の 3 種類」など）を置くと、もう片方の箱が小見出しの高さから始まり、上も下もずれて見える。小見出しは両方の列に置くか、どちらにも置かない。箱の高さは中身に合わせ、列の中の箱の合計とほかの列の箱の高さをそろえる。lint が、隣り合う列の白いカードの上端・下端が 0.03〜1.0 in ずれていると要確認に出す。同じ形の列（カードとコードの箱を縦に積んだ列を 3 つ並べる、など）は、段ごとに箱の高さをそろえ、下の段の上端を横一直線にする。JSON では `row` に `stack` を並べず、`grid`（`cols` を列の数）に段の順で並べる（`grid` は行ごとに高さをそろえる。`row` に並べると組むときの警告に出る）。1〜2 行の文なら、まず改行の位置と言い方で行数をそろえる（1 語だけ次の行に落ちる括弧の改行をやめる）。同じ形の列なら、lint のこの要確認は直す。
-- [visual-025] 2 つの箱をつなぐ横の矢印は、両側の箱の上下の中央に引く。矢印に添える言葉は矢印の上に置き、言葉の場所を空けるために矢印をずらさない。ずらすと LibreOffice・PowerPoint・Google Slides のどれでもずれて見える（lint が要確認に出す）。ただし、同じ 2 つの箱の間に行きと帰りの 2 本を引くときは、2 本を中央から同じだけ上下にずらし、言葉は上の線の上と下の線の下に置く（lint は 2 本以上の組を数えない。JSON のページは arrow の `offset` と `label_side`）。上に置く場所がないときは、言葉を線の下（縦の線なら左）に置いてよい（画像で確かめる）。
-- [visual-026] 図の大枠の流れ（データやユーザーの操作）は、上から下か左から右にそろえる。大枠の流れから外れるもの（担当がリポジトリを書いて保つ、など）は、逆向きや回り込みでもよい。大事なのは、そのページで伝えたいことと、図の大枠の流れが一致していること。矢印があちこちを向いて大枠の流れが読めなくなったら、まず大枠の矢印の向きをそろえる。
-- [visual-041] 図の中で種類の違う流れ（認証のトークンを取る流れと、データを読み書きする接続など）を、同じ向きに平行に並べない。向き（縦と横）か線の種類で分け、①②で順を振る。そのページの主張に要らない部品は描かず、それを話すページに回す。
-- [visual-043] 流れの図の矢印は、まっすぐ引けるように箱を置く。折れ線（JSON の `"route": "bent"`）は、1 つの箱から枝分かれするときと合流するときだけにし、1 本の流れを、ほかの箱を避けて回すために曲げない。曲げたくなったら、つなぐ 2 つの箱を同じ行か同じ列に置き直す。曲げた線は、どこからどこへの流れかが読みにくく、なぜ曲げたかと聞かれる。組むときの警告が、枝分かれでも合流でもない折れ線を出す（辺を書いた矢印は、戻る線などに使うので見ない）。
-- 影を付けない。グラデーションを使わない。公式スキルは影を勧めるが、和文の資料では AI っぽさのしるしと言われている（見た目 1-9、AI 実践 1-5）。
-- [visual-027] 枠と文字の間は 1 字分空ける。枠いっぱいまで文字を詰めない。枠に合わせて文字を小さくするより、文を減らすか枠を大きくする（見た目 1-8）。塗りの箱に左寄せ・右寄せで置く文字は、`d.text`・`d.label` が 1 字分を空ける（`../deck-build/slides.md` の 4）。lint が、塗りの箱の端と文字の間が 1 字分（その枠でいちばん小さい文字の大きさ）より狭い文字を要確認に出す。上下も同じ。とくに下は、箇条や項目を足すと最終行が枠の下端に寄るので、中身を足したら箱の高さも直し、最終行と下端の間を上の余白と同じくらい（1 字分以上）にする。`gslides.py check` が、Google が描いたページの画像で、塗りの箱の中の上寄せの 2 行以上の文字と箱の下端の間を測り、1 字分より狭いものを要確認に出す（`box_pad.py`。JSON の行の高さの見積もりは ±0.4 in ずれるので画像で測る）。中央寄せの帯やパネル（淡色の帯に 2 行の注記など）も同じで、箱の高さを行数ぶんだけにしない。2 行になるなら、1 行に収まる言い方にするか、上下に 1 字分ずつ足した高さにする。`box_pad.py` が、塗りの箱の中の中央寄せの 2 行以上の文字で、箱の上の端か下の端との間が 1 字分より狭いものを要確認に出す。白いカードは、最終行と下端の間を 0.28 in（2 字分ほど）以上にする。1 字分を満たしていても、箇条の 3 行目がカードの下端に近く見える。`box_pad.py` が、白いカードの下端との間が 0.28 in より狭いものを要確認に出す。カードの下端の真上に置く 1 行の札（「2 回まで」など）は、0.28 in ではなく 1 字分を見る。
-- [visual-028] 1 つだけで置く淡色のパネル（`PANEL` などの塗りの箱に文字を入れたもの。横に同じ高さの箱が並ばないもの）の文字は、上下の中央に置き（JSON の塗りのある `text` は `"valign": "middle"` が既定）、高さを中身に合わせる。上寄せのまま箱を大きくすると、下だけが空き、中央に置いたほかのページのパネルと揃え方がそろわない。同じ行に並ぶパネル同士も揃え方をそろえる。横に同じ高さのカードが並ぶ列は、見出しの高さをそろえるため上寄せのままでよい。`gslides.py check` が、画像で、淡色のパネルの上寄せの文字の下の空きが上の空きより 0.25 in 以上大きいものを要確認に出す（`box_pad.py`。白いカードと濃紺の箱、横に同じ高さの箱が並ぶものは見ない）。
-- [visual-044] **囲み（`box` の枠）の中に置く部品は、囲みの 4 辺から 0.08 in 以上内側に置く。** 部品の端を囲みの端と同じ座標にしない（枠線の囲みは線が重なって 1 本に見え、塗りの囲みは部品が端に貼り付いて見え、どちらも囲みが読めない）。0.08 in は、線が重なるか、ほとんど接して見えるものを止める下限で、ふつうは 0.15 in（11pt の 1 字分）ほど空ける。幅が足りなければ、中の部品を細くするか間を詰める。組むときの警告が、囲みの辺から 0.08 in より近い縁のある部品（カード・札・箱・コード・表・数字の強調〔`stat`〕、塗りか枠線のある文字）を出す。
+- Do not color both the fill and the border. Use one or the other. A white card with a thin rule (`FFFFFF` + `DCE0E2`) is fine (見た目 1-7).
+- [visual-018] Cards, process nodes, and filled labels default to subtle rounded corners with a radius of **0.1 in** (the roundness of the original AI Deck Factory pptx). Do not increase the radius for larger boxes. `slides.py` builds this roundness by combining rectangles and circles. Do not use the roundness of Google's standard `ROUND_RECTANGLE` as is. For backgrounds, image frames, and other things that need square corners, write `"shape": "rectangle"` on JSON `box` and `text`. Inside meaningful line icons, you may combine whatever shapes you need.
+- [visual-019] Choose numbered circles from three sizes: small 0.3 in, 11pt (markers inside a figure); medium 0.36 in, 14pt (cards and steps; the default); large 0.48 in, 18pt (large stages). For medium and large, a digit height of about 40% of the circle looks balanced. Small uses 11pt to match the surrounding 11pt text (it is 11pt bold, so white on red reaches 3.62:1; visual-039). With a small circle and large text, "10" spills out of the circle (write `small`, `medium`, or `large` in `"size"` of JSON `num`; `NUM` in `slides.py`).
+- [visual-020] **Put number badges only on things whose order has meaning (steps, stages, numbers referred to by page).** If you put icons (product icons, line art) on cards for peer items, remove the numbers and keep only the icons. With both a number and an icon, two markers line up at the head of the row.
+- Keep arrows thin, in body color or supporting color. Do not make arrows the main feature (見た目 1-7).
+- [visual-021] **Arrows that pass between rows of boxes, such as a timeline axis, are at least 0.2 in away from the boxes above and below.** If they are close enough to touch the box edges, the arrow looks like a box border and is hard to read. Draw the axis midway between the boxes above and below.
+- [visual-022] **A small heading that moves to a different topic within one page (such as 「いまの〇〇では」 below a figure) is shown as separate from the figure above.** Put a thin rule (`RULE`) or a gap of 0.3 in or more between it and the figure above, and make the small heading at least 3pt larger than the bold labels inside the figure (such as the words under 「比べる軸」). With the same color and weight and only 1pt of difference, it reads as a continuation of the figure above. You may add a short phrase in supporting color saying what the section is about. Even if the small heading's color or weight differs from the figure above, a narrow gap still makes it look like a continuation, so apply the same rule. You do not need a large gap; a rule with 0.1–0.2 in above and below is enough.
+- [visual-023] When you enclose a range for emphasis, use a red (`RED`) rounded rectangle with a 2pt line and the same 0.1 in corner radius as the cards inside. The thickness is the same for dashed lines (a range inside a figure; `{"type": "box", "line": "RED", "shape": "round_rectangle", "dash": true}`) and solid lines (one table column; do not write `"dash"`). `box` makes red lines 2pt by default (`EMPH_PT` in `slides.py`; other borders are 0.75pt). The examples are on the template's component pages (pages 4 and 5).
+- [visual-024] **When you line up columns, align the top and bottom edges of the boxes across columns.** If only one column has a small heading (such as 「MCP の 3 種類」), the other column's box starts at the small heading's height, and both top and bottom look misaligned. Put the small heading in both columns or in neither. Fit box heights to the content, and make the total of the boxes in one column match the height of the boxes in the other columns. lint reports as `要確認` when the top or bottom edges of white cards in adjacent columns differ by 0.03–1.0 in. For columns of the same form (for example, three columns each stacking a card and a code box), make the box heights equal per tier, so that the top edges of the lower tier are on one horizontal line. In JSON, do not line up `stack`s in a `row`; put them in a `grid` (`cols` set to the number of columns) in tier order (`grid` equalizes heights per row; lining them up in a `row` gives a warning at build time). For one- or two-line text, first equalize the line counts by the line break positions and the wording (stop the parenthetical line break that drops just one word to the next line). For columns of the same form, fix this lint `要確認`.
+- [visual-025] Draw a horizontal arrow between two boxes at the vertical center of the boxes on both sides. Put the words for the arrow above the arrow, and do not shift the arrow to make room for the words. If you shift it, it looks misaligned in LibreOffice, PowerPoint, and Google Slides alike (lint reports it as `要確認`). However, when you draw two arrows, going and returning, between the same two boxes, shift the two equally above and below the center, and put the words above the upper line and below the lower line (lint does not count pairs of two or more; on JSON pages use the arrow's `offset` and `label_side`). When there is no room above, you may put the words below the line (to the left for a vertical line) (check on the image).
+- [visual-026] Align the main flow of a diagram (data or user actions) top to bottom or left to right. Things outside the main flow (such as the owner writing and maintaining the repository) may go in reverse or loop around. What matters is that what the page wants to say matches the diagram's main flow. If arrows point every which way and the main flow cannot be read, first align the direction of the main-flow arrows.
+- [visual-041] Do not lay out different kinds of flow in one diagram (such as the flow that obtains an authentication token and the connection that reads and writes data) in parallel in the same direction. Separate them by direction (vertical and horizontal) or by line style, and number the order with ①②. Do not draw components that the page's claim does not need; move them to the page that talks about them.
+- [visual-043] Place boxes in a flow diagram so that arrows can be drawn straight. Use bent lines (JSON `"route": "bent"`) only when branching from one box or merging into one, and do not bend a single flow to route around other boxes. If you want to bend it, re-place the two boxes it connects in the same row or the same column. A bent line makes it hard to read where the flow goes from and to, and people ask why it is bent. The build-time warning lists bent lines that are neither a branch nor a merge (arrows with sides written are not checked, because they are used for return lines and the like).
+- No shadows. No gradients. The official skill recommends shadows, but in Japanese materials they are said to be a sign of AI-made work (見た目 1-9、AI 実践 1-5).
+- [visual-027] Leave one character's width between the frame and the text. Do not pack text up to the edge of the frame. Rather than shrinking the text to fit the frame, cut the text or enlarge the frame (見た目 1-8). For left- or right-aligned text in a filled box, `d.text` and `d.label` leave one character's width (`../deck-build/slides.md` §4). lint reports as `要確認` text whose gap to the filled box edge is narrower than one character's width (the size of the smallest text in that frame). The same applies top and bottom. The bottom especially: adding bullets or items moves the last line toward the bottom edge of the frame, so when you add content also fix the box height, so that the gap between the last line and the bottom edge is about the same as the top padding (one character's width or more). `gslides.py check` measures, on the image of the page Google drew, the gap between top-aligned text of two or more lines in a filled box and the box's bottom edge, and reports gaps narrower than one character's width as `要確認` (`box_pad.py`; JSON line height estimates are off by ±0.4 in, so it measures on the image). The same applies to center-aligned bands and panels (such as a two-line note in a light band): do not make the box height just the line count. If it becomes two lines, either rephrase it to fit on one line, or add one character's width above and below. `box_pad.py` reports as `要確認` center-aligned text of two or more lines in a filled box whose gap to the box's top or bottom edge is narrower than one character's width. For white cards, keep the gap between the last line and the bottom edge at 0.28 in (about two characters' width) or more. Even when one character's width is met, the third bullet line looks close to the card's bottom edge. `box_pad.py` reports as `要確認` gaps to a white card's bottom edge narrower than 0.28 in. For a one-line tag placed right above a card's bottom edge (such as 「2 回まで」), check one character's width instead of 0.28 in.
+- [visual-028] Text in a standalone light panel (a filled box such as `PANEL` with text in it, with no box of the same height beside it) is centered vertically (`"valign": "middle"` is the default for filled JSON `text`), and the height fits the content. If you leave it top-aligned and make the box larger, only the bottom is empty, and its alignment does not match panels centered on other pages. Panels in the same row also use the same alignment. Columns of cards of the same height side by side may stay top-aligned so their headings line up. `gslides.py check` reports as `要確認`, on the image, top-aligned text in a light panel whose empty space below is 0.25 in or more larger than the space above (`box_pad.py`; white cards, navy boxes, and boxes with same-height boxes beside them are not checked).
+- [visual-044] **Place components inside an enclosure (the border of a `box`) at least 0.08 in inside all four sides of the enclosure.** Do not give a component's edge the same coordinate as the enclosure's edge (with a bordered enclosure the lines overlap and look like one, with a filled enclosure the component looks stuck to the edge, and in both cases the enclosure cannot be read). 0.08 in is the lower limit that stops lines that overlap or nearly touch; usually leave about 0.15 in (one 11pt character's width). If the width is not enough, make the inner components narrower or tighten the gaps. The build-time warning lists components with edges (cards, tags, boxes, code, tables, number emphasis 〔`stat`〕, and text with a fill or border) closer than 0.08 in to the enclosure's sides.
 
-## 5. 表とグラフ
+## 5. Tables and charts
 
-- 表は縦の罫線を消し、横の罫線も最小にする（結合したセルの区切りが見えにくい表だけ、JSON の `"borders": "grid"` で縦横に引く）。行が多いときは 1 行おきに `EEEDE9`。強調は 1 列か 1 セルだけ（見た目 1-12）。囲むときは赤の 2pt の角丸（4）。`d.table` は既定で、見出しの行を濃紺に白の太字、1 列目を濃紺の太字、1 行おきに `PANEL` にする（`first_col`・`zebra` で外せる）。
-- 表は `d.table` で作る（セルごとに書体と文字サイズを付ける）。図や表の中の文字だけ書体が違うと、そこだけ組みが崩れる（AI 実践 1-2。lint が Noto Sans JP でない書体を止める）。
-- グラフは凡例を付けず、系列の近くに直接ラベルを書く。目盛りは 3〜5 本。3D・影・グラデーションを使わない。系列の色は 1 の表から取る（見た目 1-12）。1 系列の棒は、JSON の `bars` がこの形で描く（`../deck-build/slides.md` の 2）。棒に重ねる折れ線（単位の違う数）は灰色、目標・上限の直線は赤の点線にし、どちらも線のそばに数と何の線かを書く。両方を重ねるときは、赤が 2 つにならないよう、強調の棒（`hot`）を控える。
+- Remove vertical rules from tables and keep horizontal rules to a minimum (only for tables where the borders of merged cells are hard to see, draw both with JSON `"borders": "grid"`). When there are many rows, use `EEEDE9` on alternate rows. Emphasize only one column or one cell (見た目 1-12). To enclose, use a red 2pt rounded rectangle (§4). By default `d.table` makes the header row white bold on navy, the first column navy bold, and alternate rows `PANEL` (`first_col` and `zebra` turn these off).
+- Build tables with `d.table` (it sets the font and text size per cell). If only the text inside a figure or table has a different font, the layout breaks there (AI 実践 1-2; lint stops fonts other than Noto Sans JP).
+- Charts have no legend; write labels directly near the series. Use 3–5 gridlines. No 3D, shadows, or gradients. Take series colors from the §1 table (見た目 1-12). JSON `bars` draws single-series bars in this form (`../deck-build/slides.md` §2). A line laid over bars (a quantity in different units) is gray, and a straight line for a target or limit is a red dashed line; next to each line, write its value and what the line is. When you lay both over, hold back the emphasized bar (`hot`) so there are not two reds.
 
-## 6. 図解の型
+## 6. Diagram patterns
 
-言いたい 1 文から型を選び、1 枚に 1 つの型にする。構成案の各ページに型を書く（見た目 1-13。型の名前の一次出典は未確認）。
+Choose the pattern from the one sentence you want to say, and use one pattern per page. Write the pattern for each page in the outline (見た目 1-13. The primary source of the pattern names is unconfirmed).
 
-| 言いたいこと | 型 | 図の約束 |
+| What you want to say | Pattern | Diagram convention |
 |---|---|---|
-| 〜は 3 つある | 並列 | 同じ大きさの箱を並べる。同じ大きさは同格を表す |
-| 〜と〜は違う | 対比 | 左右に並べ、比べる軸をそろえる |
-| 〜の順に進む | 推移 | 左から右か、上から下。矢印は順序を表す |
-| 〜で成り立っている | 構造 | 積み上げか入れ子。囲みはグループを表す |
-| 〜を繰り返す | 循環 | 輪。始まりの位置を示す。横長のスライドでは淡い塗りの楕円の軌道に段を載せ、向きは段の間の軌道の上の矢じりで示す（下の箇条） |
-| 〜に分かれる | 階層 | 木 |
+| There are three X | Parallel | Line up boxes of the same size. Same size means peer status |
+| X and Y differ | Contrast | Place them left and right, and align the axes of comparison |
+| It proceeds in the order X | Transition | Left to right, or top to bottom. Arrows show order |
+| It is made up of X | Structure | Stacked or nested. Enclosures show groups |
+| It repeats X | Cycle | A ring. Show where it starts. On a wide slide, put the stages on the orbit of a lightly filled ellipse, and show direction with arrowheads on the orbit between stages (the bullet below) |
+| It splits into X | Hierarchy | A tree |
 
-- [visual-029] **循環は、段と段を直線の矢印でつながない。** 輪の上に置いた箱を直線でつなぐと、円を無理にたどった形になる。淡い塗り（`PANEL`）と細い輪郭（`SUB`）の楕円を 1 つ置き、その輪郭の上に段の箱を載せ、段の間の輪郭に、輪郭の接線の向きの短い矢じりを置く。輪の内側には、1 周で何が起きるかを 1〜2 行で置ける。レビューの観点 5 で見る。
-- 同じ大きさの箱を均等に並べる型は、中身が本当に並列のときだけ使う。毎ページ「カード 3 枚」にしない（見た目 1-9、AI 実践 1-5）。
-- [visual-030] 顧客の事例のページは、社名の文字の代わりに、その会社のロゴを置く。どの会社の話かがひと目で分かり、見栄えもよい。ロゴの取り方は `../deck-build/slides.md` の 6。複数社を並べるときは、高さを見た目の重さでそろえる（横長のロゴは低く、マークが大きいロゴは高く）。
+- [visual-029] **In a cycle, do not connect stages with straight arrows.** Connecting boxes on a ring with straight lines forces a circle to be traced. Place one ellipse with a light fill (`PANEL`) and a thin outline (`SUB`), put the stage boxes on its outline, and place short arrowheads, pointing along the outline's tangent, on the outline between stages. Inside the ring you can put one or two lines on what happens in one round. Check this in review aspect 5.
+- Use the pattern of evenly lined-up same-size boxes only when the content is truly parallel. Do not make every page "three cards" (見た目 1-9、AI 実践 1-5).
+- [visual-030] On customer case study pages, place that company's logo instead of the company name in text. It shows at a glance which company the story is about, and it looks good. For how to get logos, see `../deck-build/slides.md` §6. When you line up several companies, equalize the heights by visual weight (wide logos lower, logos with a large mark taller).
 - [visual-031] 考え方を説明する図（「製品 A・B」のような一般名の対比）も、顧客向けなら聞き手のいまの構成（部門、使っている製品、データの入れ方と使い方）に当てはめて描く。左にいまの姿、右に考え方を当てはめた姿を置くと、聞き手が自分の話として読める。いまの姿に置く製品は、アカウントマップ・RFI・顧客の `profile.md`・`memory.md` で確かめ、聞き手が使っている主要なもの（DB なら Oracle など）を漏らさない。漏れると「分かっていない」と読まれる。逆に、聞き手がしていない連携（例: 基幹へのリバース ETL）を、一般論の流れとして描かない。描くのは聞き手の痛みのある流れ（例: 基幹からの取り込み）で、それが提案の狙いにつながるようにする。聞き手の構成で確かめていないところは図に書かず、ノートの問いかけにする。当てはめるときは、言いたいことに要る要素だけを入れる（運用の主体やツールの名前などの細部は入れない）。2 重管理のような状態は、言葉のラベルではなく、同じ部品（データの印など）が 2 か所にあることで見せる。変えたあとの姿の図には、聞き手のいまの資産（Git のリポジトリ、Notion など）がどこで活きるかを部品として入れる。ただし、置き換わる仕組み（内製の ETL など）は、変えたあとの姿に残さない。そこは置き換える機能（「Databricks の機能で取り込む」など）で書くか、ラベルを省く。一方、歴史や一般論を説明する図は、固有の製品名を出さず、使い方（DWH・ETL・AI エージェントなど）で描く。製品名は、聞き手に当てはめるページで出す。
-- [visual-032] 選択肢を並べる図（クラウドごとの経路、プランごとの構成など）で、顧客の環境が分かっているときは、一般の形で全部を並べたままにしない。顧客の環境の選択肢を赤（`RED`）の角丸で囲むか、関係のない選択肢を消す。手順の基準（相手の製品のヘルプの手順など）は、比べるために 1 行だけ残してよい。顧客の環境を相手（パートナーなど）に伝えてよいか迷うときは、黙って一般の形にせず、ユーザーに聞く。レビューの観点 3 で見る。
-- [visual-033] いまの姿と変えたあとの姿を 2 枚で見せるときは、2 枚を同じ骨組み（段の並び、箱の位置と大きさ、番号）で描き、変わるところだけを変える。めくったときに、違い（箱が 1 つにまとまる、道筋が短くなる）が図で分かる。めくって続けて見せるほかのページ（クイズの問いと答え、同じ図に印を足していくページ）も同じで、同じ部品の位置と大きさをそろえる。中身の量が違っても箱の高さはそろえ、増えた分は下に足す。
-- [visual-034] 対比や推移で列を並べる図は、どの列にも同じ部品を同じ段に描く（例: 上の段にクエリエンジン、下の段にデータの置き場所）。ある列で部品を省くと、その列で何が起きているか（どこで分析するか）が図から読めない。中身についての指摘を受けて直すときは、文言だけでなく図にも反映する。誰が何を読み、何を作り、誰がそれを使うかは、文で書くだけにせず、作る側 → できたもの → 使う側の矢印で描く。
-- [visual-035] 同じ 2 つを比べるページが続くとき（OLAP と OLTP、従来の DB と Lakebase など）は、どのページでも左右の順（表なら列の順）を同じにする。主役の側（Lakebase など）を置く側もそろえる。レビューの観点 2 で見る。
-- [visual-036] 構成図（データの流れ、役割分担、つなぎ方）は、箱に「データソース」「SIEM」のような一般名だけを書かない。ログの種類や製品の具体名を書き、製品にはロゴか製品のアイコン、ログの種類には線画のアイコン（1 つのセット・1 色）を添える。聞き手の環境に当てはまるか分からない具体名には「（例）」を付ける。つなぎ方は別の囲みに書かず、箱の間の矢印に手段の名前（Add-on、HEC など）を添える。Appendix などの小さな流れの図（「ビジネスメンバー → Genie One → Notion」のように箱を矢印でつないだもの）も構成図として扱い、製品の箱にはロゴ、人の箱には線画のアイコンを置く。文字だけの箱にしない（アイコンがあるほうが見栄えがよい）。系統の図（フォーク・組み込みの関係）と使い分けの図も構成図として扱い、製品・OSS の箱に公式のロゴ（Iconify の `logos:`・`simple-icons:`、なければ GitHub の組織のアバター）を、ロゴのない OSS には書かれた言語のロゴか線画を添える。画像は `d.image` で置く。アイコンは中身を見分けるために置き、見出しや文の飾りには置かない（7 の「意味のないアイコン」）。ロゴとアイコンの作り方は `../deck-build/slides.md` の 6。
-- [visual-042] **データを写す流れと、写さずに問い合わせる向きを、同じ実線の矢印で描かない。** データが動くもの（写す・同期する）は太い実線の矢印にし、受け側に写しの箱を描く。問い合わせが届くだけでデータが動かないもの（フェデレーション、カタログに登録して読む）は点線の矢印（JSON の arrow の `"dash": true`）にし、問い合わせる側から向きを描き、受け側にデータの箱を描かない。どちらかは凡例か囲み（「データを写す」「写さずに問い合わせる」）で示す。データのつなぎ方（連携・同期・登録・フェデレーション）を並べるページは、カードではなく、置き場所の箱の間の道の図にする。
-- [visual-045] 1 回・1 本の作業の時間割（何分に何をしたか）は、表ではなく時間の帯（ガント。横に時刻、縦に工程か作業。JSON の `gantt` の `cols` に時刻の区切りを書く）で描き、長い区間と主張に効く区間を色（`status` の `hot`）で示す。
+- [visual-032] In diagrams that line up options (paths per cloud, configurations per plan, and so on), when the customer's environment is known, do not leave all options lined up in the general form. Enclose the customer's option in a red (`RED`) rounded rectangle, or remove the irrelevant options. You may keep one row of the reference procedure (such as the procedure in the other party's product help) for comparison. When you are unsure whether you may tell the other party (such as a partner) about the customer's environment, do not quietly fall back to the general form; ask the user. Check this in review aspect 3.
+- [visual-033] When you show the current state and the changed state on two pages, draw both with the same skeleton (order of tiers, position and size of boxes, numbers), and change only what changes. When the reader flips the page, the difference (boxes merging into one, a shorter path) shows in the diagram. The same applies to other pages shown in sequence by flipping (a quiz question and its answer, pages that add markers to the same diagram): keep the positions and sizes of the same components. Even when the amount of content differs, keep the box heights equal, and add what grows at the bottom.
+- [visual-034] In diagrams that line up columns for contrast or transition, draw the same components in the same tier in every column (example: query engine in the upper tier, data storage in the lower tier). If you drop a component in one column, the diagram no longer shows what happens in that column (where the analysis happens). When you fix things after a finding about the content, reflect it in the diagram too, not only in the wording. Who reads what, who builds what, and who uses it: do not only write it in text; draw it with arrows from builder → result → user.
+- [visual-035] When pages comparing the same two things follow one another (OLAP and OLTP, a conventional DB and Lakebase, and so on), keep the left-right order (the column order for tables) the same on every page. Also keep the main side (such as Lakebase) on the same side. Check this in review aspect 2.
+- [visual-036] In architecture diagrams (data flows, division of roles, how things connect), do not write only general names like 「データソース」 or 「SIEM」 in the boxes. Write the concrete log types and product names, and add a logo or product icon to products and a line icon (one set, one color) to log types. Add 「（例）」 to concrete names when you do not know whether they apply to the audience's environment. Do not write the connection method in a separate enclosure; add the name of the means (Add-on, HEC, and so on) to the arrow between boxes. Treat small flow diagrams in the Appendix and elsewhere (boxes connected by arrows, like 「ビジネスメンバー → Genie One → Notion」) as architecture diagrams too: put logos in product boxes and line icons in people boxes. Do not make text-only boxes (icons look better). Also treat lineage diagrams (forks, embedding relations) and when-to-use-which diagrams as architecture diagrams: give product and OSS boxes their official logo (Iconify `logos:` or `simple-icons:`, otherwise the GitHub organization's avatar), and give OSS without a logo the logo of the language it is written in or line art. Place images with `d.image`. Place icons to tell content apart, not to decorate headings or text (§7, "meaningless icons"). For how to make logos and icons, see `../deck-build/slides.md` §6.
+- [visual-042] **Do not draw a flow that copies data and a direction that queries without copying with the same solid arrow.** Things where data moves (copy, sync) get a thick solid arrow, with a box for the copy on the receiving side. Things where only queries arrive and data does not move (federation, registering in a catalog and reading) get a dashed arrow (JSON arrow `"dash": true`), drawn in the direction from the querying side, with no data box on the receiving side. Show which is which with a legend or an enclosure (「データを写す」, 「写さずに問い合わせる」). Pages that line up ways of connecting data (integration, sync, registration, federation) use a diagram of paths between storage boxes, not cards.
+- [visual-045] Draw the timetable of one run or one piece of work (what was done at which minute) not as a table but as time bars (a Gantt chart: time across, steps or tasks down; write the time divisions in `cols` of JSON `gantt`), and show long segments and segments that matter to the claim with color (`hot` in `status`).
 
-## 7. AI が作った資料に出やすい癖
+## 7. Habits typical of AI-made materials
 
-どれも、主題と関係なく既定値のまま出るのが問題（研究 1-8）。見つけたら、そのページで役に立つかを考えて、要らなければ消す。
+In every case, the problem is that they appear as defaults unrelated to the subject (研究 1-8). When you find one, consider whether it helps on that page, and remove it if it does not.
 
-- 絵文字、長いダッシュ（—）、英語の大文字のラベル（「KEY POINTS」型）。lint が数える
-- 見出しの下の線、スライドの端の縦の線、カードの片側だけの線（公式スキルも禁止）
-- 影つきの角丸カードの量産、意味のないアイコン（名詞の飾り）、毎ページ同じ型
-- 暗い地にネオンの色、グラデーション
+- Emoji, long dashes (—), uppercase English labels (the 「KEY POINTS」 type). lint counts them
+- Lines under headings, vertical lines at the slide edge, a line on only one side of a card (the official skill also forbids these)
+- Mass-produced rounded cards with shadows, meaningless icons (decorations for nouns), the same pattern on every page
+- Neon colors on dark backgrounds, gradients
 - 「〜を実現」「シームレス」「次世代」などの空疎な言い回し（content.md の 6）
 - 会社名や製品名を替えてもそのまま使える文
-- 全ページに同じ飾り。キッカーと結論バンドは、1 のとおり要るページにだけ置く
+- The same decoration on every page. Place the kicker and the conclusion band only on pages that need them, as in §1
 
-## 8. AI がよく出すデザイン案で使わないもの
+## 8. AI design suggestions not to use
 
-1 のとおり、AI がよく出すデザイン案（公式の pptx スキルの Design Ideas が代表。スライドにはこのスキルを使わないが、モデルは同じ案を出しがち）よりこのフォルダの型を優先する。具体的には次を使わない（見た目 2 節）。
+As in §1, this folder's style takes priority over the design suggestions AI often makes (the official pptx skill's Design Ideas are the typical case. We do not use that skill for slides, but models tend to make the same suggestions). Specifically, do not use the following (見た目 2 節).
 
-| 公式スキル | 使わない理由 |
+| Official skill | Why not use it |
 |---|---|
-| タイトル 36〜44pt | 和文は 1 字が欧文のほぼ 2 倍の幅。36pt では 1 行が 20 字ほどになり、主張の文が入らない。1 の 24pt でよい |
-| 「すべてのスライドに画像・アイコン・図を」 | 和文の資料では、飾りのアイコンが AI っぽさのしるし。中身が図になるときだけ図を置く |
-| 影で区別、色付きの円にアイコン | 同上。パネル `EEEDE9` と罫線 `DCE0E2` で足りる |
-| 安全な書体は Arial・Calibri | 和文は Noto Sans JP。欧文も同じ書体の欧文を使い、混ぜない（コードだけは等幅の Cascadia Mono。2） |
-| 主題ごとに大胆な配色、クリーム色の地を避ける | 1 の公式ブランドの配色に固定する。地の Oat Light はブランドの色として選んだもの |
-| 60〜72pt の大きな数字 | 読む資料なら 32〜40pt で足りる |
-| 斜体のアクセント | 和文に斜体はない |
+| Title 36–44pt | One Japanese character is almost twice as wide as a Latin one. At 36pt one line holds about 20 characters, and a claim sentence does not fit. The 24pt in §1 is enough |
+| "Images, icons, or diagrams on every slide" | In Japanese materials, decorative icons are a sign of AI-made work. Place a diagram only when the content becomes a diagram |
+| Distinguish with shadows; icons in colored circles | Same as above. The panel `EEEDE9` and the rule `DCE0E2` are enough |
+| Safe fonts are Arial and Calibri | Japanese uses Noto Sans JP. Latin text also uses the Latin glyphs of the same font, without mixing (only code uses the monospace Cascadia Mono; §2) |
+| Bold palettes per subject; avoid cream backgrounds | Fix the palette to the official brand palette in §1. The Oat Light background was chosen as a brand color |
+| Large numbers at 60–72pt | For materials meant to be read, 32–40pt is enough |
+| Italic accents | Japanese has no italics |

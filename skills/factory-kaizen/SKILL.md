@@ -1,43 +1,43 @@
 ---
 name: factory-kaizen
-description: 工場（プラグイン、大元）を改善する。現場（ワークスペース）で育った決まり・点検・スクリプトの直しのうち、ほかの人にも効くものを、過去の資料で確かめてから、プラグインのリポジトリに Issue で出す。元のリポジトリを clone して変更案を書き、変えた版と前の版で lint をかけ比べ、正本から仮に組み直したページの画像を前後で並べ、理由・背景・検証の結果・画像・変更案の差分を入れた Issue を作る。PR は持ち主が Issue から作る。dreaming の「プラグインに上げる」提案を適用するとき、「工場を改善して」「プラグインに Issue を出して」「大元を直して」と頼まれたときに使う。
+description: Improve the factory (the plugin, upstream). Of the rules, checks, and script fixes that grew in the field (a workspace), take those that help other people too, verify them on past materials, and file them as an Issue on the plugin repository. Clones the upstream repository and writes the proposed change, runs lint with the changed and previous versions and compares, rebuilds pages from the source of truth with both versions and lays the images side by side, and creates an Issue with the reason, background, verification results, images, and the diff of the proposed change. The owner creates the PR from the Issue. Use when applying dreaming's 「プラグインに上げる」 proposals, or when asked 「工場を改善して」, 「プラグインに Issue を出して」, or 「大元を直して」.
 ---
 
-# 工場を改善する（大元に Issue を出す）
+# Improve the factory (file an Issue upstream)
 
-ワークスペースは、修正の指示とやり取りの積み重ねで、決まり（AGENTS.md・`rules/`）と点検（`rules/deck-build/checks.py`）を育てていく 1 つのプロダクトとして扱う。そのうち、ほかの人にも効くもの（その人の好みや顧客の事情でないもの）だけを、ここで大元（プラグイン）に Issue として出す。何をどこに置くかは `../deck-practices/rules.md` の「決まりの層」。
+Treat the workspace as one product whose rules (AGENTS.md, `rules/`) and checks (`rules/deck-build/checks.py`) grow from accumulated corrections and exchanges. Of these, file only the ones that help other people too (not one person's taste or one customer's circumstances) as an Issue upstream (the plugin). What goes where is in "Rule layers" of `../deck-practices/rules.md`.
 
-Issue を読んだプラグインの持ち主が、入れるかを決め、ほかのコードと合わせて書き直して PR にする。だから Issue には、持ち主がワークスペースを見ずに決められるだけの材料（何が起きたか、数、確かめた結果、画像、変更案の差分、迷ったところ）を入れる。変更案は、確かめられる形で動けば足りる。きれいにする・縮める・レビューを回す（simplify・review-loop など）のは持ち主がするので、ここではしない。
+The plugin owner reads the Issue, decides whether to take it, and rewrites it to fit the rest of the code as a PR. So the Issue must contain enough material for the owner to decide without seeing the workspace (what happened, counts, verification results, images, the diff of the proposed change, open questions). The proposed change only needs to work in a verifiable form. Cleaning up, shrinking, and running reviews (simplify, review-loop, etc.) are the owner's job, so do not do them here.
 
-前提: `gh` にログインしていること。ワークスペースで回す。元のリポジトリ（`.claude-plugin/plugin.json` の `repository`）は `start` が `.factory/kaizen/<名前>/repo` に clone するので、手元に checkout も fork も用意しなくてよい。
+Prerequisites: `gh` is logged in. Run in the workspace. `start` clones the upstream repository (`repository` in `.claude-plugin/plugin.json`) into `.factory/kaizen/<name>/repo`, so no local checkout or fork is needed.
 
 ```sh
-P="python3 <このスキルのフォルダ>/scripts/kaizen.py"
-$P start <名前>                                   # .factory/kaizen/<名前>/repo に clone（ブランチ kaizen/<名前>）
-$P lint <名前> <資料の URL ...>                    # いまの資料に、前の版と変えた版の lint をかけて比べる
-$P rebuild <名前> <資料のフォルダ ...> [--pages 2,5]   # 正本から前後の版で仮に組み、変わったページの画像を並べる（仮の資料はゴミ箱へ）
-$P open <名前> --title <題> --body <本文.md>       # 元のリポジトリに Issue。2 回目からは同じ Issue を書き換える
-$P clean <名前>                                   # Issue が閉じられたあと（clone ごと消す）
+P="python3 <this skill's folder>/scripts/kaizen.py"
+$P start <name>                                   # clone into .factory/kaizen/<name>/repo (branch kaizen/<name>)
+$P lint <name> <material URL ...>                 # run lint with the previous and changed versions on current materials and compare
+$P rebuild <name> <material folder ...> [--pages 2,5]   # build temporarily from the source of truth with both versions and lay changed pages' images side by side (the temporary materials go to the trash)
+$P open <name> --title <title> --body <body.md>   # Issue on the upstream repository. From the second time, rewrites the same Issue
+$P clean <name>                                   # after the Issue is closed (deletes the clone too)
 ```
 
-## 手順
+## Steps
 
-1. **出すものを決める。** 何を変えるか、なぜか（決まりの台帳の `ledger.py why <決まりの ID>` に出る指摘と資料・顧客の数、再発とレビューの結果、`.factory/lint_runs.jsonl` や dreaming の記録の数字）を 1 つにまとめる。原文と資料の名前は Issue に書かず（2 の `start` のあとは `verify/detail.md` にだけ書く）、Issue には数を書く。ワークスペースの `rules/` に写しがあるなら、それを大元に移す形にする。顧客の `memory.md`（`ws-memory`）の好みは、じかに上げない（2 社以上で同じなら、dreaming が先に `rules/` に寄せる。`../deck-practices/rules.md` の「顧客の memory」）。移した決まりには、プラグインの接頭辞の新しい ID を付ける（`.factory/kaizen/<名前>/repo` の中で同じ接頭辞のいちばん大きい番号の次。`ws-` は付けない）。本文には ID と短い理由だけを書き、日付と原文は書かない（`../deck-practices/rules.md` の「修正の指示の戻し方」）。
-2. **`start` して、`.factory/kaizen/<名前>/repo` の中に変更案を書き、commit する。** プラグインの入った場所は直さない。ブランチは push しない（Issue に差分を載せる）ので、commit の分け方とメッセージは自由でよい。
-3. **過去の資料で確かめる。** 変えたものに合わせて選ぶ。
-   - 決まり・点検（`lint.py`、`checks.py` から移したもの）: `lint` を、その規則が効くはずの資料と、効いてはいけない資料の両方にかける。候補は `.factory/lint_runs.jsonl` の資料（その規則の指摘が出た資料）と `references_index.md` の「作った」。
-   - 組み方・見た目（`slides.py`・`docs.py`・`template.py`、`visual.md`・`visual_doc.md`、テンプレート、画像）: `rebuild` を、変わるはずのページがある資料にかける。前後の画像は必須（`open` が止める）。
-   - 見た目が前後で変わらない変更（lint だけの変更で `visual.md` の文も変えたときなど）: `rebuild` は「変わったページ: なし」になり、画像を作らない。変えた決まりが効くページの画像（見本を組んだものなど）を `verify/img/` に手で置き、本文の「過去資料での検証」に、見た目が前後で変わらないことを書く。`rebuild` の目印（`verify/pr.md` の `<!-- img:<ファイル名> -->`）のない画像は、`open` が検証の記録の末尾の「ほかの画像」にまとめて載せる（ほかの場所に載せたいなら、`verify/pr.md` に目印を足す）。
-   - 文だけの直し（手順の書き換えなど）: 検証が要らなければ、本文の「過去資料での検証」に `検証しない理由:` を書く。
-   - 結果を読み、増えた指摘が誤検知でないか、消えた指摘が本当に直ってよいものかを、`.factory/kaizen/<名前>/verify/detail.md`（資料の名前と指摘の本文が入る）で確かめる。思った結果でなければ 2 に戻る。
-4. **本文を書く。** 下の型で `.factory/kaizen/<名前>/body.md` に書く。節はすべて要る（`open` が止める）。
-5. **ユーザーに確かめてから `open` する。** Issue はリポジトリの外の人も読む。次の 2 つを見せて、よいと言われてから出す。
-   - 本文
-   - 載せる画像（`verify/img/` と、変えた png。png は差分に中身が出ないので、`open` が変えた版を画像として載せる）。顧客向けの資料（`Customers/`）の画像は、顧客の名前・数字・社外秘が写るので、原則として載せない。社内向けか、公開の内容だけの資料で確かめ直す。
-   `open` は、節がそろっているか、検証があるか、見た目の変更に画像があるかを確かめてから、画像を `pr-assets` ブランチ（元のリポジトリに書けなければ、自分の fork の。fork がなければ `open` が GitHub に作る）に置き、検証の記録（資料は「資料 1」の番号だけ。名前・URL・本文は出さない）と、前の版の commit と、変更案の差分（`git diff origin/main...HEAD`。`start` が clone した元のリポジトリの main が起点）を本文に足して Issue を作る。本文が上限を超えるほど差分が長いときは、差分を載せず行数だけを書く（分けて出す）。
-6. **返す。** Issue の URL を返す。dreaming のプラグインへの提案（P-ID）から出したなら、`ledger.py sent <P-ID> --issue <URL>` で決まりの台帳に残す（変更案で提案と違う ID にしたら `--rule <その ID>` も付ける）（dreaming が同じ提案を出し直さない）。Issue の行方は `gh issue view <URL> --json state,stateReason` で見る。入れずに閉じられたら（`NOT_PLANNED`）、`ledger.py reject <P-ID> --reason <理由>`。直して閉じられたら（`COMPLETED`）、`claude plugin update ai-deck-factory@ai-deck-factory`（pi は入れ方による）で届くことを伝え、`clean` する。届くと、dreaming が `ledger.py candidates` の「写しを消す」で、ワークスペースの `rules/` の写しを消す提案を出す（上げた文が、入っているプラグインにあるかで見る。持ち主が文や ID を変えて入れたら出ないので、dreaming の 4e の重なりで消す）。出典の指摘は `sent` で新しい ID につながっている。出典にしなかった指摘が写しに残っていれば（`ledger.py why <ws-ID>`）、指摘ごとに `ledger.py route <c-ID> <プラグインの ID>` でつなぎ直す。
+1. **Decide what to file.** Combine into one: what to change and why (the findings and the number of materials and customers shown by `ledger.py why <rule ID>` in the rule ledger, recurrences and review results, figures from `.factory/lint_runs.jsonl` or dreaming's records). Do not write original quotes or material names in the Issue (after `start` in step 2, write them only in `verify/detail.md`); write counts in the Issue. If the workspace `rules/` has a copy, frame it as moving that copy upstream. Do not file preferences from a customer's `memory.md` (`ws-memory`) directly (if two or more customers share one, dreaming first moves it into `rules/`; "Customer memory" in `../deck-practices/rules.md`). Give a moved rule a new ID with the plugin's prefix (the next number after the largest one with the same prefix in `.factory/kaizen/<name>/repo`; no `ws-`). In the rule text write only the ID and a short reason, not dates or original quotes ("Routing corrections" in `../deck-practices/rules.md`).
+2. **Run `start`, write the proposed change inside `.factory/kaizen/<name>/repo`, and commit.** Do not edit the plugin's install location. The branch is not pushed (the diff goes into the Issue), so commit granularity and messages are free.
+3. **Verify on past materials.** Choose by what changed.
+   - Rules and checks (`lint.py`, things moved from `checks.py`): run `lint` on both materials the rule should fire on and materials it must not fire on. Candidates are the materials in `.factory/lint_runs.jsonl` (materials where that rule's finding appeared) and 「作った」 in `references_index.md`.
+   - Layout and appearance (`slides.py`, `docs.py`, `template.py`, `visual.md`, `visual_doc.md`, templates, images): run `rebuild` on materials that have pages that should change. Before/after images are required (`open` stops without them).
+   - Changes whose appearance does not differ before and after (for example a lint-only change that also edits text in `visual.md`): `rebuild` reports 「変わったページ: なし」 and makes no images. Place images of pages where the changed rule applies (for example built samples) in `verify/img/` by hand, and write in the 「過去資料での検証」 section of the body that the appearance does not change. Images without a `rebuild` marker (`<!-- img:<file name> -->` in `verify/pr.md`) are collected by `open` under 「ほかの画像」 at the end of the verification record (to show them elsewhere, add a marker to `verify/pr.md`).
+   - Text-only edits (rewording a procedure, etc.): if no verification is needed, write `検証しない理由:` in the 「過去資料での検証」 section of the body.
+   - Read the results, and in `.factory/kaizen/<name>/verify/detail.md` (which contains material names and finding text) check that added findings are not false positives and that removed findings really should go away. If the results are not what you expected, go back to step 2.
+4. **Write the body.** Write it in `.factory/kaizen/<name>/body.md` using the template below. Every section is required (`open` stops otherwise).
+5. **Confirm with the user before `open`.** People outside the repository also read the Issue. Show these two and file only after the user approves.
+   - The body
+   - The images to include (`verify/img/` and changed png files; a png's content does not show in a diff, so `open` includes the changed version as an image). As a rule, do not include images from customer-facing materials (`Customers/`), because they show the customer's name, numbers, and confidential information. Re-verify with internal materials or materials with only public content.
+   `open` checks that the sections are complete, that verification exists, and that appearance changes have images. It then puts the images on the `pr-assets` branch (of your fork if you cannot write to the upstream repository; if there is no fork, `open` creates one on GitHub), appends the verification record (materials only as numbers like 「資料 1」; no names, URLs, or text), the previous version's commit, and the diff of the proposed change (`git diff origin/main...HEAD`, based on main of the upstream repository cloned by `start`) to the body, and creates the Issue. If the diff is so long that the body exceeds the limit, leave out the diff and write only its line count (file it in parts).
+6. **Report back.** Return the Issue URL. If it came from a dreaming proposal to the plugin (P-ID), record it in the rule ledger with `ledger.py sent <P-ID> --issue <URL>` (if the proposed change uses an ID different from the proposal, also add `--rule <that ID>`) (so dreaming does not propose the same thing again). Follow the Issue with `gh issue view <URL> --json state,stateReason`. If it is closed without being taken (`NOT_PLANNED`), run `ledger.py reject <P-ID> --reason <reason>`. If it is closed as fixed (`COMPLETED`), tell the user it arrives with `claude plugin update ai-deck-factory@ai-deck-factory` (for pi, depends on how it was installed), and run `clean`. Once it arrives, dreaming proposes deleting the copy in the workspace `rules/` through 「写しを消す」 of `ledger.py candidates` (it checks whether the filed text is in the installed plugin; if the owner changed the text or ID, it does not appear, so dreaming removes it through the overlap check in its step 4e). The source findings are already linked to the new ID by `sent`. If findings that were not used as sources remain on the copy (`ledger.py why <ws-ID>`), relink each finding with `ledger.py route <c-ID> <plugin ID>`.
 
-## 本文の型
+## Body template
 
 ```markdown
 ## 変えること
@@ -59,7 +59,7 @@ $P clean <名前>                                   # Issue が閉じられた�
 <確信のない判断・前提（しきい値を何本の資料で決めたか、など）と、とらなかった案。なければ「なし」>
 ```
 
-## 注意
+## Notes
 
-- Issue の本文と画像に、顧客の名前・社内の URL・個人名を入れない（AGENTS.md の「社外秘と顧客の情報」と同じ）。`open` は、題・本文・ブランチの名前・変えたファイルの名前・載せる差分（消した行と前後の行も）に、ワークスペースの `Customers/` の顧客の名前、`Customers/<顧客>/` と `Internal/` の資料のフォルダの名前（年の 4 桁の数字が入ったもの。決まりでは `<内容>_<日付>`）、`factory.toml` の `[factory] private` の語があると止める。日付のないフォルダの名前や、日本語の社名・製品名は `[factory] private` に書く。決まりの出典の括弧は「顧客向けの資料の p.3」「ユーザー「（顧客）は〜」」のように書く。
-- 検証で組んだ仮の資料は `drive.factory` に作り、終わったらゴミ箱に移す（`--keep` のときだけ残る）。lint の記録（`.factory/lint_runs.jsonl`）には入らない。
+- Do not put customer names, internal URLs, or personal names in the Issue body or images (same as 「社外秘と顧客の情報」 in AGENTS.md). `open` stops if the title, body, branch name, changed file names, or included diff (including removed lines and context lines) contain a customer name from the workspace's `Customers/`, a material folder name under `Customers/<customer>/` or `Internal/` (one containing a 4-digit year; by rule `<内容>_<日付>`), or a word in `[factory] private` of `factory.toml`. Write folder names without dates, and Japanese company and product names, in `[factory] private`. Write the source parentheses of a rule like 「顧客向けの資料の p.3」 or 「ユーザー「（顧客）は〜」」.
+- Temporary materials built for verification are created in `drive.factory` and moved to the trash afterward (kept only with `--keep`). They are not recorded in the lint log (`.factory/lint_runs.jsonl`).

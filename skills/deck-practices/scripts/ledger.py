@@ -561,7 +561,7 @@ def flat(s):
 def rule_texts(ws):
     """決まりの ID → その決まりの文（同じ行の次の [ID] まで。行の最初の決まりは行の頭から、最後の決まりは続く字下げの行も）を flat にしたもの。
     行の頭に立つ決まり（[content-001] **どの種類でも**）は、空行までの ID のない行も。箇条書きの決まりには、隣の ID のない項目をつなげない（その項の語句を近くの ID に付けたら止める）。
-    プラグインとワークスペースの決まりと顧客の memory から。[ID] は決まりを書いたところにだけ付け、ほかから指すときは角括弧を付けない（rules.md の決まりの ID）。"""
+    プラグインとワークスペースの決まりと顧客の memory から。[ID] は決まりを書いたところにだけ付け、ほかから指すときは角括弧を付けない（rules.md の「Rule IDs」）。"""
     out = {}
     for t in texts([PLUGIN, ws / "AGENTS.md", ws / "rules", *(ws / "Customers").glob("*/memory.md")], {Path(__file__).resolve()}):
         bodies(t, out)

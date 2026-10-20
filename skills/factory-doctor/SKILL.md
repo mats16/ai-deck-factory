@@ -1,38 +1,38 @@
 ---
 name: factory-doctor
-description: AI Deck Factory を動かす前提を確かめる。Python・uv、ワークスペース（factory.toml・AGENTS.md）、スキルの重なり、Google の認証（環境変数のトークンか認証情報の JSON）、テンプレートと Drive のフォルダに届くか、材料を集める MCP を見て、直し方を出す。factory-init のあと、新しい環境、401・403、「factory.toml が見つからない」が出たとき、「環境を確かめて」「doctor して」と頼まれたときに使う。
+description: Check the prerequisites for running AI Deck Factory. Looks at Python and uv, the workspace (factory.toml, AGENTS.md), overlapping skills, Google authentication (a token in an environment variable or a credentials JSON), whether templates and Drive folders are reachable, and the MCP servers for gathering material, and prints how to fix each problem. Use after factory-init, in a new environment, on 401 or 403, when 「factory.toml が見つからない」 appears, or when asked 「環境を確かめて」 or 「doctor して」.
 ---
 
-# 前提を確かめる
+# Check the prerequisites
 
 ```sh
-cd <ワークスペース>
-python3 <このスキルのフォルダ>/scripts/doctor.py          # 手元と Google の API
-python3 <このスキルのフォルダ>/scripts/doctor.py --local  # 手元だけ（API を呼ばない）
+cd <workspace>
+python3 <this skill's folder>/scripts/doctor.py          # local and Google APIs
+python3 <this skill's folder>/scripts/doctor.py --local  # local only (does not call APIs)
 ```
 
-1 行 1 項目で「OK」「要修正」「要確認」を出す。要修正が 1 つでもあれば exit 1。
+Prints one item per line as 「OK」, 「要修正」, or 「要確認」. Exits 1 if there is at least one `要修正`.
 
-## 見るもの
+## What it checks
 
-| 項目 | 要修正・要確認のとき |
+| Item | What to do on `要修正` or `要確認` |
 |---|---|
-| Python 3.11 以上、uv | 入れる。uv がないと、画像での測り（`box_pad.py`・`doc_layout.py`・`sheet.py`）と、lint の文節の点検（BudouX）が動かない |
-| `factory.toml`・`AGENTS.md`（`CLAUDE.md`・`references_index.md`） | factory-init で置く |
-| `factory.source` | 使わなくなった（factory-kaizen が自分で clone する）。ユーザーに伝えて消す |
-| スキルの重なり | ワークスペースの `.agents/skills/`・`.claude/skills/` に同じ名前のスキルがある。プラグインと二重に読まれるので、どちらを使うかをユーザーに聞く（ワークスペースのものを外すのはユーザーが決める） |
-| `google.quota_project`、`slides.templates`、`drive.*` | factory-init の 3 のとおり埋める |
-| `slides.themes`（前の版の書き方） | テーマの表を、ワークスペースの `themes/slides/<名前>.json`（`kind: theme`。色は `colors` の下に同じ名前で書き、`url` は書かない）に移し、`url` を `[slides.templates]` の「<名前> = "<url>"」に移して、表を消す。テンプレートのある名前は `slides.py theme <url>` でも写せる（2026-10-16 より前のテンプレートは、テーマに入れない色・`copyright`・`mono`・`description` が抜けるので、表から写す）。移す前に、表のコメントに残した経緯をどこに残すかをユーザーに聞く（JSON にはコメントを書けない） |
-| `themes/slides/<名前>.json`、テーマのファイル、`slides.default_theme` | 書けない値は、出た場所を直して `slides.py lint <ファイル>` で確かめる。テンプレートだけでファイルのないテーマは `slides.py theme <URL>` で写す |
-| テーマの説明 | `description` がないテーマは、エージェントが資料ごとに選べない。何のテーマで、どの資料・聞き手に使うかを書く（`deck-build/slides.md` の 3） |
-| `review.*`、AGENTS.md の方針のレビュー・返したあとの直し | `review.*` は雛形の範囲の値（`"ai"`・`"human"`、1〜3）に直す。AGENTS.md に前の雛形の「人がレビューするかも選んでもらう」か「ユーザーに返す前に、スキル `deck-review` で全体をレビューする」が残っていれば、ユーザーに見せてから雛形の今の文（`[review] plan_reviewer` に従う。新しく作った資料は `deck-review`、返したあとは `deck-practices` の「返したあとの依頼」）に替える（ワークスペースの決まりなので、黙って直さない） |
-| Google の認証 | 出たコマンド（`gcloud auth application-default login --scopes=…`）をユーザーに回してもらう。トークンの取り方は `factory.toml` の `[google]` のコメント |
-| テンプレート・Drive のフォルダ | 開けないものは、URL の誤りか、共有されていない。持ち主に共有を頼むか、URL を直す |
+| Python 3.11 or later, uv | Install them. Without uv, the image measurements (`box_pad.py`, `doc_layout.py`, `sheet.py`) and lint's phrase-break check (BudouX) do not run |
+| `factory.toml`, `AGENTS.md` (`CLAUDE.md`, `references_index.md`) | Place them with factory-init |
+| `factory.source` | No longer used (factory-kaizen clones by itself). Tell the user and remove it |
+| Overlapping skills | The workspace's `.agents/skills/` or `.claude/skills/` has a skill with the same name. It is loaded twice along with the plugin's, so ask the user which one to use (the user decides whether to remove the workspace's copy) |
+| `google.quota_project`, `slides.templates`, `drive.*` | Fill them in as in factory-init step 3 |
+| `slides.themes` (the format of an earlier version) | Move the theme table to the workspace's `themes/slides/<name>.json` (`kind: theme`; write the colors under `colors` with the same names, and do not write `url`), move `url` to 「<名前> = "<url>"」 in `[slides.templates]`, and delete the table. Names that have a template can also be copied with `slides.py theme <url>` (templates from before 2026-10-16 lack the colors not stored in the theme, `copyright`, `mono`, and `description`, so copy those from the table). Before moving, ask the user where to keep the history left in the table's comments (JSON cannot hold comments) |
+| `themes/slides/<name>.json`, theme files, `slides.default_theme` | For invalid values, fix the reported location and check with `slides.py lint <file>`. For a theme that has a template but no file, copy it with `slides.py theme <URL>` |
+| Theme descriptions | A theme without `description` cannot be chosen per material by the agent. Write what the theme is and which materials and audience it is for (`deck-build/slides.md` §3) |
+| `review.*`, the plan review and post-delivery fixes in AGENTS.md | Fix `review.*` to values within the template's range (`"ai"`, `"human"`, 1 to 3). If AGENTS.md still contains the earlier template's 「人がレビューするかも選んでもらう」 or 「ユーザーに返す前に、スキル `deck-review` で全体をレビューする」, show it to the user and then replace it with the current template text (follow `[review] plan_reviewer`; newly created materials use `deck-review`, and after delivery use `deck-practices`'s "Requests after delivery") (it is a workspace rule, so do not change it silently) |
+| Google authentication | Have the user run the printed command (`gcloud auth application-default login --scopes=…`). How to get a token is in the comments of `[google]` in `factory.toml` |
+| Templates and Drive folders | Anything that cannot be opened has a wrong URL or is not shared. Ask the owner to share it, or fix the URL |
 
-## スクリプトの外で見るもの
+## What to check outside the script
 
-材料を集める道具（`deck-practices/materials.md`）が使えるかは、スクリプトからは見えない。`factory.toml` の `[sources]` に書いた道具（MCP のサーバーかスキルの名前）が自分の道具の一覧にあるかを見て、ないものを「要確認」として一緒に返す。`[sources]` が空なら、どの道具を使うかをユーザーに聞いて書く。なくても資料は組めるが、材料の集め方が手作業になる。
+The script cannot see whether the tools for gathering material (`deck-practices/materials.md`) are available. Check whether each tool written in `[sources]` of `factory.toml` (an MCP server or skill name) is in your own tool list, and return the missing ones together as `要確認`. If `[sources]` is empty, ask the user which tools to use and write them. Materials can be built without them, but gathering material becomes manual.
 
-## 返し方
+## How to reply
 
-要修正と要確認を、直し方と一緒に返す。ユーザーが回すもの（ログインのコマンド、共有の依頼）と、こちらで直せるもの（`factory.toml` の値）を分ける。直したら、もう一度回す。
+Return the `要修正` and `要確認` items together with how to fix them. Separate what the user runs (login commands, share requests) from what you can fix (values in `factory.toml`). After fixing, run it again.
