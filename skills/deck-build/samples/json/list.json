@@ -1,0 +1,16 @@
+{"apiVersion": "slides/v1", "kind": "page",
+ "title": "印と文字を並べる", "lead": "番号かアイコンの中心を、項目の 1 行目の中心にそろえる", "kicker": "list",
+ "body": [
+  {"type": "row", "items": [
+    {"type": "list", "items": [
+      "利用者数・最大同時接続数・読み書きの比率は",
+      "いまのデータベースと、運用・スケール・リリースの課題は。長い項目は 2 行に折り返し、2 行目は文字の左端にそろえる",
+      {"icon": "tabler:database", "text": "アイコンを交ぜても、本文の **左端** がそろう"},
+      {"head": "見出しのある項目", "text": "本文は灰色の補足になり、見出しの下に置く"}]},
+    {"type": "stack", "items": [
+      {"type": "list", "icon": "tabler:circle-check", "color": "RED_TEXT", "size": "small", "gap": 0.1, "items": [
+        "同じアイコンは list に 1 回だけ書く",
+        {"num": 9, "text": "項目に書いた番号が勝つ"},
+        {"image": "asset:gcp/bigquery.png", "text": "ロゴも印に置ける"}]},
+      {"type": "list", "start": 5, "items": ["5 から数える", "左の列の続きの番号"]}]}]}],
+ "note": "左は番号の並びに、アイコンの項目と見出しのある項目を交ぜたもの。右上は全部の項目に同じアイコンを付け、項目ごとに番号とロゴで替えたもの。右下は start で 5 から数えたもの。"}
