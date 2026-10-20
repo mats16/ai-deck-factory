@@ -1014,6 +1014,7 @@ LABEL_GAP = 0.04  # 矢印の札と線の間（in。縦の線の右は 2 倍。�
 # 印のあるカード（過去の資料の node・icard・ncard。2026-10-16）: 印の大きさ（アイコン・番号／画像）、カードの端から印、印から文字、文字の上、最終行と下端（in）
 MARK, MARK_IMG, MARK_IN, MARK_GAP, CARD_TOP, CARD_BOTTOM = 0.36, 0.5, 0.18, 0.14, 0.16, 0.28
 STAT_PAD, HEAD_GAP = 0.2, 0.06  # 数字の強調の箱の端と文字の間、印のあるカードの見出しと本文の間（in）
+LIST_GAP = 0.16  # list の項目の間（in）
 # ガント（過去の資料の gantt。slides-010）: 項目の列、補足の列の最小、月の列の最大と最小、バーの高さ（9pt の 2 行）、段の間、行の上下、バーと列の端、
 # 余った高さを 1 行に足す上限（in）
 G_HEAD, G_NOTE, G_COL, G_COL_MIN, G_BAR, G_LANE, G_PAD, G_INSET, G_GROW = 2.2, 2.4, 1.0, 0.4, 0.42, 0.06, 0.1, 0.04, 0.4
@@ -1041,6 +1042,7 @@ SPEC_EL = {  # type → (要るキー, 書けるキー)
     "image": ({"src": "s"}, {"alt": "s"}),
     "icon": ({"name": "s"}, {"size": "p", "color": "c"}),
     "num": ({"n": "ns"}, {"size": tuple(NUM), "fill": "c"}),
+    "list": ({"items": "litems"}, {"icon": "s", "start": "pi", "size": tuple(NUM), "gap": "n", "color": "c"}),  # 印（番号かアイコン）と文字の並び。印の中心を項目の 1 行目にそろえる
     "box": ({}, _BOX),
     "arrow": ({"from": "pt", "to": "pt"}, {"color": "c", "head": "b", "dash": "b", "weight": "p", "route": ("straight", "bent"), "label": "md",
                          "label_side": ("top", "bottom", "left", "right"), "offset": "f"}),  # label は線の札、label_side はその置き場所、offset は線を横（縦）にずらす in
@@ -1051,6 +1053,7 @@ SPEC_EL = {  # type → (要るキー, 書けるキー)
     "grid": ({"items": "kids", "cols": "pi"}, {"gap": "n"}),
     "frame": ({"items": "kids", "h": "p"}, {}),
 }
+LIST_ITEM = ({}, {"text": "md", "head": "s", "icon": "s", "num": "ns", "image": "s"})  # list の項目（文字だけなら "文字" と書ける）。印は icon・num・image のどれか 1 つで、list の icon と番号より勝つ
 TABLE_CELL = ({"text": "md"}, {"colspan": "pi", "rowspan": "pi", "fill": "c", "color": "c", "align": tuple(ALIGN), "valign": tuple(VALIGN)})  # 表のセル（HTML の td にならった）
 GANTT_ROW = ({"head": "s"}, {"bars": "gbars", "marks": "gmarks", "note": "s"})  # ガントの行: 項目、バーの並び、節目の並び、補足（右の列。どれかの行に書くと列ができる）
 GANTT_STATUS = {"plan": "NAVY", "tbd": "CARD", "done": "PANEL", "hot": "RED_SOFT"}  # バーの状態 → 塗り（決まった予定・未定〔点線の枠〕・終わった・強調〔赤の文字〕）。色は書かせず、資料をまたいで意味をそろえる
@@ -1061,7 +1064,8 @@ BARS_LINE = ({"values": "bvals"}, {"unit": "s", "label": "s"})  # 棒の折れ�
 BARS_THRESHOLD = ({"value": "n"}, {"label": "s"})  # 棒の直線（目標・上限など）: 棒と同じ目盛りの数、何の線か
 NO_SIZE = ("icon", "num", "arrow")  # w・h を書かない（大きさは size、矢印は両端）
 CONTAINERS = ("row", "stack", "grid", "frame")  # 並べ方の箱（中の部品を置くだけで、Deck を呼ばない）
-NO_H = ("row", "stack", "grid", "gantt")  # h を書かない（高さは中身から決まる。中身より小さい h は次の部品と重なる。frame だけは h が要る）
+NO_ESC = (*CONTAINERS, "list")  # raw を書けない（並べ方の箱は Deck を呼ばない。list は印と文字で呼ぶメソッドが分かれる）
+NO_H = ("row", "stack", "grid", "gantt", "list")  # h を書かない（高さは中身から決まる。中身より小さい h は次の部品と重なる。frame だけは h が要る）
 STRETCH = ("card", "stat", "box", "label", "code", "frame", "stack")  # row・grid で行の高さまで伸ばす（text は塗りか枠線のあるときだけ）
 SPEC_PAGE = {
     "page": ({"title": "s"}, {"lead": "s", "kicker": "s", "body": "els", "band": "band", "source": "md", "note": "s"}),
@@ -1107,6 +1111,7 @@ SPEC_OK = {"s": lambda v: isinstance(v, str), "md": lambda v: isinstance(v, str)
            "pages": lambda v: isinstance(v, list) and bool(v) and all(isinstance(x, str) and x.endswith(".json") for x in v),
            "pt": lambda v: isinstance(v, str) or isinstance(v, list) and len(v) == 2 and all(map(_num, v)),
            "items": lambda v: isinstance(v, list) and all(_strs(x, 2) for x in v),
+           "litems": lambda v: isinstance(v, list) and bool(v) and all(isinstance(x, (str, dict)) for x in v),
            "cols": lambda v: _strs(v) and bool(v), "grows": lambda v: isinstance(v, list) and bool(v) and all(isinstance(x, dict) for x in v),
            "gbars": lambda v: isinstance(v, list) and all(isinstance(x, dict) for x in v), "gmarks": lambda v: isinstance(v, list) and all(isinstance(x, dict) for x in v),
            "bline": lambda v: isinstance(v, dict), "bthr": lambda v: isinstance(v, dict),
@@ -1148,6 +1153,7 @@ def spec_check(o, schema, loc, extra=None):
 SPEC_TYPES = {"s": "文字列", "md": "記法つきの文字列", "n": "0 以上の数", "f": "数（負の数も書ける）", "p": "0 より大きい数", "i": "整数", "pi": "1 以上の整数", "b": "true か false", "c": f"色の名前（{'・'.join(COLOR_NAMES)}。6 桁は書けない。値はテーマのファイルで決める）",
               "w": '0 より大きい数（in）か "fit"（label だけ。中身の文字の幅にする）', "nh": "0 より大きい数（in）か、行ごとのその並び",
               "els": "部品の並び", "kids": "1 つ以上の部品の並び", "pages": "ページかデッキのファイルのパス（.json）の並び", "pt": "部品の id（\"<id>.<辺>\" で出る辺・入る辺。辺は top・bottom・left・right）か [x, y]", "items": '[["見出し", "説明"], …]',
+              "litems": '["文字", {"head": 見出し, "text": 文字, "icon"・"num"・"image": 印}, …]（文字は記法が書ける）',
               "rows": '[["見出しの行", …], ["セル", {"text": "セル", "colspan": 2}, …], …]（セルは記法つきの文字か {"text": …, …}）', "hn": "true・false か、見出しの行の数（0 以上の整数）", "nums": "正の数の並び",
               "cols": '列の名前の並び（["10 月", "11 月", …]）', "grows": '[{"head": 項目, "bars": [{"from": 列, "to": 列, …}], "marks": [{"at": 位置, "text": 言葉}], "note": 補足}, …]',
               "bitems": '[["名前", 0 以上の数], …]', "bvals": "0 以上の数の並び（items の順）", "bline": '{"values": [数, …], "unit": 単位, "label": 何の数か}',
@@ -1251,6 +1257,18 @@ def spec_plain(parts):
     return parts if isinstance(parts, str) else "".join(p if isinstance(p, str) else p[0] for p in parts)
 
 
+def first_pt(parts, size):
+    """parts の最初の段落の、いちばん大きな文字の大きさ（pt。{32:…} の文字があればその大きさ。{8:…} だけなら 8）。"""
+    out = 0
+    for p in [parts] if isinstance(parts, str) else parts:
+        t, sz = (p, size) if isinstance(p, str) else (p[0], p[1].get("size", size))
+        lead = re.split(r"[\n\v]", t, maxsplit=1)[0]
+        out = max(out, sz) if lead else out  # 空白だけの文字も、その大きさで行の高さが決まる
+        if len(lead) < len(t):
+            break
+    return out or size
+
+
 def spec_bullets(s, loc=""):
     """段落がすべて「- 」で始まるなら、頭を外して箇条書きにする。「- 」の段落とほかの段落が交ざっていたら止める
     （箇条書きは枠の全部の段落に付くので、交ぜると「- 」がそのまま出る。2026-10-16 の sandbox で起きた）。"""
@@ -1343,13 +1361,25 @@ class SpecPage:
         if kind not in SPEC_EL:
             sys.exit(f"{loc}: 部品は {{\"type\": …}} で書き、type は {'・'.join(SPEC_EL)}")
         geo = {k: t for k, t in _GEO.items() if not (kind in NO_SIZE and k in ("w", "h")) and not (kind in NO_H and k == "h") and (in_frame or k not in ("x", "y"))}
-        spec_check(e, SPEC_EL[kind], f"{loc}（{kind}）", geo | ({} if kind in CONTAINERS else _ESC))  # 並べ方の箱は Deck を呼ばないので raw は効かない
+        spec_check(e, SPEC_EL[kind], f"{loc}（{kind}）", geo | ({} if kind in NO_ESC else _ESC))
         if kind == "table":  # 列の数がそろうかは、高さを見込む前に見る（table_h が列の幅を引く）
             self.table_check(e, loc)
         if kind == "gantt":
             self.gantt_check(e, loc)
         if kind == "bars":
             self.bars_check(e, loc)
+        if kind == "list":
+            for i, it in enumerate(e["items"]):
+                l = f"{loc}（list）.items[{i}]"
+                if isinstance(it, dict):
+                    spec_check(it, LIST_ITEM, l)
+                    if len(ms := [k for k in ("icon", "num", "image") if k in it]) > 1:
+                        sys.exit(f"{l}: 項目の印は icon・num・image のどれか 1 つ: {'・'.join(ms)}")
+                it = {"text": it} if isinstance(it, str) else it
+                if not (spec_plain(spec_md(it.get("text", ""))).strip() or it.get("head", "").strip()):  # 記法を外した文字で見る（"***  ***" は空白だけ）
+                    sys.exit(f"{l}: text か head を書く（空の項目は印だけになる）")
+                if spec_bullets(it.get("text", ""), l)[1]:  # 項目の本文は箇条書きにしない（「- 」がそのまま出る）
+                    sys.exit(f"{l}: 項目の本文に箇条書き（- ）は書けない。項目を分けるか、card にする")
         if e.get("w") == "fit" and kind != "label":
             sys.exit(f"{loc}（{kind}）.w: \"fit\"（中身の幅）は label だけ")
         if in_frame and kind != "arrow" and ("x" not in e or "y" not in e or "w" not in e and kind not in NO_SIZE):
@@ -1704,6 +1734,9 @@ class SpecPage:
             return w / r
         if kind in ("icon", "num"):
             return self.fixed_w(e)
+        if kind == "list":
+            rows = self.list_rows(e, w, loc)
+            return sum(r[-1] for r in rows) + e.get("gap", LIST_GAP) * (len(rows) - 1)
         if kind == "box":
             return 0
         if kind == "stack":
@@ -1712,6 +1745,49 @@ class SpecPage:
         ws, gap = self.widths(e, w, loc)
         it = iter(ws)
         return sum(max(self.measure(c, next(it), loc) for c in row) for row in self.rows_of(e)) + gap * (len(self.rows_of(e)) - 1)
+
+    def list_rows(self, e, w, loc):
+        """list の項目ごとの (場所, 印の種類, 印, 見出しの parts, 本文の parts, 見出しの高さ, 本文の高さ, 文字の上端, 印の上端, 項目の高さ)。上端は項目の上端から。
+        印の中心を 1 行目（見出しがあればその行）の中心にそろえる。2 行目からは文字の左端にそろえて下げ、印は 1 行目の横に残る。
+        印を書かない項目は、list の icon か、start から項目の順で数えた番号。"""
+        d, emph = NUM[e.get("size", "medium")][0], spec_color(ON_FILL.get(self.bg, ("TEXT", "RED_TEXT"))[1])
+        tw, out = w - d - MARK_GAP, []
+        if tw <= 0.3:
+            sys.exit(f"{loc}（list）: 幅が足りない（{w:.2f} in に、印 {d:.2f} in と間 {MARK_GAP} in）")
+        for i, it in enumerate(e["items"]):
+            it, l = {"text": it} if isinstance(it, str) else it, f"{loc}.items[{i}]"
+            m = self.mark(it)  # 印が 2 つ以上の項目は check が止めている
+            kind, v = (m, it[m]) if m else ("icon", e["icon"]) if "icon" in e else ("num", e.get("start", 1) + i)
+            head = [(it["head"], {"bold": True, "size": 12})] if it.get("head", "").strip() else []  # 空白だけの見出しは置かない（check と同じ見方）
+            body = spec_md(it.get("text", ""), emph, l)
+            body = body if spec_plain(body).strip() else []  # 記法を外して空白だけの本文は置かない（check と同じ見方）
+            hh = spec_text_h(head, tw, 12, 100) if head else 0
+            bh = spec_text_h(body, tw, 11) if body else 0
+            first = (12 if head else first_pt(body, 11)) * 1.2 / 72  # 1 行目の高さ。2 行以上の行間 125% は 1 行目の下に足される（2026-10-20 に Google が描いた画像で測った。125% で見込むと 3.5 px 上に出た）
+            ty, my = max((d - first) / 2, 0), max((first - d) / 2, 0)
+            out.append((l, kind, v, head, body, hh, bh, ty, my, max(my + d, ty + hh + (HEAD_GAP if head and body else 0) + bh)))
+        return out
+
+    def list(self, e, x, y, w, loc):
+        dark = self.bg in ON_FILL
+        on = spec_color(ON_FILL[self.bg][0] if dark else "TEXT")
+        size = e.get("size", "medium")
+        d = NUM[size][0]
+        tx, tw = x + d + MARK_GAP, w - d - MARK_GAP
+        for l, kind, v, head, body, hh, bh, ty, my, ih in self.list_rows(e, w, loc):
+            self.index.append((l, spec_plain(head) + spec_plain(body)))
+            if kind == "num":
+                self.emit("num", f"{l}.num", n=v, cx=x + d / 2, cy=y + my + d / 2, size=size, fill=RED)  # 地によらず赤の円（印のあるカードと同じ）
+            elif kind == "icon":
+                self.emit("icon", f"{l}.icon", name=v, x=x, y=y + my, size=d, color=hex_of(spec_color(e.get("color")) if "color" in e else on))
+            else:
+                self.emit("image", f"{l}.image", src=self.src({"src": v}, l), x=x, y=y + my, w=d, h=d, alt=spec_plain(head or body))
+            if head:
+                self.emit("text", f"{l}.head", x=tx, y=y + ty, w=tw, h=max(hh, 0.2), parts=head, size=12, color=on if dark else spec_color("HEAD"), spacing=100, edge=True)
+            if body:  # 見出しがあれば、本文は灰色の補足
+                self.emit("text", f"{l}.text", x=tx, y=y + ty + hh + (HEAD_GAP if head else 0), w=tw, h=max(bh, 0.2), parts=body, size=11,
+                          color=spec_color(("SUB_ON_NAVY" if dark else "SUB") if head else on), edge=True)
+            y += ih + e.get("gap", LIST_GAP)
 
     def mark(self, e):
         """カードの印（icon・num・image のどれか）。2 つ以上なら止める。"""
@@ -1922,6 +1998,8 @@ class SpecPage:
                              **({"kind": SHAPES[e["shape"]]} if "shape" in e else {}), **({"radius": e["radius"]} if "radius" in e else {}))
         if kind == "gantt":
             return self.gantt(e, x, y, w, h, loc)
+        if kind == "list":
+            return self.list(e, x, y, w, loc)
         if kind == "bars":
             return self.bars(e, x, y, w, h, loc)
         if kind == "frame":
@@ -1929,6 +2007,8 @@ class SpecPage:
         if kind == "stack":
             return self.flow(e["items"], x, y, w, e.get("gap", GAP), f"{loc}.items")
         # row・grid: 列の幅を決め、行ごとに高さをそろえる
+        if any({c["type"] for c in r} & {"num", "icon"} and any(c["type"] == "text" and not (c.get("fill") or c.get("line")) for c in r) for r in self.rows_of(e)):  # 塗りか枠線のある文字は行の高さまで伸びる  # 2026-10-20 の sandbox で、row の上端そろえで文字が円の中心より上に出た
+            self.warns.append(f"{loc}（{kind}）: 番号かアイコンと文字を同じ行に並べた（{kind} は上端をそろえるので、文字が印の中心より上に出る）。印と文字の並びは list にする")
         ws, gap = self.widths(e, w, loc)
         it, cy, k = iter(ws), y, 0
         for row in self.rows_of(e):
@@ -2202,7 +2282,11 @@ SPEC_UNIT = {"w": "幅（in）", "h": "高さ（in）", "x": "frame の左上か
              "borders": "罫線。rows は横の罫線だけ（既定）、grid は縦横と外枠（結合したセルの区切りを見せるとき）、none はなし",
              "colspan": "右へ結合する列の数（覆う位置にはセルを書かない。HTML と同じ）", "rowspan": "下へ結合する行の数（下の行の、覆う位置にはセルを書かない）",
              "cell.fill": "そのセルの塗り（濃い色なら文字は白）。行か列の全部は表の fills", "cell.color": "文字の色（書かなければ塗りから決まる）",
-             "cell.align": "そのセルの横の寄せ（書かなければ列の align）", "cell.valign": "そのセルの上下の寄せ（書かなければ表の valign）"}
+             "cell.align": "そのセルの横の寄せ（書かなければ列の align）", "cell.valign": "そのセルの上下の寄せ（書かなければ表の valign）",
+             "list.icon": "全部の項目の印（Iconify の名前）。書かなければ番号", "start": "最初の番号（既定 1。印を書いた項目も 1 つと数える）",
+             "list.size": "印の大きさ（num と同じ。既定は medium）", "list.color": "アイコンの色（既定は本文の色）", "list.gap": "項目の間（in。既定 0.16）",
+             "item.text": "本文（見出しがあれば灰色の補足）", "item.head": "見出し（太字 12pt）", "item.icon": "その項目の印（Iconify の名前）",
+             "item.num": "その項目の番号", "item.image": "その項目の印の画像（ロゴなど。image の src と同じ書き方）"}
 
 
 def spec_unit(kind, k):
@@ -2214,7 +2298,7 @@ def spec_brief():
     """書く形の早見表（slides.py schema --brief）。SPEC_EL・SPEC_PAGE・SPEC_DECK と型の説明から作るので、形と食い違わない。* は要るキー。
     pom の llm.txt にならい、ページを書く子が JSON Schema の全文の代わりに読む（prompt_pages.md）。"""
     short = {"s": "文字", "md": "記法", "n": "数", "f": "正か負の数", "p": "正の数", "i": "整数", "pi": "1 以上", "b": "真偽", "c": "色", "els": "部品の並び", "kids": "部品の並び",
-             "w": '正の数か "fit"', "nh": "正の数か行ごとの並び", "ints": "1 からの番号の並び", "nums": "比の並び", "ns": "文字か整数", "hn": "真偽か行の数", "rows": "行の並び。セルは記法か {…}", "pt": "id（id.辺）か [x, y]"}
+             "w": '正の数か "fit"', "nh": "正の数か行ごとの並び", "ints": "1 からの番号の並び", "nums": "比の並び", "ns": "文字か整数", "hn": "真偽か行の数", "rows": "行の並び。セルは記法か {…}", "litems": "項目の並び。記法か {…}", "pt": "id（id.辺）か [x, y]"}
     def keys(schema, kind=""):
         need, opt = schema
         out = []
@@ -2228,10 +2312,10 @@ def spec_brief():
              "記法: **太字** ***赤の太字*** {32:文字}（32pt） [名前](URL) [名前](#p12)（p12.json のページ） <br>（段落の中の改行）。\\n で段落、どの段落も「- 」で始めると箇条書き", "",
              "## デッキ", "deck: " + keys(SPEC_DECK), "", "## ページ（type。省くと page）"]
     lines += [f"{k}: {keys(v)}" for k, v in SPEC_PAGE.items()]
-    lines += ["", "## 部品（type）", "どの部品にも: id（矢印の from・to で指す）、w（幅 in）、h（高さ in。row・stack・grid・gantt と icon・num・arrow は書かない）。"
+    lines += ["", "## 部品（type）", "どの部品にも: id（矢印の from・to で指す）、w（幅 in）、h（高さ in。row・stack・grid・gantt・list と icon・num・arrow は書かない）。"
               "x・y は frame の中だけ。raw は形の外の書き方（lint が要確認に出す）"]
     lines += [f"{k}: {keys(v, k)}" for k, v in SPEC_EL.items()]
-    lines += ["  table の rows のセル（記法つきの文字か {…}）: " + keys(TABLE_CELL, "cell"), "  gantt の rows: " + keys(GANTT_ROW), "  gantt の bars: " + keys(GANTT_BAR), "  gantt の marks: " + keys(GANTT_MARK), "  bars の line: " + keys(BARS_LINE), "  bars の threshold: " + keys(BARS_THRESHOLD)]
+    lines += ["  table の rows のセル（記法つきの文字か {…}）: " + keys(TABLE_CELL, "cell"), "  list の items の項目（記法つきの文字か {…}）: " + keys(LIST_ITEM, "item"), "  gantt の rows: " + keys(GANTT_ROW), "  gantt の bars: " + keys(GANTT_BAR), "  gantt の marks: " + keys(GANTT_MARK), "  bars の line: " + keys(BARS_LINE), "  bars の threshold: " + keys(BARS_THRESHOLD)]
     return "\n".join(lines)
 
 
@@ -2282,6 +2366,9 @@ def spec_schema():
     for k in cell["properties"]:
         cell["properties"][k] |= {"description": u} if (u := spec_unit("cell", k)) else {}
     row = {"type": "array", "items": {"anyOf": [t["md"], cell]}}
+    item = {"type": "object", "properties": {k: dict(t[v]) | ({"description": u} if (u := spec_unit("item", k)) else {}) for k, v in LIST_ITEM[1].items()},
+            "anyOf": [{"required": ["text"]}, {"required": ["head"]}], "additionalProperties": False}
+    t["litems"] = {"type": "array", "items": {"anyOf": [t["md"], item]}, "minItems": 1, "description": "項目。文字だけなら記法つきの文字で書く"}
     t["rows"] = {"type": "array", "prefixItems": [row | {"minItems": 1}], "items": row, "minItems": 1,  # 1 行目は空にできない（列の数を決める）
                  "description": "1 行目が見出しの行。セルは記法つきの文字か {\"text\": …}。結合したセルが覆う位置には、セルを書かない（HTML と同じ。上の rowspan が全部の列を覆う行は []）"}
     t["grows"] = {"type": "array", "minItems": 1, "items": {"type": "object", "properties": {"head": {"type": "string", "description": "項目（表のセル。記法なし）"}, "bars": t["gbars"],
@@ -2295,7 +2382,7 @@ def spec_schema():
         for k, v in {**need, **opt, **(extra or {})}.items():
             props[k] = dict(t[v] if isinstance(v, str) else {"enum": list(v)}) | ({"description": u} if (u := spec_unit(kind, k)) and "description" not in t.get(v, {}) else {})
         return {"type": "object", "properties": props, "required": ([] if not need_type else ["type"]) + list(need), "additionalProperties": False}
-    defs = {f"el_{k}": obj(k, v, {g: x for g, x in _GEO.items() if not (k in NO_SIZE and g in ("w", "h")) and not (k in NO_H and g == "h")} | ({} if k in CONTAINERS else _ESC))
+    defs = {f"el_{k}": obj(k, v, {g: x for g, x in _GEO.items() if not (k in NO_SIZE and g in ("w", "h")) and not (k in NO_H and g == "h")} | ({} if k in NO_ESC else _ESC))
             for k, v in SPEC_EL.items()}
     defs |= {f"page_{k}": obj(k, v, need_type=k != "page", k8s="page") for k, v in SPEC_PAGE.items()}
     defs |= {"element": {"oneOf": [{"$ref": f"#/$defs/el_{k}"} for k in SPEC_EL]}, "page": {"anyOf": [{"$ref": f"#/$defs/page_{k}"} for k in SPEC_PAGE]},
@@ -3997,6 +4084,8 @@ def selftest_sample():
             used["table.cell"] |= set(c)
         for k in ("line", "threshold") if e["type"] == "bars" else ():  # 棒の折れ線と直線のキーも
             used[f"bars.{k}"] |= set(e.get(k, {}))
+        for it in e["items"] if e["type"] == "list" else []:  # list の項目のキーも
+            used["list.item"] |= set(it) if isinstance(it, dict) else set()
         for c in e["items"] if e["type"] in ("row", "stack", "grid", "frame") else []:
             el(c)
     for f in root.glob("*.json"):
@@ -4018,7 +4107,8 @@ def selftest_sample():
     want["theme"] = set(SPEC_THEME[1])
     want |= {"gantt.rows": set(GANTT_ROW[0]) | set(GANTT_ROW[1]), "gantt.bars": set(GANTT_BAR[0]) | set(GANTT_BAR[1]) | {f"status:{k}" for k in GANTT_STATUS},
              "gantt.marks": set(GANTT_MARK[0]),  # バーの状態は、どれも見本で組む
-             "table.cell": set(TABLE_CELL[0]) | set(TABLE_CELL[1]), "bars.line": set(BARS_LINE[0]) | set(BARS_LINE[1]), "bars.threshold": set(BARS_THRESHOLD[0]) | set(BARS_THRESHOLD[1])}
+             "table.cell": set(TABLE_CELL[0]) | set(TABLE_CELL[1]), "bars.line": set(BARS_LINE[0]) | set(BARS_LINE[1]), "bars.threshold": set(BARS_THRESHOLD[0]) | set(BARS_THRESHOLD[1]),
+             "list.item": set(LIST_ITEM[1])}
     miss = {t: sorted(k - used[t]) for t, k in want.items() if k - used[t]}
     assert not miss and geo == set(_GEO) and kinds == set(KINDS), ("見本に足りない型とキー", miss, set(_GEO) - geo, set(KINDS) - kinds)
     real = {k: globals()[k] for k in ("iconify", "asset")}
@@ -4281,12 +4371,36 @@ def selftest_spec():
     assert near(mo[0]["h"], est_lines("i" * 80, 1, 11, True) * 11 * 1.2 * 1.25 / 72 + 0.02)  # 等幅の字幅で行数を見る
     assert near(mo[1]["w"], 4 * MONO_EM * 11 / 72 + 2 * 11 / 72 + 0.06)
     for bad, want in [({"type": "card", "icon": "a:b", "num": 1}, "どれか 1 つ"), ({"type": "card", "head": "h", "align": "center"}, "印（icon・num・image）のあるカード"),
-                      ({"type": "card", "icon": "a:b", "align": "center", "valign": "middle"}, "一緒に使えない")]:
+                      ({"type": "card", "icon": "a:b", "align": "center", "valign": "middle"}, "一緒に使えない"),
+                      ({"type": "list", "items": [{"icon": "a:b", "num": 1, "text": "t"}]}, "どれか 1 つ"), ({"type": "list", "items": [{"icon": "a:b"}]}, "text か head"),
+                      ({"type": "list", "items": ["a"], "raw": {"x": 1}}, "知らないキー raw"), ({"type": "list", "items": ["a", " "]}, "text か head"), ({"type": "list", "items": ["***  ***"]}, "text か head"),
+                      ({"type": "list", "items": [{"head": "h", "text": "- a\n- b"}]}, "箇条書き"), ({"type": "list", "size": "large", "items": ["a"], "w": 0.8}, "幅が足りない")]:
         try:
             make_deck(lambda x: x.spec({"title": "t", "body": [bad]}), "x")
             raise AssertionError(f"通した: {bad}")
         except SystemExit as e:
             assert want in str(e), (want, str(e))
+    # list: 印の中心を項目の 1 行目（見出しがあればその行）の中心にそろえ、番号は start から項目の順。印を書いた項目が勝つ
+    globals()["iconify"], real_iconify = (lambda name, color=TEXT, w=512: f"https://x/{name}.png"), iconify
+    try:
+        d, li = run({"title": "t", "body": [{"type": "list", "start": 3, "items": ["一", "長い文" * 40, {"icon": "tabler:a", "head": "見出し", "text": "補足"}]},
+                                            {"type": "list", "icon": "tabler:check", "items": [{"num": 9, "text": "九"}, "印", {"head": " ", "text": "本"}, {"head": "見", "text": "*** ***"}]},
+                                            {"type": "row", "items": [{"type": "num", "n": 1}, {"type": "text", "text": "文"}]}]})
+    finally:
+        globals()["iconify"] = real_iconify
+    by = {e["loc"]: e for e in li}
+    n0, t0, n1, t1, h2, s2 = (by[f"spec.body[0].items[{i}].{k}"] for i, k in ((0, "num"), (0, "text"), (1, "num"), (1, "text"), (2, "head"), (2, "text")))
+    one, d0 = 11 * 1.2 / 72, NUM["medium"][0]
+    assert (n0["n"], n1["n"]) == (3, 4) and near(t0["y"] + one / 2, n0["cy"]) and near(t1["y"] + one / 2, n1["cy"])  # 2 行の項目も 1 行目（行間 125% の増えた分は 1 行目の下）
+    assert near(t0["x"], X + d0 + MARK_GAP) and near(n1["cy"] - d0 / 2, t0["y"] - (d0 - one) / 2 + d0 + LIST_GAP)  # 1 行の項目の高さは円の直径
+    ic = by["spec.body[0].items[2].icon"]
+    assert near(h2["y"] + 12 * 1.2 / 72 / 2, ic["y"] + d0 / 2) and h2["color"] == HEAD and s2["color"] == SUB and t0["color"] == TEXT and near(s2["x"], t0["x"])
+    assert by["spec.body[1].items[0].num"]["n"] == 9 and by["spec.body[1].items[1].icon"]["name"] == "tabler:check"
+    assert "spec.body[1].items[2].head" not in by and by["spec.body[1].items[2].text"]["color"] == TEXT and "spec.body[1].items[3].text" not in by  # 空白だけの見出しと本文は置かない
+    assert any("list にする" in w for w in d.warnings)  # row に番号と文字を並べたら知らせる
+    d, _ = run({"title": "t", "body": [{"type": "row", "items": [{"type": "num", "n": 1}, {"type": "text", "text": "文", "fill": "PANEL"}]}]})
+    assert not any("list にする" in w for w in d.warnings)  # 塗りのある文字は行の高さまで伸びるので知らせない
+    assert first_pt([("48", {"size": 32}), "件\n", ("次", {"size": 40})], 11) == 32 and first_pt("a\nb", 11) == 11 and first_pt([("小", {"size": 8})], 11) == 8 and first_pt([(" ", {"size": 20}), "abc"], 11) == 20  # 1 行目の大きさは最初の段落だけで見る
     with tempfile.TemporaryDirectory() as t:
         here = os.getcwd()
         os.chdir(t)
