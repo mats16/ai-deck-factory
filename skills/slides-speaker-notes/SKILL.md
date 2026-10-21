@@ -25,7 +25,7 @@ python3 $N push <URL> notes_vids.json          # replace the notes only
 3. **Write the script** into `notes_vids.json`, one key per page (page numbers from 1), by "How to write" and "Audio tags" below and the language file. Write the whole deck before reviewing, because the bridges between scenes depend on their neighbors.
 4. **Bring `lint` to zero `要修正`.** Look at every `要確認` and fix it, or keep it when it is intended (an example phrase that names a page number is fine).
 5. **Ask one child agent to review once** with [prompt_review.md](prompt_review.md) (a new child without the conversation, the same model as the main agent; "How to ask" in `../deck-review/SKILL.md`). Verify each finding against `deck.md` before fixing, then run `lint` again. Do not ask for a second round; the script has no layout, so the parent can check its own fixes.
-6. **Push.** `push` does not run `lint` (so a backup of the earlier notes longer than Vids' limit can be pushed back); run `lint` first. It writes only the speaker notes, so on-screen edits and comments on the slides stay. See "What push does".
+6. **Push.** `push` does not run `lint` (so a backup of the earlier notes longer than Vids' limit can be pushed back); run `lint` first. It writes only the speaker notes, so on-screen edits and comments on the slides stay. See "What push does". Do not update or offer to update a video; if the user asks to update the video too, use `../vids-beta/SKILL.md` (`vids.py update <Slides URL>`).
 7. **Deliver.** Give the URL, the scene count and total characters (from `lint`), the point the video leaves and where the story turns, what you left out of the voice, and the backup file.
 
 ## How to write
@@ -54,11 +54,11 @@ Before writing, open the file for the deck's language: [ja.md](ja.md) for Japane
 
 ## In Vids
 
-Do not include these steps when delivering, because not every deck becomes a video. Explain them when the user asks how to make the video or how to change the voice, or reports that tags are read aloud. Steps 3–4 follow the help page and have not been checked on screen; ask the user to report if the names differ.
+These are the steps on screen. If the user asks you to make the video from the deck, use `../vids-beta/SKILL.md` (beta) instead: it uses a Conversational voice from the start, so the tags work without steps 2–4. Do not include these steps when delivering, because not every deck becomes a video. Explain them when the user asks how to make the video or how to change the voice, or reports that tags are read aloud. The names in steps 2–4 were checked on screen on 2026-10-22.
 
 1. Make the video from the slides. The voices offered here do not read tags.
-2. In the video, open Voiceover on the right and choose All scenes at the top.
-3. Change the voice to one of the Conversational voices.
-4. Regenerate the voiceover of all scenes (Update all voiceovers in the help).
+2. In the video, open the AI voiceover panel (Generate a voiceover on the right) and choose the All scenes tab.
+3. Press Change the voice and select one of the Conversational voices (the 30 voices above the Classic ones, such as Nyla and Elio).
+4. Press Update all voiceovers.
 
 Suggest trying one scene that has tags before regenerating all of them.

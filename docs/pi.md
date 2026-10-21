@@ -13,7 +13,7 @@ pi install -l git:github.com/mats16/ai-deck-factory   # git から
 ```
 
 - 書き込まれるのは `<ワークスペース>/.pi/settings.json` の `packages`。手元のパスは `.pi/` からの相対のパスで入るので、ワークスペースか checkout を動かしたら入れ直す。
-- 入るもの（`package.json` の `pi`）: `skills/` の 13 個のスキルと、`extensions/rules.ts`（プラグインのファイルを read・bash で開いたら、ワークスペースの `rules/` の同じパスを、顧客の資料の `構成案*.md` などを開いたら顧客の `memory.md` を続けて出す）。
+- 入るもの（`package.json` の `pi`）: `skills/` の 14 個のスキルと、`extensions/rules.ts`（プラグインのファイルを read・bash で開いたら、ワークスペースの `rules/` の同じパスを、顧客の資料の `構成案*.md` などを開いたら顧客の `memory.md` を続けて出す）。
 - スキルは `/skill:factory-init` のように呼ぶ。入れたら `factory-init`、続けて `factory-doctor`（README の「入れ方」）。
 
 ## project trust
@@ -37,7 +37,7 @@ cd ~ && pi list                   # User packages にだけ出る（ここに ai
 (echo '{"type":"get_commands"}'; sleep 6) | pi --mode rpc --no-session | grep -o '"name":"skill:[^"]*"'
 ```
 
-ワークスペースでは 13 個（`factory-init` … `factory-kaizen`）が `scope: project` で出て、ほかのフォルダでは出ない。何も出ないときは、trust を保存していない（上の「project trust」）か、起動が返事より遅れている。`/trust` で保存するか、`sleep` を延ばしてもう一度回す。
+ワークスペースでは 14 個（`factory-init` … `factory-kaizen`）が `scope: project` で出て、ほかのフォルダでは出ない。何も出ないときは、trust を保存していない（上の「project trust」）か、起動が返事より遅れている。`/trust` で保存するか、`sleep` を延ばしてもう一度回す。
 
 ## pi はワークスペースの直下で起こす
 
