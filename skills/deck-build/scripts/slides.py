@@ -3600,7 +3600,9 @@ def lint_local(path="pages.py", url=None, talk=False, pages=None):
     _, digest, _ = pages_of(deck, reqs)
     ws = gapi.find_factory()
     rules = [Path(__file__).with_name("lint.py"), Path(__file__)] + ([ws.parent / "rules" / "deck-build" / "checks.py"] if ws else [])
-    key = "\0".join([str(Path(path).resolve()), str(talk), json.dumps(p, sort_keys=True)] + [f.read_text() if f.is_file() else "" for f in rules])  # lint の結果を変えるもの（見るテーマのマスター・レイアウト、--talk、規則の lint.py・slides.py・ワークスペースの checks.py）が変われば、前の記録を使わない
+    import lint
+    facts = lint.load_facts()  # 資料のフォルダ（build/ の親）の出典の表。変われば、前に通ったページも見直す（lint-026）
+    key = "\0".join([str(Path(path).resolve()), str(talk), json.dumps(p, sort_keys=True), str(facts)] + [f.read_text() if f.is_file() else "" for f in rules])  # lint の結果を変えるもの（見るテーマのマスター・レイアウト、--talk、規則の lint.py・slides.py・ワークスペースの checks.py）が変われば、前の記録を使わない
     state = Path(tempfile.gettempdir()) / f"slides_lint_{gapi.user()}_{hashlib.sha1(key.encode()).hexdigest()[:8]}.json"
     clean = set(json.loads(state.read_text())) if state.is_file() else set()  # 前に見て、要修正のなかったページのハッシュ
     if pages in (None, "all"):
@@ -3611,10 +3613,9 @@ def lint_local(path="pages.py", url=None, talk=False, pages=None):
         if not (w := re.match(r"警告: \[p(\d+)\]", chunk)) or int(w.group(1)) in pages:
             print(chunk, end="", file=sys.stderr)
     q = local_json(reqs, deck, p)
-    import lint
     r = lint.Report()
     r.where = spec_where(deck)  # JSON のページなら、指摘に部品の場所を付ける
-    hard = lint.lint_slides(q, r, "差し替え用" in q["title"], talk, pages, lint_scope(path))
+    hard = lint.lint_slides(q, r, "差し替え用" in q["title"], talk, pages, lint_scope(path), facts=facts)
     if out := [h for h in spec_out_hits(deck) if lint.hit_page(h) in pages]:
         r.hits[SPEC_OUT] = out
         r.show([SPEC_OUT], "要確認（JSON の形の外の書き方）")
