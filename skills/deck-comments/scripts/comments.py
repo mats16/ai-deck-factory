@@ -205,12 +205,13 @@ def alive(fid, cid):
 def announce(fids, hours):
     """見張る資料に、AI が見張っていることと終える時刻（起点の最後 + hours）を知らせのコメントに書く。もう書いてあり、終える時刻が変わったら
     （コメントを直したあとの --start で延びる）、知らせに返信する（知らせが消されたか解決されていたら、書き直す）。
-    資料ごとに書き残す（2 つ目の資料で止まっても、1 つ目に書いた知らせを忘れて、もう 1 件書くことがないように）。"""
+    資料ごとに書き残す（2 つ目の資料で止まっても、1 つ目に書いた知らせを忘れて、もう 1 件書くことがないように）。
+    もう終える時刻を過ぎていたら書かない（終える途中で止まって呼び直したとき、終えた資料にまた知らせを書かず、そのまま終える）。"""
     for f in fids:
         with state() as st:
             until = stamp(unstamp(max(st["watch"][g] for g in fids)).timestamp() + hours * 3600)
             note = st["notice"].get(f)
-            if note and when(until) == when(note["until"]):
+            if until <= stamp(time.time()) or note and when(until) == when(note["until"]):
                 continue
             if note and alive(f, note["id"]):
                 post(f, note["id"], f"見張りを終える時刻を {when(until)} に{'延ばし' if until > note['until'] else '変え'}ます")
@@ -237,10 +238,13 @@ def watch(urls, src, hours, start=False):
         closed = 0
         for f in fids if expired else []:
             with state() as st:  # 資料ごとに書き残す（2 つ目で止まっても、1 つ目の知らせにもう一度返信しない）
-                st["watch"].pop(f, None)
                 if (note := st["notice"].pop(f, None)) and alive(f, note["id"]):
                     post(f, note["id"], f"コメントの見張りを終えます（{hours:g} 時間、新しいコメントがありませんでした）。このあとのコメントは、自動では直しません。", resolve=True)
                     closed += 1
+        if expired:
+            with state() as st:  # 起点は、全部の知らせを閉じてから消す（途中で止まって呼び直すと、起点が残っているので、続きから終える）
+                for f in fids:
+                    st["watch"].pop(f, None)
         if n:
             return
         if expired:
@@ -429,6 +433,20 @@ def selftest():
             asked[:] = []
             call("watch", "--hours", "1", "X1", "X2")
             assert [u for m, u, _ in asked if m == "POST"] == [f"{DRIVE}/files/X2/comments?fields=id"], asked  # X1 にもう 1 件書かない
+            with state() as st:  # 終える時刻を過ぎた。X1 の知らせは閉じられ、X2 の知らせへの返信が 500 になる
+                st["watch"].update(X1="2026-01-01T00:00:00.000Z", X2="2026-01-01T00:00:00.000Z")
+            fail.add("X2")
+            try:
+                call("watch", "--hours", "1", "X1", "X2")
+                raise AssertionError("X2 に返せないのに通した")
+            except gapi.ApiError:
+                pass
+            assert list(saved()["notice"]) == ["X2"] and {"X1", "X2"} <= saved()["watch"].keys()  # X1 は閉じた。起点は残す
+            fail.clear()
+            asked[:] = []
+            s, _ = call("watch", "--hours", "1", "X1", "X2")  # 呼び直すと、X1 にまた知らせを書かず、X2 を閉じて終える
+            assert [u for m, u, _ in asked if m == "POST"] == [f"{DRIVE}/files/X2/comments/r9/replies?fields=id"] and s.startswith("見張りを終える"), (s, asked)
+            assert saved()["notice"] == {} and not {"X1", "X2"} & saved()["watch"].keys()
             cs.append({"id": "F", "content": "表を足して", "author": {"displayName": "相手"}, "createdTime": T(23), "modifiedTime": T(23)})
             pages[:] = [{"comments": [cs[-1]]}]
             s, _ = call("watch", "X1")
