@@ -201,7 +201,7 @@ Do not wait for skills to be called automatically; open the following file when 
 | Building, checking, delivering | `deck-build/SKILL.md` (three layers of checks, reading `gslides.py check` and lint, deliverables, placing files on Drive); for documents, `doc-build/SKILL.md` |
 | Review before delivery | `deck-review/SKILL.md` |
 | Fixing from comments on a built material, watching comments | `deck-comments/SKILL.md` (fetching comments, treating them as corrections, replying and resolving) |
-| Writing the notes as the voiceover script for a Google Vids video | `slides-speaker-notes/SKILL.md` (story across scenes, writing for speech, audio tags, replacing only the notes) |
+| Writing the notes (every deck's notes are the Google Vids voiceover script; content.md §5), or rewriting the notes of a built deck | `slides-speaker-notes/SKILL.md` (story across scenes, writing for speech, audio tags, replacing only the notes) |
 | Only when the user explicitly asks: making a Google Vids video from a deck, or updating a video made that way | `vids-beta/SKILL.md` (beta; setup, `create`, `update`, `--rebuild`, voices) |
 | Creating or adjusting a template (from a company template) | `deck-template/SKILL.md` (the three cases, mapping colors to roles, fonts, fixing contrast) |
 | Received a correction, adding a rule | `deck-practices/rules.md` (rule layers, routing corrections, verifying rules) |
