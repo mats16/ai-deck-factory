@@ -9,4 +9,4 @@
     ["保守", {"text": "対象外", "color": "SUB"}, {"text": "- 版の更新\n- 監視の設定", "align": "left"}],
     ["手間", "夜間の当番", "要る", {"text": "***要らない***", "fill": "RED_SOFT"}],
     ["資料", "詳しいこと", "[docs](https://docs.databricks.com/)", "[構成図のページ](#diagram)"]]}],
- "note": "header: 2 で上の 2 行が見出しの行。rowspan・colspan のセルが覆う位置には、セルを書かない（HTML と同じ）。"}
+ "speakerNotes": "header: 2 で上の 2 行が見出しの行。rowspan・colspan のセルが覆う位置には、セルを書かない（HTML と同じ）。"}

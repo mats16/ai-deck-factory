@@ -196,6 +196,7 @@ Do not wait for skills to be called automatically; open the following file when 
 | Building, checking, delivering | `deck-build/SKILL.md` (three layers of checks, reading `gslides.py check` and lint, deliverables, placing files on Drive); for documents, `doc-build/SKILL.md` |
 | Review before delivery | `deck-review/SKILL.md` |
 | Fixing from comments on a built material, watching comments | `deck-comments/SKILL.md` (fetching comments, treating them as corrections, replying and resolving) |
+| Writing the notes as the voiceover script for a Google Vids video | `slides-speaker-notes/SKILL.md` (story across scenes, writing for speech, audio tags, replacing only the notes) |
 | Creating or adjusting a template (from a company template) | `deck-template/SKILL.md` (the three cases, mapping colors to roles, fonts, fixing contrast) |
 | Received a correction, adding a rule | `deck-practices/rules.md` (rule layers, routing corrections, verifying rules) |
 | Editing the plugin | `factory-kaizen/SKILL.md` (verifying on past materials, and the Issue) |
