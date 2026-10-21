@@ -28,7 +28,7 @@ cp -R ~/Documents/rules ~/Documents/AGENTS.md ~/Documents/CLAUDE.md .   # 本番
 claude --plugin-dir ..
 ```
 
-- 起動したときの `plugins` の `path` が worktree を指し、`ai-deck-factory:` のスキルが 13 個読まれる。
+- 起動したときの `plugins` の `path` が worktree を指し、`ai-deck-factory:` のスキルが 14 個読まれる。
 - `claude plugin marketplace add .. --scope project` で入れてはいけない。マーケットプレイスの名前（`ai-deck-factory`）は `~/.claude/plugins/known_marketplaces.json` に 1 つしか持てず、本番のワークスペースで足したものとぶつかる。外すと、ほかで足したものの記録も消える。
 - そこから起こす `claude -p` の子（dreaming の `run.sh claude` など）には、プラグインが入っていない。子まで確かめるときは pi で試す。
 - worktree が点で始まるフォルダの下（T3 Code の `~/.t3/worktrees` など）にあると、`claude -p` で回した会話は、sandbox の中のファイルを「sensitive file」として書けない（`--permission-mode acceptEdits` でも止まる）。`claude -p` で資料まで作って確かめるときは、sandbox を `/tmp/<名前>/` に写し、そこで `claude --plugin-dir <worktree>` を回す。終わったら消す。
@@ -57,7 +57,7 @@ codex debug prompt-input ok | grep -oE 'ai-deck-factory:[a-z-]+: ' | sort -u
 pi install -l ..
 ```
 
-- `.pi/settings.json` に `../..`（`.pi/` からの相対のパス）で入り、worktree の 13 個のスキルと `extensions/rules.ts` が読まれる。`pi -p` の子（dreaming の `run.sh pi`、レビューを頼むとき）も同じものを読む（`sandbox/` で `pi -p` を起こし、deck-build の `SKILL.md` が worktree のパスで出ることと、`../skills/deck-practices/visual.md` を read すると `sandbox/rules/deck-practices/visual.md` が続けて差し込まれることを確かめた）。
+- `.pi/settings.json` に `../..`（`.pi/` からの相対のパス）で入り、worktree の 14 個のスキルと `extensions/rules.ts` が読まれる。`pi -p` の子（dreaming の `run.sh pi`、レビューを頼むとき）も同じものを読む（`sandbox/` で `pi -p` を起こし、deck-build の `SKILL.md` が worktree のパスで出ることと、`../skills/deck-practices/visual.md` を read すると `sandbox/rules/deck-practices/visual.md` が続けて差し込まれることを確かめた）。
 - trust は、`sandbox/` で対話の pi を開いて `/trust` で保存する（`pi -p` の子は聞けないので、先に済ませる）。親のフォルダの決定も子に効く。ホームを信頼してあれば、`--approve` なしの `pi -p`・`--mode rpc` でも読まれた。worktree を置くフォルダ（T3 Code なら `~/.t3/worktrees`）ごと信頼すると、聞かれなくなる代わりに、あとからそこに置くほかのリポジトリの拡張も黙って読まれる（[pi.md](pi.md) の「project trust」）。
 - 同じ名前のスキルがほかにあると、パッケージのものは負ける（[pi.md](pi.md) の「同じ名前のスキルがあるとき」）。`get_commands` の `sourceInfo.path` が worktree を指しているかを確かめる。
 
