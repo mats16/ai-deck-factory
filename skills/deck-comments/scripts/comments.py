@@ -289,7 +289,7 @@ def watch_hours(given):
 def watch_prompt(urls, hours, folder):
     """PROMPT の差し込み先を埋めた依頼文。呼ぶ側に置き換えさせると、差し込み先の名前が変わったときに埋まらないまま子に渡るので、ここで埋めて、埋め残しがあれば止める。
     1 行目は埋め残しを見つけた子が止まる決まりなので、差し込み先として見ない。"""
-    if not urls:
+    if not urls or any(u.startswith("-") for u in urls):  # 知らない引数を URL として子に渡さない
         sys.exit(__doc__)
     folder = Path(folder or ".").resolve()
     if not folder.is_dir():
@@ -297,11 +297,15 @@ def watch_prompt(urls, hours, folder):
     os.chdir(folder)  # factory.toml は、子が watch を回す資料のフォルダから上へたどる
     gapi.factory_path()
     watch_hours(hours)  # 見張る時間が決まらなければ、子を起こす前に止める
-    head, body = PROMPT.read_text().split("\n", 1)
-    for k, v in {"<material folder>": shlex.quote(str(folder)), "<path to comments.py>": shlex.quote(str(Path(__file__).resolve())),
-                 "<arguments>": shlex.join([*urls, *(["--hours", hours] if hours else [])])}.items():
+    head, _, body = PROMPT.read_text().partition("\n")
+    fill = {"<material folder>": shlex.quote(str(folder)), "<path to comments.py>": shlex.quote(str(Path(__file__).resolve())),
+            "<arguments>": shlex.join([*urls, *(["--hours", hours] if hours else [])])}
+    if bad := [v for v in fill.values() if re.search("[<>]", v)]:  # 埋めた値を、あとの置き換えや子が差し込み先と読み違えないように
+        sys.exit(f"差し込む値に < か > がある（差し込み先の埋め残しと見分けられない）: {'、'.join(bad)}")
+    missing = [k for k in fill if k not in body]  # ここで埋める差し込み先が雛形になくても止める
+    for k, v in fill.items():
         body = body.replace(k, v)
-    if left := re.findall(r"<[^<>\n]+>", body):
+    if left := missing + re.findall(r"<[^<>\n]+>", body):
         sys.exit(f"依頼文の差し込み先が埋まっていない: {'、'.join(dict.fromkeys(left))}（{PROMPT}）")
     print(f"{head}\n{body}", end="")
 
@@ -508,6 +512,12 @@ def selftest():
             try:
                 s, _ = call("watch-prompt", "--folder", str(root), "--hours", "2", "https://docs.google.com/presentation/d/X1/edit#slide=id.p", "X2")
                 assert Path.cwd() == root.resolve()  # factory.toml は資料のフォルダから上へたどる
+                (odd := root / "a<arguments>b").mkdir()
+                try:
+                    call("watch-prompt", "--folder", str(odd), "X1")  # 埋めた値の < は、あとの置き換えと子が差し込み先と読み違える
+                    raise AssertionError("< のあるフォルダを通した")
+                except SystemExit as e:
+                    assert str(e).startswith("差し込む値に < か > がある") and "a<arguments>b" in str(e), e
             finally:
                 os.chdir(cwd)
             head, body = s.split("\n", 1)
@@ -517,7 +527,8 @@ def selftest():
             globals()["PROMPT"] = root / "prompt.md"
             PROMPT.write_text("1 行目の <名前> は見ない\nIn <資料のフォルダ>, run <path to comments.py>.\n")  # 名前の変わった差し込み先
             try:
-                for argv, why in ((["watch-prompt", "X1"], "依頼文の差し込み先が埋まっていない: <資料のフォルダ>（"), (["watch-prompt", "--hours", "1"], "usage")):
+                for argv, why in ((["watch-prompt", "X1"], "依頼文の差し込み先が埋まっていない: <material folder>、<arguments>、<資料のフォルダ>（"),
+                                  (["watch-prompt", "--hours", "1"], "usage"), (["watch-prompt", "--hour", "1", "X1"], "usage")):
                     try:
                         call(*argv)
                         raise AssertionError(f"{argv} を通した")
