@@ -67,7 +67,10 @@ def sources(text):
     for i in range(len(lines)):
         if row(lines[i]) == list(SRC_COLS):
             _, rows = table(lines, i)
-            return (rows[-1][0] if rows else i + 1), {r["ID"]: r | {"_line": k} for k, r in rows}
+            out = {}
+            for k, r in rows:
+                out[r["ID"]] = r | {"_line": k, "_dup": r["ID"] in out}  # 同じ ID の行は後ろが残る。check が形の誤りに出す
+            return (rows[-1][0] if rows else i + 1), out
     return None, {}
 
 
@@ -291,11 +294,9 @@ def check(folder, fetch_now=False, days=14, today=None, fetcher=None):
         notes.append(f"元の更新日を取り直した: {sum(map(bool, got.values()))} 件（変わった {len(ch)} 件）" + (f"。取れなかった {len(miss)} 件: {', '.join(miss)}（元を開いて確かめる）" if miss else ""))
     if text and not src:
         notes.append("references.md が前の形（ID の列がない）。足すときは refs.py add（新しい形の表を末尾に足し、前の行は残す）")
-    seen_ids = set()
     for sid, r in src.items():
-        if sid in seen_ids or not re.fullmatch(r"S\d+", sid):
+        if r["_dup"] or not re.fullmatch(r"S\d+", sid):
             errs.append(f"references.md: ID「{sid}」が重なるか S<番号> でない")
-        seen_ids.add(sid)
         if not r["場所"]:
             errs.append(f"{sid}: 場所（URL・会議の ID・パス）が空")
         if r["種類"] not in SRC_KINDS:
@@ -405,6 +406,11 @@ def selftest():
         with contextlib.redirect_stdout(out := io.StringIO()):
             assert check(d, today="2026-10-21") == 6
         o = out.getvalue()
+        (dup := Path(tmp) / "dup").mkdir()
+        (dup / "references.md").write_text("| " + " | ".join(SRC_COLS) + " |\n|" + "---|" * len(SRC_COLS) + "\n"
+                                           + "".join(f"| S1 | {n} | https://ex.com/{n} | 公式 | 2026-10-01 | 2026-10-01 | 可 |  |\n" for n in "ab"))
+        with contextlib.redirect_stdout(io.StringIO()) as dup_out:
+            assert check(dup, today="2026-10-21") == 1 and "ID「S1」が重なる" in dup_out.getvalue()  # 同じ S の ID の 2 行（辞書にすると前の行が消える）
         assert all(s in o for s in ("references.md にない出典 S9", "ID「F1」が重なる", "種類「推測」", "確認「確認済み」", "出典の頭に S<番号>", "出典の表にない F7"))
         (d / "構成案_v2.md").write_text("## 出典の表\n\n| 値 | 出典 | 確認 |\n|---|---|---|\n| 会話 688 | README_data.md | 済（計算） |\n| PR 204 | gh | 未確認 |\n")
         assert [(r["ID"], r["言うこと"], state(r["確認"])) for r in facts(d)] == [("行1", "会話 688", "済"), ("行2", "PR 204", "未")]  # 前の形の表も読む

@@ -931,6 +931,8 @@ def lint_gdoc(doc, r, template=False, font=FONT, mono=MONO_DEFAULT, facts=None):
         if re.match(r"(出典|Sources?)[：:]", text, re.I) and not links_of(p):
             r.hits[NO_LINK].append(f"{where}: 「{text[:24]}」")
         sec_link |= bool(links_of(p))
+        if facts is not None and not re.match(r"(出典|Sources?|図|表) ?[：:\d]", text) and (miss := not_in_facts([text], facts)):  # 見出しの数字も（数字で結論を言う見出し）
+            r.hits[NOT_IN_FACTS].append(facts_hit(where, miss, facts))
         if style == "TITLE" and text.rstrip("。").endswith("について"):
             r.hits["題が「について」で終わる"].append(f"{where}: 「{text[:30]}」。主題と文書の性格（提案・報告・計画）を入れる（visual_doc.md の 2）")
         if (style == "TITLE" or style.startswith("HEADING_")) and POLITE_END.search(text):
@@ -958,8 +960,6 @@ def lint_gdoc(doc, r, template=False, font=FONT, mono=MONO_DEFAULT, facts=None):
         m = NUM.search(text)
         if m and not re.match(r"(図|表) ?\d+", text):
             sec_num.append(m.group())
-        if facts is not None and not re.match(r"(出典|Sources?|図|表) ?[：:\d]", text) and (miss := not_in_facts([text], facts)):
-            r.hits[NOT_IN_FACTS].append(facts_hit(where, miss, facts))
         if "bullet" in p and not tab:
             lists[p["bullet"].get("listId")].append((where, text, rs))
         quote_or_code = "borderLeft" in p["paragraphStyle"] or "shading" in p["paragraphStyle"]  # 引用（d.quote）とコード（d.code）は本文に数えない
@@ -1447,8 +1447,8 @@ def selftest():
         with contextlib.redirect_stdout(io.StringIO()):
             assert stats(log) == [("あおり", 2, 3, 2)]
     with contextlib.redirect_stdout(io.StringIO()):  # ドキュメントの段落も同じ照合。出典の行は数えない
-        lint_gdoc({**gdoc, "body": {"content": [gp("要旨", "HEADING_1"), gp("一次回答が 40% 減った。"), gp("残りは 15% だった。"), gp("出典: 社内の集計（2026 年 9 月、12%）")]}}, g := Report(), facts="| F1 | 40% |")
-    assert [h.split(": ", 1)[1] for h in g.hits[NOT_IN_FACTS]] == ["「15%」。先に出典の表へ足すか、表の値にする"], g.hits[NOT_IN_FACTS]
+        lint_gdoc({**gdoc, "body": {"content": [gp("要旨", "HEADING_1"), gp("一次回答が 40% 減った。"), gp("売上が 99% 増加", "HEADING_2"), gp("残りは 15% だった。"), gp("出典: 社内の集計（2026 年 9 月、12%）")]}}, g := Report(), facts="| F1 | 40% |")
+    assert [h.split(": ", 1)[1] for h in g.hits[NOT_IN_FACTS]] == ["「99%」。先に出典の表へ足すか、表の値にする", "「15%」。先に出典の表へ足すか、表の値にする"], g.hits[NOT_IN_FACTS]
     import tempfile
     from pathlib import Path
     with tempfile.TemporaryDirectory() as tmp:  # load_facts はプラグインの refs.py をパスで読む
