@@ -3,11 +3,11 @@
 台本は {"1": "…", "2": "…", …}（ページの番号 → そのページのノート）の JSON。
 usage（資料の build/ で）:
   speaker_notes.py pull <URL か ID>              今のノートを台本の形で標準出力に出す。deck.json のページの speakerNotes と違うページを標準エラーに出す（画面でノートが直されている）
-  speaker_notes.py lint <台本.json>              台本を確かめる（要修正: 1 シーン 2,500 字を超える。要確認: 空のシーン、確かめていないタグ、続けて置いたタグ、
-                                         1 シーンに 2 つ以上の感情のタグ、読み上げる記号、ページの参照）。字数の合計も出す
+  speaker_notes.py lint <台本.json> [--lang ja|en]   台本を確かめる（要修正: 1 シーン 2,500 字を超える。要確認: 空のシーン、確かめていないタグ、続けて置いたタグ、
+                                         1 シーンに 2 つ以上の感情のタグ、読み上げる記号、ページの参照。記号と参照は言語ごと〔既定は ja〕）。字数の合計も出す
   speaker_notes.py push <URL か ID> <台本.json>  ノートを台本に書き換え、deck.json のページの speakerNotes も書き換える。資料のフォルダ（build/ の上）の md に
                                          デッキの ID がなければ、何も書かずに止める（別の資料の build/ で回していないか）。初めての push では、今のノートを
-                                         notes_presenter_<日付>.json に控える（控えがあれば控えない。発表に戻すときは、控えを push する）。書いたあとに読み直して比べる
+                                         notes_before_<日付>.json に控える（控えがあれば控えない。元に戻すときは、控えを push する）。書いたあとに読み直して比べる
   speaker_notes.py --selftest
 """
 import datetime, json, re, sys
@@ -23,8 +23,9 @@ MAX = 2500  # Vids の 1 シーンの voiceover の上限
 PAUSES = {"short pause", "medium pause", "long pause"}
 EMOTIONS = {"determination", "enthusiasm", "curiosity"}
 TAG = re.compile(r"\[([^\[\]]*)\]")
-SPOKEN = re.compile(r"[/~#$「」『』【】（）()<>*`|]|https?:")  # voiceover が読み上げるか、読み方の決まらない記号
-PAGE_REF = re.compile(r"\d+\s*ページ|\bp\.?\s?\d+", re.I)  # 動画にページ番号はない
+# 言語ごとの (voiceover が読み上げるか読み方の決まらない記号, ページの参照。動画にページ番号はない)。../ja.md・../en.md
+LANGS = {"ja": (re.compile(r"[/~#$「」『』【】（）()<>*`|]|https?:"), re.compile(r"\d+\s*ページ|\bp\.?\s?\d+", re.I)),
+         "en": (re.compile(r"[/~#*|()<>`]|https?:"), re.compile(r"\b(?:page|slide)s?\s+\d+|\bp\.\s?\d+", re.I))}
 SCREEN = "前に組んだあとに画面で直されている"
 
 
@@ -104,14 +105,15 @@ def load(path):
     return {k: v.rstrip("\n") for k, v in script.items()}
 
 
-def check(script):
+def check(script, lang="ja"):
     """(要修正, 要確認) の行の並び。"""
+    spoken, page_ref = LANGS[lang]
     fix, ask = [], []
     for k, t in script.items():
         tags = TAG.findall(t)
         body = TAG.sub("", t)
-        if not body.strip():  # 要確認にとどめる（発表者向けの控えには、ノートのない表紙・扉がある。控えに戻す push を止めない）
-            ask.append(f"p{k}: 空のシーン（扉も 50〜100 字を話す）")
+        if not body.strip():  # 要確認にとどめる（前のノートの控えには、ノートのない表紙・扉がある。控えに戻す push を止めない）
+            ask.append(f"p{k}: 空のシーン（扉でも話す）")
         if len(t) > MAX:
             fix.append(f"p{k}: {len(t)} 字（Vids の 1 シーンの上限は {MAX} 字）")
         if bad := sorted({x for x in tags if x not in PAUSES | EMOTIONS}):
@@ -120,16 +122,16 @@ def check(script):
             ask.append(f"p{k}: タグを続けて置いている")
         if sum(x in EMOTIONS for x in tags) > 1:
             ask.append(f"p{k}: 感情のタグが 2 つ以上")
-        if m := SPOKEN.search(body):
+        if m := spoken.search(body):
             ask.append(f"p{k}: 読み上げる記号「{m.group()}」（…{body[max(0, m.start() - 10):m.end() + 10]}…）")
-        if m := PAGE_REF.search(body):
+        if m := page_ref.search(body):
             ask.append(f"p{k}: ページの参照「{m.group()}」")
     return fix, ask
 
 
-def cmd_lint(path):
+def cmd_lint(path, lang):
     script = load(path)
-    fix, ask = check(script)
+    fix, ask = check(script, lang)
     for title, rows in (("要修正", fix), ("要確認", ask)):
         print(f"\n== {title}: {len(rows)} ==")
         if rows:
@@ -177,8 +179,8 @@ def cmd_push(pid, path):
     files = pair(slides)  # Slides に書く前に読む（読めないファイルがあれば、何も書かずに止まる）
     before = notes_of(slides)
     screen = SCREEN in (gapi.guard(pid, revision(pid), STAMP, "", stop=False) or [])
-    if not list(Path().glob("notes_presenter_*.json")):
-        bk = Path(f"notes_presenter_{datetime.date.today():%Y%m%d}.json")
+    if not list(Path().glob("notes_before_*.json")):
+        bk = Path(f"notes_before_{datetime.date.today():%Y%m%d}.json")
         bk.write_text(json.dumps(before, ensure_ascii=False, indent=1) + "\n")
         print(f"今のノートを {bk} に控えた", file=sys.stderr)
     if reqs := note_reqs(slides, script, deck_font(p)):
@@ -202,7 +204,9 @@ def selftest():
                       "4": "[sigh] 12 ページを見てください。[short pause][medium pause] /path", "5": "[curiosity] なぜ。[determination] だから。"})
     assert fix == ["p3: 2501 字（Vids の 1 シーンの上限は 2500 字）"], fix
     assert [a.split(":")[0] for a in ask] == ["p2"] + ["p4"] * 4 + ["p5"] and "空のシーン" in ask[0] and "[sigh]" in ask[1] and "続けて" in ask[2] and "「/」" in ask[3] and "12 ページ" in ask[4], ask
-    assert check({"1": "【ユーザー・2 分】話す。"})[1] == ["p1: 読み上げる記号「【」（…【ユーザー・2 分】話…）"]  # 発表者向けの印も読み上げる
+    assert check({"1": "Pause the video (or not) on slide 5.", "2": "「引用」を p.5 で。"}, "en")[1] == [
+        "p1: 読み上げる記号「(」（…the video (or not) on…）", "p1: ページの参照「slide 5」", "p2: ページの参照「p.5」"]  # 英語は「」を見ず、英語の参照を見る
+    assert check({"1": "【ユーザー・2 分】話す。"})[1] == ["p1: 読み上げる記号「【」（…【ユーザー・2 分】話…）"]  # 【】の印も読み上げる
     note = lambda t: {"slideProperties": {"notesPage": {"notesProperties": {"speakerNotesObjectId": "n"},
                                                         "pageElements": [{"objectId": "n", "shape": {"text": {"textElements": [{"paragraphMarker": {}}, {"textRun": {"content": t}}]}}}] if t else []}}}
     slides = [note("前のノート\n"), note(""), note("同じ\n"), note("  \n")]
@@ -254,7 +258,9 @@ def main():
     if len(a) == 2 and a[0] == "pull":
         return cmd_pull(file_id(a[1]))
     if len(a) == 2 and a[0] == "lint":
-        return cmd_lint(a[1])
+        return cmd_lint(a[1], "ja")
+    if len(a) == 4 and a[0] == "lint" and a[2] == "--lang" and a[3] in LANGS:
+        return cmd_lint(a[1], a[3])
     if len(a) == 3 and a[0] == "push":
         return cmd_push(file_id(a[1]), a[2])
     sys.exit(__doc__)

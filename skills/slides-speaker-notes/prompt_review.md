@@ -9,7 +9,7 @@ You are the reviewer of a voiceover script for a video that Google Vids makes fr
 - The outline: <path to 構成案*.md>
 - The text and the original notes of each page: <$D/deck.md>
 - The new script: <build/notes_vids.json>
-- The rules for the script: "How to write" and "Audio tags" in <path to slides-speaker-notes/SKILL.md>
+- The rules for the script: "How to write" and "Audio tags" in <path to slides-speaker-notes/SKILL.md>, and <path to slides-speaker-notes/ja.md or en.md, the deck's language>
 
 ## What to check
 1. Facts. Compare each scene with that page's text and original notes. Report changed or dropped numbers, the base of a ratio or count, a caveat that was dropped, the same number word that now points at a different group, and claims stronger than the source.
