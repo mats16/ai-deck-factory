@@ -25,7 +25,7 @@ python3 $N push <URL> notes_vids.json          # replace the notes only
 3. **Write the script** into `notes_vids.json`, one key per page (page numbers from 1), by "How to write" and "Audio tags" below. Write the whole deck before reviewing, because the bridges between scenes depend on their neighbors.
 4. **Bring `lint` to zero `要修正`.** Look at every `要確認` and fix it, or keep it when it is intended (an example phrase that contains 「5 ページ」 is fine).
 5. **Ask one child agent to review once** with [prompt_review.md](prompt_review.md) (a new child without the conversation, the same model as the main agent; "How to ask" in `../deck-review/SKILL.md`). Verify each finding against `deck.md` before fixing, then run `lint` again. Do not ask for a second round; the script has no layout, so the parent can check its own fixes.
-6. **Push.** `push` refuses while `要修正` remains. It writes only the speaker notes, so on-screen edits and comments on the slides stay. See "What push does".
+6. **Push.** `push` does not run `lint` (so a presenter backup longer than Vids' limit can be pushed back); run `lint` first. It writes only the speaker notes, so on-screen edits and comments on the slides stay. See "What push does".
 7. **Deliver.** Give the URL, the scene count and total characters (from `lint`), the point the video leaves and where the story turns, what you left out of the voice, and the backup file.
 
 ## How to write
@@ -45,6 +45,7 @@ python3 $N push <URL> notes_vids.json          # replace the notes only
 
 ## What push does
 
+- It stops before writing anything unless an `.md` file in the material's folder (the outline holds the URL) contains the deck's ID, because page file names such as `p05.json` repeat across materials, and pushing from another material's `build/` would overwrite that material's page files.
 - The first time, it saves the current notes to `notes_presenter_<date>.json` in `build/`. If any `notes_presenter_*.json` exists, it saves nothing, so the file keeps the presenter's notes. To present with the deck again, `push` that file.
 - It replaces only the speaker notes of pages whose notes changed (in the deck's font), reads them back, and stops if they differ from the script.
 - It rewrites `speakerNotes` in the page file of each slide, keeping the file's layout. It finds the file by the file-name mark in the slide's ID (not by position, so a locally reordered `deck.json` does not send notes to the wrong file). It lists the slides whose file it cannot find (pages.py decks, pages added on screen); rewrite those notes yourself (`d.note` for pages.py).

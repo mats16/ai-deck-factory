@@ -5,7 +5,8 @@ usage（資料の build/ で）:
   speaker_notes.py pull <URL か ID>              今のノートを台本の形で標準出力に出す。deck.json のページの speakerNotes と違うページを標準エラーに出す（画面でノートが直されている）
   speaker_notes.py lint <台本.json>              台本を確かめる（要修正: 1 シーン 2,500 字を超える。要確認: 空のシーン、確かめていないタグ、続けて置いたタグ、
                                          1 シーンに 2 つ以上の感情のタグ、読み上げる記号、ページの参照）。字数の合計も出す
-  speaker_notes.py push <URL か ID> <台本.json>  ノートを台本に書き換え、deck.json のページの speakerNotes も書き換える。初めての push では、今のノートを
+  speaker_notes.py push <URL か ID> <台本.json>  ノートを台本に書き換え、deck.json のページの speakerNotes も書き換える。資料のフォルダ（build/ の上）の md に
+                                         デッキの ID がなければ、何も書かずに止める（別の資料の build/ で回していないか）。初めての push では、今のノートを
                                          notes_presenter_<日付>.json に控える（控えがあれば控えない。発表に戻すときは、控えを push する）。書いたあとに読み直して比べる
   speaker_notes.py --selftest
 """
@@ -64,6 +65,12 @@ def page_files(deck=Path("deck.json")):
         else:  # 部品 1 つのファイル（kind component）は、ノートを書く場所がない
             return None
     return out
+
+
+def mine(pid):
+    """今いる build/ が、このデッキの資料のものか。資料のフォルダの md（構成案に URL を書く）にデッキの ID があるかで見る。
+    ページのファイル名（p05.json など）はどの資料でもそろうので、pair の印だけでは別の資料のファイルと取り違える。"""
+    return any(pid in f.read_text(errors="ignore") for f in Path.cwd().parent.glob("*.md"))
 
 
 def pair(slides):
@@ -164,8 +171,9 @@ def cmd_push(pid, path):
     slides = p["slides"]
     if set(script) != {str(i) for i in range(1, len(slides) + 1)}:
         sys.exit(f"{path} のページ（{len(script)} 個）が、デッキの 1〜{len(slides)} ページと合わない")
-    if fix := check(script)[0]:
-        sys.exit("要修正が残っている（speaker_notes.py lint）: " + " / ".join(fix))
+    if not mine(pid):
+        sys.exit(f"資料のフォルダ（{Path.cwd().parent}）の md（構成案など）に、このデッキの ID {pid} がない。"
+                 "別の資料の build/ で回していないかを確かめる（この資料のデッキなら、構成案に URL を書いてから回す）")
     files = pair(slides)  # Slides に書く前に読む（読めないファイルがあれば、何も書かずに止まる）
     before = notes_of(slides)
     screen = SCREEN in (gapi.guard(pid, revision(pid), STAMP, "", stop=False) or [])
@@ -203,7 +211,8 @@ def selftest():
     assert [next(iter(x)) for x in r] == ["deleteText", "insertText", "updateTextStyle", "insertText", "updateTextStyle", "deleteText"], r  # 空のページは消さず、同じページは書かない。空白だけのノートも消す
     with tempfile.TemporaryDirectory() as t:
         cwd = os.getcwd()
-        os.chdir(t)
+        Path(t, "build").mkdir()
+        os.chdir(Path(t, "build"))  # 資料のフォルダの build/（mine が上の md を見る）
         try:
             src = '{"apiVersion": "slides/v1", "kind": "page",\n "title": "見出し", "speakerNotes": "古い \\"ノート\\"",\n "body": [{"type": "gantt", "rows": [{"head": "a", "note": "補足"}]}]}\n'
             Path("p1.json").write_text(src)
@@ -212,6 +221,8 @@ def selftest():
             Path("pages_a.json").write_text('{"apiVersion": "slides/v1", "kind": "deck", "name": "a", "pages": ["p1.json", "p2.json"]}')
             Path("deck.json").write_text('{"apiVersion": "slides/v1", "kind": "deck", "pages": ["p0.json", "pages_a.json"]}')
             assert page_files() == [Path("p0.json"), Path("p1.json"), Path("p2.json")]  # 子のデッキのファイルの中も並べる
+            Path("..", "構成案.md").write_text("- Google Slides: https://docs.google.com/presentation/d/1AbC_x/edit\n")
+            assert mine("1AbC_x") and not mine("1Other")  # 別の資料の build/ では書かない
             sid = lambda name: f"r1_0001k{page_key(name)}h{'0' * 16}"
             assert pair([{"objectId": sid("p2")}, {"objectId": sid("p0")}, {"objectId": "g1"}]) == [Path("p2.json"), Path("p0.json"), None]  # 並びでなく印で結ぶ
             Path("part.json").write_text('{"apiVersion": "slides/v1", "kind": "component", "type": "text", "text": "t"}')
