@@ -4,13 +4,13 @@
 usage（資料の build/ で）:
   speaker_notes.py pull <URL か ID>              今のノートを台本の形で標準出力に出す。deck.json のページの speakerNotes と違うページを標準エラーに出す（画面でノートが直されている）
   speaker_notes.py lint <台本.json> [--lang ja|en]   台本を確かめる（要修正: 1 シーン 2,500 字を超える。要確認: 空のシーン、確かめていないタグ、続けて置いたタグ、
-                                         1 シーンに 2 つ以上の感情のタグ、読み上げる記号、ページの参照。記号と参照は言語ごと〔既定は ja〕）。字数の合計も出す
+                                         1 シーンに 2 つ以上の感情のタグ、読み上げる記号、ページの参照、ja では英字。記号と参照は言語ごと〔既定は ja〕）。字数の合計も出す
   speaker_notes.py push <URL か ID> <台本.json>  ノートを台本に書き換え、deck.json のページの speakerNotes も書き換える。資料のフォルダ（build/ の上）の md に
                                          デッキの ID がなければ、何も書かずに止める（別の資料の build/ で回していないか）。初めての push では、今のノートを
                                          notes_before_<日付>.json に控える（控えがあれば控えない。元に戻すときは、控えを push する）。書いたあとに読み直して比べる
   speaker_notes.py --selftest
 """
-import datetime, json, re, sys
+import datetime, json, re, sys, unicodedata
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -23,9 +23,13 @@ MAX = 2500  # Vids の 1 シーンの voiceover の上限
 PAUSES = {"short pause", "medium pause", "long pause"}
 EMOTIONS = {"determination", "enthusiasm", "curiosity"}
 TAG = re.compile(r"\[([^\[\]]*)\]")
-# 言語ごとの (voiceover が読み上げるか読み方の決まらない記号, ページの参照。動画にページ番号はない)。../ja.md・../en.md
-LANGS = {"ja": (re.compile(r"[/~#$「」『』【】（）()<>*`|]|https?:"), re.compile(r"\d+\s*ページ|\bp\.?\s?\d+", re.I)),
-         "en": (re.compile(r"[/~#*|()<>`]|https?:"), re.compile(r"\b(?:page|slide)s?\s+\d+|\bp\.\s?\d+", re.I))}
+# 日本語の文字（かな・漢字）でない字と数字の続き。- . ' _（全角も）でつないだもの（deck-review・GPT-4o・v2.5）も 1 語
+W = r"[^\W_ぁ-ヿㇰ-ㇿｦ-ﾟ㐀-䶿一-鿿豈-\uFAFF\U00020000-\U0003FFFF々〆〇〻]"
+JOIN = re.compile(r"[-.'’_‐‑－．＇＿]")
+WORD = re.compile(rf"{W}+(?:{JOIN.pattern}{W}+)*")
+# 言語ごとの (voiceover が読み上げるか読み方の決まらない記号, ページの参照。動画にページ番号はない, カタカナにする英字)。../ja.md・../en.md
+LANGS = {"ja": (re.compile(r"[/~#$「」『』【】（）()<>*`|]|https?:"), re.compile(r"\d+\s*ページ|\bp\.?\s?\d+", re.I), WORD),
+         "en": (re.compile(r"[/~#*|()<>`]|https?:"), re.compile(r"\b(?:page|slide)s?\s+\d+|\bp\.\s?\d+", re.I), None)}
 SCREEN = "前に組んだあとに画面で直されている"
 
 
@@ -107,7 +111,7 @@ def load(path):
 
 def check(script, lang="ja"):
     """(要修正, 要確認) の行の並び。"""
-    spoken, page_ref = LANGS[lang]
+    spoken, page_ref, latin = LANGS[lang]
     fix, ask = [], []
     for k, t in script.items():
         tags = TAG.findall(t)
@@ -126,6 +130,8 @@ def check(script, lang="ja"):
             ask.append(f"p{k}: 読み上げる記号「{m.group()}」（…{body[max(0, m.start() - 10):m.end() + 10]}…）")
         if m := page_ref.search(body):
             ask.append(f"p{k}: ページの参照「{m.group()}」")
+        if latin and (words := [w for w in dict.fromkeys(latin.findall(unicodedata.normalize("NFC", body))) if not JOIN.sub("", w).isdigit()]):
+            ask.append(f"p{k}: カタカナにする英語 {'・'.join(words)}（画面の表示を指すなら残す）")
     return fix, ask
 
 
@@ -203,7 +209,10 @@ def selftest():
     fix, ask = check({"1": "[short pause] はじめに。[enthusiasm] ようこそ。", "2": "", "3": "あ" * 2501,
                       "4": "[sigh] 12 ページを見てください。[short pause][medium pause] /path", "5": "[curiosity] なぜ。[determination] だから。"})
     assert fix == ["p3: 2501 字（Vids の 1 シーンの上限は 2500 字）"], fix
-    assert [a.split(":")[0] for a in ask] == ["p2"] + ["p4"] * 4 + ["p5"] and "空のシーン" in ask[0] and "[sigh]" in ask[1] and "続けて" in ask[2] and "「/」" in ask[3] and "12 ページ" in ask[4], ask
+    assert [a.split(":")[0] for a in ask] == ["p2"] + ["p4"] * 5 + ["p5"] and "空のシーン" in ask[0] and "[sigh]" in ask[1] and "続けて" in ask[2] and "「/」" in ask[3] and "12 ページ" in ask[4], ask
+    assert ask[5] == "p4: カタカナにする英語 path（画面の表示を指すなら残す）", ask  # タグの英字は見ない
+    assert check({"1": "Cafe\u0301 と ＧＣＰ と S3、deck-review と Wi-Fi、GPT-4o の v2.5 を Việt で。32 ドル、3.5 倍、２０２６ 年、2026-10-21、２０２６－１０、々、ㇰ〻、my_var、Ｗｉ－Ｆｉ、Wi‐Fi。"})[1] == [
+        "p1: カタカナにする英語 Café・ＧＣＰ・S3・deck-review・Wi-Fi・GPT-4o・v2.5・Việt・my_var・Ｗｉ－Ｆｉ・Wi‐Fi（画面の表示を指すなら残す）"]  # 書いたとおりの語を、出てきた順に。数字だけは出さない
     assert check({"1": "Pause the video (or not) on slide 5.", "2": "「引用」を p.5 で。"}, "en")[1] == [
         "p1: 読み上げる記号「(」（…the video (or not) on…）", "p1: ページの参照「slide 5」", "p2: ページの参照「p.5」"]  # 英語は「」を見ず、英語の参照を見る
     assert check({"1": "【ユーザー・2 分】話す。"})[1] == ["p1: 読み上げる記号「【」（…【ユーザー・2 分】話…）"]  # 【】の印も読み上げる
