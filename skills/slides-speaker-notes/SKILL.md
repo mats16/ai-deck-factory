@@ -32,7 +32,7 @@ python3 $N push <URL> notes_vids.json          # replace the notes only
 
 Before writing, open the file for the deck's language: [ja.md](ja.md) for Japanese (the default, 「日本語で作る」 in the workspace's AGENTS.md) or [en.md](en.md) for English. It holds what depends on the language: the tone, the length of a scene, words to rewrite for the voice, symbols, how to point at other scenes, and where tags go. The workspace adds to or overrides it in `rules/slides-speaker-notes/<ja|en>.md` (the hook shows it after the file). Run `lint` with the same language (`--lang ja|en`).
 
-- [slides-speaker-notes-001] スライドを読み上げない。動画全体の筋を優先する。冒頭で、この動画を通して見てほしい点を先に言う。各シーンの頭に、前のシーンからのつなぎの一言を入れ、章の切り替わりでは、ここから何の話かを言う。最後にその点に戻り、次の一歩を呼びかけて終える。
+- [slides-speaker-notes-001] スライドを読み上げない。動画全体の筋を優先する。冒頭で、この動画を通して見てほしい点を先に言う。各シーンの頭に、前のシーンからのつなぎの一言を入れ、章の切り替わり（扉）では、ここから何の話かを、話しかける言葉でつなぐ（言い方は言語のファイル）。最後にその点に戻り、次の一歩を呼びかけて終える。
 - [slides-speaker-notes-002] 細部は声では飛ばしてよい（ファイル名、パス、コマンド、表のセルの値）。表や細かいページでは、動画を止めて見るよう促す。動画にページ番号はないので、ページを番号で指さず、前後のシーンとして指す（言い方は言語のファイル）。
 - [slides-speaker-notes-003] 縮めても、事実は元のノートとスライドから変えない。割合や件数は、何のうちの数かを残す。同じ数の言葉が別のまとまりを指すときは、どのまとまりかを言う。断り書きを落とさず、言い過ぎにしない。
 
