@@ -1129,7 +1129,8 @@ def cmd_check(src):
         os.chdir(src)
     md = load_doc() if src else None
     font, mono = built_fonts(did)  # 書体は組んだときのもの（doc.md のテーマではない）
-    hard = lint.lint_gdoc(doc, r := lint.Report(), template=bool(md and (md.meta.get("template") or md.meta.get("source"))), font=font, mono=mono)  # テンプレートとその見本は、節の順をテンプレートが決める
+    hard = lint.lint_gdoc(doc, r := lint.Report(), template=bool(md and (md.meta.get("template") or md.meta.get("source"))), font=font, mono=mono,
+                         facts=lint.load_facts() if src else None)  # テンプレートとその見本は、節の順をテンプレートが決める
     if not any(w in doc["title"].lower() for w in ("tmp", "template", "作業用", "テンプレート")):  # 一時の文書は数えない（gslides.py と同じ）
         lint.log_run(r, did)
     for f in glob.glob(f"{d}/p-*.png"):

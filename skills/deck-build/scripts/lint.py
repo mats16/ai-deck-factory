@@ -6,7 +6,7 @@
 書いたルールのうち、機械で見られるものを数える。標準ライブラリだけで動く。
 要修正（HARD）が 1 つでもあれば exit 1。要確認（WARN）は 1 件ずつ見て、直すか、残す理由を言えるようにする。
 ルールの出典は ../../deck-practices/ と、ワークスペースの Research/deck_research/log/。pptx を読んでいた版は Archive/pptx_pipeline_20261007/、docx を読んでいた部分は Archive/docx_pipeline_20261010/。"""
-import hashlib, itertools, json, math, os, re, subprocess, sys, time
+import hashlib, itertools, json, math, os, re, subprocess, sys, time, unicodedata
 from collections import Counter, defaultdict
 
 sys.dont_write_bytecode = True
@@ -68,6 +68,8 @@ ARROW_MID = "横向きの矢印が、両側の箱の上下の中央にない"
 LINE_GRID = "格子を線で組んでいる（標準の表にできないか）"
 NO_NOTES = "ノートがない"
 NO_SOURCE = "数字に出典の行がない"
+# [lint-026] ページの数字は出典の表にあるものだけ。足すときは先に表へ足す（deck-practices/content.md の content-064）。表は refs.py が資料のフォルダから読む
+NOT_IN_FACTS = "出典の表にない数字"
 TWO_LINES = "見出しかリードが 2 行の見込み"  # 見出しは 1 行、リードは 1 文（visual.md の 1）
 HEAD_PERIOD, BULLET_PERIOD = "見出しの句点", "箇条書きの句点の混在"  # content.md の 6。名前は Docs の規則と同じ（Docs は見出しのスタイル、箇条書きのリストごと）
 # [lint-023] 見出しは短い名詞句。言い切りは判断を頼むページと数字の結論のページの 2〜3 枚だけ（content.md の 4・6、visual_doc.md の 2）
@@ -99,7 +101,7 @@ MONO = MONO_DEFAULT  # 見ている資料の等幅の書体。lint_slides がデ
 FONT_NG = f"書体が {FONT} でない"  # スライドはテンプレートの書体（deck_font）と比べる。Google Fonts にない書体は、API が受け付けても黙って別の書体で描かれる（slides.md の 5）。英数字だけの MONO（コード）は通す
 MONO_NG = f"等幅の {MONO_DEFAULT} に和文"  # 名前は既定の書体のまま（台帳と lint_runs.jsonl が名前で数える）。テーマの mono なら指摘にその名前を出す。MONO に和文の字形はなく、Google が別の書体で描く。和文は FONT にする（slides.py の mono_reqs。visual.md の 2）
 DECK_WIDE = {NO_COVER, NO_DIVIDER, SHORT_CH, MANY_BANDS, HEAD_CLAIMS}  # デッキ全体を見て出す規則。lint_slides の only で絞らない（ページの番号が付いていても、ほかのページで決まる）
-PAGE_ONLY = {NO_NOTES, NO_SOURCE, NO_LINK, TALK, TWO_LINES, HEAD_PERIOD, HEAD_POLITE, EMPTY_BELOW, EMPTY_HOLE}  # ページを見て出す規則。部品だけを見るときは出さない
+PAGE_ONLY = {NO_NOTES, NO_SOURCE, NOT_IN_FACTS, NO_LINK, TALK, TWO_LINES, HEAD_PERIOD, HEAD_POLITE, EMPTY_BELOW, EMPTY_HOLE}  # ページを見て出す規則。部品だけを見るときは出さない
 ESTIMATE = {TWO_LINES, BODY_LINES, PHRASE_BREAK, EMPTY_BELOW, EMPTY_BOX, EMPTY_HOLE, TEXT_OVER}  # 字幅と行の高さの見積もりから出す指摘。Google が描いた画像で確定する（ほかは JSON で決まる）
 HARD_NAMES = set(HARD) | {HEAD_PERIOD, HEAD_POLITE, f"{MIN_PT}pt 未満の文字", f"{DOC_MIN_PT}pt 未満の文字", COPYRIGHT_NG, FONT_NG, MONO_NG, "用紙が A4 でない", "追跡の印の付いたリンク"}
 INS = INSET * 72  # 文字の枠の内側の余白（pt）。Slides API の既定は 0.1 in で、変えられない
@@ -503,6 +505,43 @@ def line_grid(lines):  # [lint-017] 上端と長さが同じ縦線が 3 本以�
     return [n for n in seen.values() if n >= 3]
 
 
+def load_facts(folder=".."):
+    """資料のフォルダ（build/ の親）の出典の表の文字（../../deck-practices/scripts/refs.py の facts_text）。slides.py lint・docs.py check が build/ で呼び、
+    lint_slides・lint_gdoc の facts に渡す。refs.py はパスで読む（build/ に同じ名前のファイルがあっても取り違えない）。"""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("refs", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "deck-practices", "scripts", "refs.py"))
+    refs = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(refs)
+    return refs.facts_text(folder)
+
+
+DIGITS = re.compile(r"\d+(?:\.\d+)?")
+NUMBER = re.compile(r"(?<![A-Za-z\d.])" + DIGITS.pattern)  # 表の数の読み方。英字の後ろ（v2、H100）と、小数点の後ろ（1.2.3 の 3）は数えない
+
+
+def not_in_facts(texts, facts):
+    """texts の統計らしい数字（NUM。NO_SOURCE と同じもの）のうち、数の字が出典の表の文字 facts（refs.py の facts_text）にないもの。全角と桁区切りはそろえて、数の字だけを比べる。
+    丸めた値は、ページの書き方のまま表の「言うこと」に書く（materials-007。表 3.24 倍だけならページの 3.2 倍は出す）。
+    ponytail: 単位と意味（15% と 15 社、範囲の下の値、NUM が数えない数）は見ない。それは照合の子の 2 回目（deck-review/prompt_sources.md の "Pages"）が見る"""
+    norm = lambda t: re.sub(r"(?<=\d),(?=\d{3})", "", unicodedata.normalize("NFKC", t))
+    have, out = set(NUMBER.findall(norm(facts or ""))), []
+    for t in texts:
+        t, end = norm(URL.sub("", t)), 0
+        for m in NUM.finditer(t):
+            if m.start() < end:  # 前の数の続き（$12M の 2M）
+                continue
+            n = DIGITS.match(t, m.start() + re.search(r"\d", m.group()).start())  # NUM の $ の形は 1 字だけを取るので、数の終わりまで読む
+            end = n.end()
+            if n.group() not in have and (shown := t[m.start():max(m.end(), n.end())].strip()) not in out:
+                out.append(shown)
+    return out
+
+
+def facts_hit(where, miss, facts):
+    """出典の表にない数字の指摘の 1 行（スライドはページ、ドキュメントは段落の場所）。"""
+    return f"{where}: 「" + "」「".join(miss[:4]) + "」" + ("（出典の表がない）" if not facts else "。先に出典の表へ足すか、表の値にする")
+
+
 def hit_page(h):
     """指摘の頭のページの番号（「p3: …」「p3 の見出し: …」）。頭が p<番号> でない指摘（デッキ全体のもの）は None。"""
     m = re.match(r"p(\d+)", h)
@@ -533,8 +572,9 @@ class Report:
         return n
 
 
-def lint_slides(p, r, reuse=False, talk=False, only=None, scope="deck"):
+def lint_slides(p, r, reuse=False, talk=False, only=None, scope="deck", facts=None):
     """p は presentations.get の JSON。reuse は社内資料の差し替え用（元の大きさのままなので 11pt の下限と表紙を見ない）。
+    facts は資料の出典の表の文字（load_facts）。None なら、ページの数字が表にあるかを見ない（lint-026）。
     only（ページの番号の集合）を渡すと、そのページの指摘・見出し・字数だけを出す（slides.py lint --pages）。デッキ全体の規則（DECK_WIDE）と、
     ワークスペースの点検（ページをまたいで見るものがありうる）は絞らない。"""
     titles, sizes, pairs, chars, dark, foot_secret, bands, claims, wraps = [], Counter(), defaultdict(list), [], [], [], [], [], []
@@ -547,7 +587,7 @@ def lint_slides(p, r, reuse=False, talk=False, only=None, scope="deck"):
         bg = page_bg(p, s, scheme)
         dark.append(is_dark(p, s, scheme))
         grid = []
-        shapes, lines, boxes, best, top, has_src, nums = [], [], [], (0, None, None), (0, None, None), False, []
+        shapes, lines, boxes, best, top, has_src, nums, fact_nums = [], [], [], (0, None, None), (0, None, None), False, [], []
         els = list(flatten(s.get("pageElements", [])))
         ups = dict(ancestry(s.get("pageElements", [])))
         parts = set(group_lines(s.get("pageElements", [])))
@@ -614,6 +654,8 @@ def lint_slides(p, r, reuse=False, talk=False, only=None, scope="deck"):
                         has_src = True
                     elif not footer and not mono and NUM.search(t):
                         nums.append(t)
+                    if not footer and not mono and not re.match(r"\s*(出典|Sources?)\s*[：:]", t, re.I):  # 出典の表と比べるのは、出典の行（「出典:」で始まる）のほか。値の見分けは not_in_facts（NUM より広い: 3B、10Mユーザー）
+                        fact_nums.append(t)
                     for c, st in para[1]:
                         txt, sz = c.strip(), size_of(st)
                         if not txt:
@@ -700,6 +742,8 @@ def lint_slides(p, r, reuse=False, talk=False, only=None, scope="deck"):
                                           + "。箱を中身に合わせて縮め、間を詰める。上下の中央に置いた図ならそのままでよい（画像で見る）")
         if nums and not has_src:
             r.hits[NO_SOURCE].append(f"p{i}: 「{nums[0][:30]}」")
+        if facts is not None and (miss := not_in_facts(fact_nums, facts)):
+            r.hits[NOT_IN_FACTS].append(facts_hit(f"p{i}", miss, facts))
         note = note_text(s)
         if not note.strip() and not reuse:
             r.hits[NO_NOTES].append(f"p{i}")
@@ -751,7 +795,7 @@ def lint_slides(p, r, reuse=False, talk=False, only=None, scope="deck"):
     print(f"\n== 本文の字数（見出し・リード・出典・フッターを除く。話す資料は {TALK_MAX} 字まで） ==")
     print(" / ".join(chars))
     hard = r.show(list(HARD) + [f"{MIN_PT}pt 未満の文字", COPYRIGHT_NG, FONT_NG, MONO_NG, HEAD_PERIOD, HEAD_POLITE], "要修正")
-    r.show(list(WARN) + list(SLIDE_ONLY) + list(NOTES_ONLY) + [NO_SOURCE, NO_LINK, BODY_LINES, TWO_LINES, HEAD_CLAIMS, BULLET_PERIOD, TALK, NO_NOTES, ARROW_MID, TEXT_OVER, LINE_GRID, EMPTY_BELOW, EMPTY_BOX, EMPTY_HOLE, PAD_NG, NUM_NO_UNIT, OPEN_HEAD, PHRASE_BREAK, COL_SHIFT, DASH_ROUND, STAGE_NG, CODE_NOT_MONO, BLOCK_ON_NAVY, MANY_BANDS, NO_COVER, NO_DIVIDER, SHORT_CH], "要確認")
+    r.show(list(WARN) + list(SLIDE_ONLY) + list(NOTES_ONLY) + [NO_SOURCE, NOT_IN_FACTS, NO_LINK, BODY_LINES, TWO_LINES, HEAD_CLAIMS, BULLET_PERIOD, TALK, NO_NOTES, ARROW_MID, TEXT_OVER, LINE_GRID, EMPTY_BELOW, EMPTY_BOX, EMPTY_HOLE, PAD_NG, NUM_NO_UNIT, OPEN_HEAD, PHRASE_BREAK, COL_SHIFT, DASH_ROUND, STAGE_NG, CODE_NOT_MONO, BLOCK_ON_NAVY, MANY_BANDS, NO_COVER, NO_DIVIDER, SHORT_CH], "要確認")
     hard += workspace_checks("slides", p, r)
     print("\n== 文字サイズ（pt: run の数） ==")
     print(", ".join(f"{k:g}: {v}" for k, v in sorted(sizes.items())))
@@ -814,7 +858,7 @@ def theme_pages():
     return out
 
 
-def lint_gdoc(doc, r, template=False, font=FONT, mono=MONO_DEFAULT):
+def lint_gdoc(doc, r, template=False, font=FONT, mono=MONO_DEFAULT, facts=None):
     """template=True はテンプレートから書いた文書（docs.py の doc.md の template:）。節の順はテンプレートが決めるので、冒頭の要旨を見ない。"""
     ns = {s["namedStyleType"]: s for s in doc.get("namedStyles", {}).get("styles", [])}
     base = ns.get("NORMAL_TEXT", {}).get("textStyle", {})
@@ -914,6 +958,8 @@ def lint_gdoc(doc, r, template=False, font=FONT, mono=MONO_DEFAULT):
         m = NUM.search(text)
         if m and not re.match(r"(図|表) ?\d+", text):
             sec_num.append(m.group())
+        if facts is not None and not re.match(r"(出典|Sources?|図|表) ?[：:\d]", text) and (miss := not_in_facts([text], facts)):
+            r.hits[NOT_IN_FACTS].append(facts_hit(where, miss, facts))
         if "bullet" in p and not tab:
             lists[p["bullet"].get("listId")].append((where, text, rs))
         quote_or_code = "borderLeft" in p["paragraphStyle"] or "shading" in p["paragraphStyle"]  # 引用（d.quote）とコード（d.code）は本文に数えない
@@ -971,7 +1017,7 @@ def lint_gdoc(doc, r, template=False, font=FONT, mono=MONO_DEFAULT):
     print("\n".join(firsts) or "（見出しも本文もない）")
     print(f"\n== 本文の字数: {body} 字（見出し・表・図表の題・出典・引用を除く）、1 行 約 {per_line:.0f} 字 ==")
     hard = r.show(list(HARD) + [f"{DOC_MIN_PT}pt 未満の文字", FONT_NG, MONO_NG, A4_NG, UTM_NG, HEAD_PERIOD, HEAD_POLITE], "要修正")
-    r.show(list(WARN) + [NO_LINK] + list(DOC_ONLY), "要確認")
+    r.show(list(WARN) + [NOT_IN_FACTS, NO_LINK] + list(DOC_ONLY), "要確認")
     hard += workspace_checks("doc", doc, r)
     return hard
 
@@ -1102,6 +1148,16 @@ def selftest():
     for lines in (8, 9):
         res, _, hard = run(deck([(NAVY, [title(), shape(lines), shape(9, y=7.08), shape(9, prefix="出典：")])]))
         assert hard == 0 and len(res.hits[BODY_LINES]) == (1 if lines == 9 else 0)
+    # 出典の表にない数字: 表にある数（桁区切り・全角はそろえる）は出さず、ない値だけを出す。表を読まなければ（None）見ない
+    nums_page = deck([(OAT, [title(), shape(1, text=["一次回答が 3.2 倍、費用は １,２００ 万円、残りは 15%"]), shape(1, y=6.6, prefix="出典：", link=True)])])
+    for facts, miss in ((None, None), ("| F1 | 3.2 倍（3.24） | 計算 | F2÷F3 | 済 |\n| F4 | 1200 万円 | 数字 | S1 | 済 |\n| F5 | 1.5% | 数字 | S1 | 済 |", "p1: 「15%」。"),
+                        ("", "p1: 「3.2 倍」「1200 万」「15%」（出典の表がない）")):
+        res, out, _ = run(nums_page, facts=facts)
+        assert (res.hits[NOT_IN_FACTS] or [None])[0] == (miss and miss + ("先に出典の表へ足すか、表の値にする" if facts else "")), res.hits[NOT_IN_FACTS]
+    res, _, _ = run(deck([(OAT, [title(), shape(1, text=["出典の表のとおり、一次回答が 99% 減った"]), shape(1, y=6.6, prefix="出典：社内の集計 12%", link=True)])]), facts="| 1% |")
+    assert res.hits[NOT_IN_FACTS] == ["p1: 「99%」。先に出典の表へ足すか、表の値にする"], res.hits[NOT_IN_FACTS]  # 「出典:」で始まる行だけを外す（本文の「出典の表の…」は見る）
+    assert not_in_facts(["89%、$12M、１,２００ 万円、30〜40%"], "| F15 | 88.7% | $12 million | 1200 万 | 40% |") == ["89%"]  # 丸めた値は表に書く。$ の数は終わりまで読む。範囲の下の値は見ない
+    assert not_in_facts(["3 倍、B2B の 3 M社"], "| F3 | 3.5 倍 |") == ["3 倍"]  # ID の F3 と小数の続きは表の数でない。語の中の数と名前（M社）は NUM が数えない
     # 文字の下限: 塗りのない文字は 11pt 未満で止め、塗りのある図形の中の文字は 9pt まで通す（8pt は止める）
     for size, fill, n in ((9, None, 1), (9, NAVY, 0), (8, NAVY, 1)):
         res, _, _ = run(deck([(NAVY, [title(), shape(1, y=3, size=size, fill=fill)])]))
@@ -1390,9 +1446,16 @@ def selftest():
         log_run(a, "d1", log), log_run(b, "d1", log), log_run(b, "d2", log)
         with contextlib.redirect_stdout(io.StringIO()):
             assert stats(log) == [("あおり", 2, 3, 2)]
-    globals()["workspace_checks"] = ws_checks
-    import gapi, tempfile  # ワークスペースの点検: HARD の名前だけ要修正になる
+    with contextlib.redirect_stdout(io.StringIO()):  # ドキュメントの段落も同じ照合。出典の行は数えない
+        lint_gdoc({**gdoc, "body": {"content": [gp("要旨", "HEADING_1"), gp("一次回答が 40% 減った。"), gp("残りは 15% だった。"), gp("出典: 社内の集計（2026 年 9 月、12%）")]}}, g := Report(), facts="| F1 | 40% |")
+    assert [h.split(": ", 1)[1] for h in g.hits[NOT_IN_FACTS]] == ["「15%」。先に出典の表へ足すか、表の値にする"], g.hits[NOT_IN_FACTS]
+    import tempfile
     from pathlib import Path
+    with tempfile.TemporaryDirectory() as tmp:  # load_facts はプラグインの refs.py をパスで読む
+        Path(tmp, "構成案.md").write_text("## 出典の表\n\n| ID | 言うこと | 種類 | 出典 | 確認 |\n|---|---|---|---|---|\n| F1 | 40% | 数字 | S1 | 済 |\n")
+        assert load_facts(tmp) == "40%" and load_facts(os.path.join(tmp, "nothing")) is None  # 資料のフォルダの出典の表を読み、構成案も台帳もなければ None
+    globals()["workspace_checks"] = ws_checks
+    import gapi  # ワークスペースの点検: HARD の名前だけ要修正になる
     with tempfile.TemporaryDirectory() as ws, contextlib.chdir(ws), contextlib.redirect_stdout(io.StringIO()):
         Path(ws, "factory.toml").write_text("")
         Path(ws, "rules", "deck-build").mkdir(parents=True)

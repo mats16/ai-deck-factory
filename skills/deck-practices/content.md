@@ -151,6 +151,7 @@ Read this before writing the outline. §0 covers what is the same for every mate
   - 顧客向けのドキュメントは です・ます調。スピーカーノートは話し言葉（です・ます）。社内メモは だ・である調でよい。
 - When making the material in English, use sentence case for headings and write the notes in English too.
 - [content-033] **Sources:** Attach a source to every number (on slides, the source line at the bottom of the page; in documents, a footnote or parentheses in the body). Give every blog, talk, doc, or study cited as a source a link to the original page, so that it can be reached from the page that cites it. Do not put links only in the source list in the Appendix (lint reports source lines without links). For customer-facing materials, attach only public URLs, and do not cite meetings with the customer as sources (「社外秘と顧客の情報」 in AGENTS.md).
+- [content-064] **Facts on pages come from the 「出典の表」.** Put on pages only numbers, availability statements, statements about the customer's environment, and proper nouns that are rows of the 「出典の表」 (columns and kinds: "Ledger" in materials.md). When you need a new one while writing, add the row with its source first, then write the page; do not settle the value on the page and backfill the table. Write a computed value as a `計算` row with the rows it uses and the formula, because computed values were the numbers most often missing from the table. Product facts (`提供・数字・名前`) need a `公式` source or local data: mark them 「済」 only after opening one, and treat a chat, a meeting, an article, or something said in the conversation as a lead, not a source. Write `見立て` rows on the page so that they read as `見立て` or `仮説`. lint reports numbers that are not in the table (`出典の表にない数字`).
 - [content-063] プレビューやベータの機能は、提供ステージ（Private Preview・Public Preview・Beta）を書く。「本番向けではない」「本番では使えない」と添えない。どこまで使えるかの判断は聞き手に任せる（本文もノートも、ほかのページも同じ）。スライドのラベルの付け方と、控えるページは visual.md の 1。
 - 1 つの資料で 1 つのものには 1 つの言葉を使う。最後に表記ゆれを全文で探す。略語は初出で正式名を書く（中身 1-11）。
 - [content-034] 道具・エージェントは、聞き手がふだん使っている製品の名前で書く（Claude Code、Codex CLI など）。ACP のアダプターや登録簿の表示名（Claude Agent、Codex など）は、アダプターそのものや登録簿の一覧を指すときだけ使い、そのページで製品の名前との対応を一度書く。レビューの観点 4 で見る。
@@ -181,7 +182,7 @@ Read this before writing the outline. §0 covers what is the same for every mate
 - [ ] 各ページの本文が、言い切り（見出しかリード）の「なぜそう言えるか」に答えている
 - [ ] Pages with figures or tables have all of 「見出し」「データの名前」「出典」
 - [ ] キッカーと結論バンドが、要るページにだけある。結論バンドが見出しと同じことを言っていない
-- [ ] Every number on the slides is in the outline's source table
+- [ ] Every number, availability statement, statement about the customer, and proper noun on the pages is a row of the 「出典の表」 (lint `出典の表にない数字` is 0, or you can say why each one stays), and no row is still `未`
 - [ ] 評価語に、そのページの裏づけがある
 - [ ] 比較に、相手が勝つ軸がある
 - [ ] 最後のページが、次の一歩（決めること・範囲・期間・基準）になっている
