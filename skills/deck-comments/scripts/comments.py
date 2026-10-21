@@ -9,15 +9,18 @@ usage（資料のフォルダで）:
                                       「まだ」と返る（見張りの子が呼び直す。../prompt_watch.md）。最後のコメント（なければ見張り始め。--start で今にする）から
                                       --hours（既定は factory.toml の [feedback.google_comments] watch_hours）のあいだ新しいコメントがなければ、「見張りを終える」と返る。
                                       資料には、AI が見張っていることと終える時刻をコメントに書き（知らせ）、終える時刻が延びたら返信し、終えたら返信して解決する
+  comments.py watch-prompt <URL か ID>... [--hours <時間>] [--folder <資料のフォルダ>]   見張りの子に渡す依頼文（../prompt_watch.md を埋めたもの）を出す。
+                                      資料のフォルダの既定は今いるフォルダ。埋め残しの差し込み先があれば止める
   comments.py --selftest
 前に取った時刻、reply で送った返信の ID（--new で新しいと数えない）、見張りの起点、知らせのコメントの ID と書いた終える時刻は、ワークスペースの .factory/comments.json に残す。"""
-import contextlib, datetime, html, json, math, os, re, sys, time, urllib.parse
+import contextlib, datetime, html, json, math, os, re, shlex, sys, time, urllib.parse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "deck-build" / "scripts"))
 import gapi
 from gapi import DRIVE, SLIDES, file_id, run
 
+PROMPT = Path(__file__).resolve().parents[1] / "prompt_watch.md"
 WAIT, POLL = 270, 90  # 1 回の watch で待つ秒（呼び直す子のプロンプトのキャッシュが 5 分で切れる前に返る）と、そのあいだに Drive を見る間隔
 FIELDS = ("nextPageToken,comments(id,content,author(displayName,me),createdTime,modifiedTime,resolved,anchor,quotedFileContent(value),"
           "replies(id,content,author(displayName,me),modifiedTime,deleted))")
@@ -283,8 +286,31 @@ def watch_hours(given):
     return hours
 
 
+def watch_prompt(urls, hours, folder):
+    """PROMPT の差し込み先を埋めた依頼文。呼ぶ側に置き換えさせると、差し込み先の名前が変わったときに埋まらないまま子に渡るので、ここで埋めて、埋め残しがあれば止める。
+    1 行目は埋め残しを見つけた子が止まる決まりなので、差し込み先として見ない。"""
+    if not urls:
+        sys.exit(__doc__)
+    folder = Path(folder or ".").resolve()
+    if not folder.is_dir():
+        sys.exit(f"資料のフォルダがない: {folder}")
+    os.chdir(folder)  # factory.toml は、子が watch を回す資料のフォルダから上へたどる
+    gapi.factory_path()
+    watch_hours(hours)  # 見張る時間が決まらなければ、子を起こす前に止める
+    head, body = PROMPT.read_text().split("\n", 1)
+    for k, v in {"<material folder>": shlex.quote(str(folder)), "<path to comments.py>": shlex.quote(str(Path(__file__).resolve())),
+                 "<arguments>": shlex.join([*urls, *(["--hours", hours] if hours else [])])}.items():
+        body = body.replace(k, v)
+    if left := re.findall(r"<[^<>\n]+>", body):
+        sys.exit(f"依頼文の差し込み先が埋まっていない: {'、'.join(dict.fromkeys(left))}（{PROMPT}）")
+    print(f"{head}\n{body}", end="")
+
+
 def main():
     a = sys.argv[1:]
+    if a[:1] == ["watch-prompt"]:
+        hours, folder = opt(a, "--hours"), opt(a, "--folder")
+        return watch_prompt(a[1:], hours, folder)
     if a[:1] == ["reply"] and len(a) in (4, 5) and a[4:] in ([], ["--resolve"]):
         reply(file_id(a[1]), a[2], a[3], a[4:] == ["--resolve"])
         return print(f"{a[2]} に返信" + ("して解決した" if a[4:] else "した"))
@@ -477,6 +503,29 @@ def selftest():
                     assert "watch_hours" in str(e)
             conf["feedback"]["google_comments"]["watch_hours"] = 1.5
             assert watch_hours(None) == 1.5 and watch_hours("2") == 2
+            # watch-prompt: 依頼文を埋めて出す。埋め残しの差し込み先と、URL がないときは止める
+            cwd, me = os.getcwd(), Path(__file__).resolve()
+            try:
+                s, _ = call("watch-prompt", "--folder", str(root), "--hours", "2", "https://docs.google.com/presentation/d/X1/edit#slide=id.p", "X2")
+                assert Path.cwd() == root.resolve()  # factory.toml は資料のフォルダから上へたどる
+            finally:
+                os.chdir(cwd)
+            head, body = s.split("\n", 1)
+            assert head == PROMPT.read_text().split("\n", 1)[0] and not re.findall(r"<[^<>\n]+>", body), s
+            assert f"cd {shlex.quote(str(root.resolve()))} && python3 {shlex.quote(str(me))} watch --start 'https://docs.google.com/presentation/d/X1/edit#slide=id.p' X2 --hours 2\n" in body, s
+            real_prompt = PROMPT
+            globals()["PROMPT"] = root / "prompt.md"
+            PROMPT.write_text("1 行目の <名前> は見ない\nIn <資料のフォルダ>, run <path to comments.py>.\n")  # 名前の変わった差し込み先
+            try:
+                for argv, why in ((["watch-prompt", "X1"], "依頼文の差し込み先が埋まっていない: <資料のフォルダ>（"), (["watch-prompt", "--hours", "1"], "usage")):
+                    try:
+                        call(*argv)
+                        raise AssertionError(f"{argv} を通した")
+                    except SystemExit as e:
+                        assert why in str(e) and "<名前>" not in str(e), (argv, e)
+            finally:
+                globals()["PROMPT"] = real_prompt
+                os.chdir(cwd)
             before = (root / ".factory" / "comments.json").read_text()
             try:
                 with state() as st:
