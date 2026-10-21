@@ -57,7 +57,7 @@ watch_hours = 0  # 最後のコメント（なければ見張り始め）から�
 # usage    = ""            # 顧客の利用額・利用状況
 
 [drive]
-factory = ""    # 個人の資料の根元（例: My Drive の AI Deck Factory）。template.py --from-base は、この下の Themes にテンプレートを作る（なければ作る）。gslides.py keep の差し替え用の複製は直下に作る
+factory = ""    # 個人の資料の根元（例: My Drive の AI Deck Factory）。template.py --from-base は、この下の Themes にテンプレートを作る（なければ作る）。gslides.py keep の差し替え用の複製は直下に、調べものの写し（drive_put.py research）はこの下の Research に作る
 shared_themes = ""  # 全社の共有テーマのフォルダ（管理者が template.py で作ったテンプレートの置き場所。見る権限でよい）。slides.py themes が、factory.toml にないテンプレートを候補に出す。
                     # 使うときは slides.py theme <url> で写す（テーマのファイルと [slides.templates] に書く）。管理者は自分の factory の下の Themes を指してよい
 customers = ""  # 顧客向けの資料の置き場所の根元（例: 共有ドライブ 10_Customers）

@@ -13,6 +13,7 @@ UPLOAD = "https://www.googleapis.com/upload/drive/v3/files"
 PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 GSLIDES = "application/vnd.google-apps.presentation"
 GDOCS = "application/vnd.google-apps.document"
+FOLDER = "application/vnd.google-apps.folder"
 _TOK = None
 WAITED = []  # 429 で待った秒（request が足す。Clock が回数と秒を出す）
 _HOLD = [0.0]  # 429 の分の枠が明ける時刻。並べて取るほかの取り手も、それまで送らない
@@ -174,6 +175,17 @@ def file_id(s):  # Google Slides・Docs の URL か ID
 def folder_id(s):  # Drive のフォルダの URL か ID
     m = re.search(r"/folders/([\w-]+)", s)
     return m.group(1) if m else s
+
+
+def subfolder(root, name, create=False):
+    """root（フォルダの URL か ID）の下の name のフォルダの ID。なければ None（create なら作る）。2 つあれば古いほう（作るのと探すのとで同じものを選ぶ）。"""
+    q = urllib.parse.quote(f"name = '{name}' and '{folder_id(root)}' in parents and mimeType = '{FOLDER}' and trashed = false")
+    found = request("GET", f"{DRIVE}/files?q={q}&orderBy=createdTime&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true")["files"]
+    if found:
+        return found[0]["id"]
+    if not create:
+        return None
+    return request("POST", f"{DRIVE}/files?supportsAllDrives=true&fields=id", {"name": name, "mimeType": FOLDER, "parents": [folder_id(root)]})["id"]
 
 
 def upload(data, mime, name=None, parent=None, convert=None, fid=None, fields="id"):

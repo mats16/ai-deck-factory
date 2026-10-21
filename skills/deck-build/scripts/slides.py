@@ -107,7 +107,6 @@ THEMES_DIR = "Themes"  # template.py --from-base がテンプレートを作る 
 BUILTIN_THEMES = Path(__file__).resolve().parent.parent / "themes"
 WS_THEMES = ("themes", "slides")
 THEME_KEYS = ("description", "font", "mono", "copyright", "colors", "cover", "section")
-FOLDER = "application/vnd.google-apps.folder"
 READ_ERRORS = (gapi.ApiError, urllib.error.URLError)  # Drive を読めない（権限・URL・認証・回線）。request は HTTP のエラーだけを ApiError にする
 # 会社のテンプレートから残した表紙・扉のレイアウト（図形・ロゴ・写真付き。パターンごとに番号）。template.py がそのレイアウトのページ番号の枠の
 # 代替テキストに書く。w は元のタイトルの枠の右端までの文字の幅（in）、tone は地の明るさ（文字の色を決める）。なければ表紙・扉も Blank に組む
@@ -2907,10 +2906,8 @@ def shared_files():
 
 
 def find_themes_folder(root):
-    """[drive] factory（root）の下の Themes の ID。なければ None（作るのは template.py の themes_folder）。2 つあれば古いほう（作るのと探すのとで同じものを選ぶ）。"""
-    q = urllib.parse.quote(f"name = '{THEMES_DIR}' and '{folder_id(root)}' in parents and mimeType = '{FOLDER}' and trashed = false")
-    found = request("GET", f"{DRIVE}/files?q={q}&orderBy=createdTime&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true")["files"]
-    return found[0]["id"] if found else None
+    """[drive] factory（root）の下の Themes の ID。なければ None（作るのは template.py の themes_folder）。"""
+    return gapi.subfolder(root, THEMES_DIR)
 
 
 @functools.cache

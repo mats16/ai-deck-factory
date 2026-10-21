@@ -52,6 +52,7 @@ AI Deck Factory（プラグイン）で、スライドとドキュメントを�
 
 - 先に `grep -rln <語> Research/ references_index.md` で前の調査を探す。あれば読み、足りないところだけ調べて同じファイルに足す（末尾の「更新」に日付と変わったこと）。
 - 書くこと: 依頼（ユーザーの言葉のまま）、結論（冒頭に数行）、根拠と出典（URL と確かめた日）、確かめたことと推測の区別、未確認のこと。社外秘が入るなら冒頭に【社内】と書く。
+- **書いたら・足したら、Google Drive に写す。** `python3 <スキル deck-build のフォルダ>/scripts/drive_put.py research Research/<内容>_<YYYYMMDD>.md`。Google Docs に変えて、`factory.toml` の `drive.factory` の下の `Research`（なければ作る）に上げる。同じ名前があれば上書きし、URL は変わらない。初めて上げたら、`references_index.md` の「Google Drive の置き場所」の `Research` の行（なければ足す）の下に `- 上げた: Research/<内容>_<YYYYMMDD>.md → [<YYYYMMDD>_<内容>](URL)（初めて上げた日）` を足す。写しは控えと、人がブラウザで読むためのもの。元はこのフォルダの md で、探すのも読むのもこちらでする。Drive の写しは直さず、コメントも付けない（上げ直すと、直しは消え、コメントは付け先を失う）。
 - ある資料のための調べものは、`Research/` ではなく、その資料のフォルダ（`references.md`・`社内メモ_*.md`）に書く。出典は `refs.py add` で `references.md` に 1 行ずつ足し、ページに出す事実は構成案の「出典の表」に、出典の ID と一緒に書く（deck-practices の materials.md の "Ledger"）。資料に使えそうな出典は `references_index.md` にも足す。
 
 ## 社外秘と顧客の情報
