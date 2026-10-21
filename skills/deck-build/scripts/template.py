@@ -17,11 +17,11 @@ from collections import Counter
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from gapi import DRIVE, GSLIDES, PPTX, SLIDES, batch, factory, file_id, folder_id, request, run, trash, upload
+from gapi import DRIVE, GSLIDES, PPTX, SLIDES, batch, factory, file_id, request, run, subfolder, trash, upload
 from lint import JA, cells, contrast, flatten, lum, paras, solid
 from slides import (BG, BLANK, CARD, CARD_DOWN, COPYRIGHT_PT, DECOR, EMU, GA, HEAD, INSET, NAVY, NAVY_BLOCK, ON_RED, OSS, PAD, PANEL, PREVIEW, RED, RED_ON_NAVY,
                     RED_SOFT, RED_TEXT, RULE, SLOTS, STAGE_TEXT, SUB, SUB_ON_NAVY, TEXT, WHITE, W, X, Y_BODY, Y_FOOT, build, cols, make_deck, number_style)
-from slides import (BUILTIN_THEMES, FIXED as FIXED_DEFAULT, FOLDER, FONT_EM, JP_FONTS, LAYOUT_MARK, NAMED, ROLE, THEME_MARK, THEME_PROP, THEMES_DIR, TONES, VARIANTS, find_themes_folder, is_blank,
+from slides import (BUILTIN_THEMES, FIXED as FIXED_DEFAULT, FONT_EM, JP_FONTS, LAYOUT_MARK, NAMED, ROLE, THEME_MARK, THEME_PROP, THEMES_DIR, TONES, VARIANTS, is_blank,
                     load_theme, need_brand, placeholders, read_theme, record_template, templates, theme_file, theme_fixed, theme_font, theme_names,
                     theme_reqs, theme_slots, use_font, use_layouts, use_theme, ws_themes)
 
@@ -433,8 +433,7 @@ def themes_folder():
     """[drive] factory の下の Themes フォルダの ID。なければ作る（フォルダの ID や URL は factory.toml に持たない）。"""
     if not (root := factory().get("drive", {}).get("factory")):
         sys.exit(f"factory.toml の [drive] factory（個人の資料の根元）がない。テンプレートはその下の {THEMES_DIR} に作る")
-    return find_themes_folder(root) or request("POST", f"{DRIVE}/files?supportsAllDrives=true&fields=id",
-                                                {"name": THEMES_DIR, "mimeType": FOLDER, "parents": [folder_id(root)]})["id"]
+    return subfolder(root, THEMES_DIR, create=True)
 
 
 def publish(pid, theme, t):
