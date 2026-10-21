@@ -1090,10 +1090,10 @@ NO_ESC = (*CONTAINERS, "list")  # raw を書けない（並べ方の箱は Deck 
 NO_H = ("row", "stack", "grid", "gantt", "list")  # h を書かない（高さは中身から決まる。中身より小さい h は次の部品と重なる。frame だけは h が要る）
 STRETCH = ("card", "stat", "box", "label", "code", "frame", "stack")  # row・grid で行の高さまで伸ばす（text は塗りか枠線のあるときだけ）
 SPEC_PAGE = {
-    "page": ({"title": "s"}, {"lead": "s", "kicker": "s", "body": "els", "band": "band", "source": "md", "note": "s"}),
-    "cover": ({"title": "s", "kicker": "s"}, {"sub": "s", "variant": "pi", "note": "s"}),
-    "divider": ({"num": "s", "title": "s"}, {"sub": "s", "variant": "pi", "note": "s"}),
-    "slide": ({}, {"bg": "c", "foot": "b", "body": "els", "source": "md", "note": "s"}),
+    "page": ({"title": "s"}, {"lead": "s", "kicker": "s", "body": "els", "band": "band", "source": "md", "speakerNotes": "s"}),
+    "cover": ({"title": "s", "kicker": "s"}, {"sub": "s", "variant": "pi", "speakerNotes": "s"}),
+    "divider": ({"num": "s", "title": "s"}, {"sub": "s", "variant": "pi", "speakerNotes": "s"}),
+    "slide": ({}, {"bg": "c", "foot": "b", "body": "els", "source": "md", "speakerNotes": "s"}),
 }
 SPEC_DECK = ({"name": "s", "pages": "pages"}, {"theme": "s"})  # theme はいちばん上のデッキのファイルのもの（slides.py themes の名前）
 # テーマのファイル（read_theme）。colors は役割の名前（ROLE）・テーマに入れない色（FIXED）・名前で引く役割（NAMED）→ 6 桁。cover・section は
@@ -2314,7 +2314,7 @@ def spec_page(d, p, base, loc, name=None):
     if kind not in SPEC_PAGE:
         sys.exit(f"{loc}: type「{kind}」はない（ページは {'・'.join(SPEC_PAGE)}、部品は {'・'.join(SPEC_EL)}）")
     spec_check(p, SPEC_PAGE[kind], f"{loc}（{kind}）")
-    kw = {k: spec_color(v) if k == "bg" else v for k, v in p.items() if k not in ("type", "body", "band", "source", "note")}
+    kw = {k: spec_color(v) if k == "bg" else v for k, v in p.items() if k not in ("type", "body", "band", "source", "speakerNotes")}
     sid = getattr(d, kind)(**kw)
     if name:
         if name in d.page_names:
@@ -2349,12 +2349,12 @@ def spec_page(d, p, base, loc, name=None):
     if src := p.get("source"):
         d.source(sid, parts := spec_md(src, SUB, f"{loc}.source"))
         sp.index.append((f"{loc}.source", "出典: " + spec_plain(parts)))
-    if p.get("note"):
-        d.note(sid, p["note"])
+    if p.get("speakerNotes"):
+        d.note(sid, p["speakerNotes"])
     d.spec_index[sid] = sp.index
     d.spec_esc += [(sid, l, k) for l, k in sp.esc]
     d.resolved.append({"type": kind, "loc": loc, **kw, "els": sp.out, **({"band": band} if band else {}), **({"source": p["source"]} if "source" in p else {}),
-                       **({"note": p["note"]} if "note" in p else {})})
+                       **({"speakerNotes": p["speakerNotes"]} if "speakerNotes" in p else {})})
     return sid
 
 
@@ -4251,7 +4251,7 @@ def selftest_spec():
         d.finish()
         return d, d.resolved[0]["els"]
     body = ["Bronze は届いたまま", "Silver は型をそろえて重複を外し、結合できる形にする", "Gold"]
-    page = {"title": "見出し", "lead": "リード", "note": "話すこと", "source": "[公式](https://docs.databricks.com/)", "band": {"text": "結論", "sub": "補足"},
+    page = {"title": "見出し", "lead": "リード", "speakerNotes": "話すこと", "source": "[公式](https://docs.databricks.com/)", "band": {"text": "結論", "sub": "補足"},
             "body": [{"type": "row", "items": [{"type": "card", "head": h, "text": b, "id": h} for h, b in zip(("B", "S", "G"), body)]},
                      {"type": "text", "text": "下の文は ***強調*** と `uv run` を含む", "fill": "PANEL"},
                      {"type": "arrow", "from": "B", "to": "S"}]}
@@ -4301,7 +4301,7 @@ def selftest_spec():
         head = {"apiVersion": API_VERSION}
         (Path(t) / "sub" / "p.json").write_text(json.dumps({**head, "kind": "page", "title": "画像", "body": [{"type": "image", "src": "../img/a.png", "w": 4}]}))
         (Path(t) / "pages_a.json").write_text(json.dumps({**head, "kind": "deck", "name": "a", "pages": ["sub/p.json"]}))  # 子が担当のページを並べたもの
-        (Path(t) / "cover.json").write_text(json.dumps({**head, "kind": "page", "type": "cover", "title": "表紙", "kicker": "k", "note": "[画像のページ](#p)"}))
+        (Path(t) / "cover.json").write_text(json.dumps({**head, "kind": "page", "type": "cover", "title": "表紙", "kicker": "k", "speakerNotes": "[画像のページ](#p)"}))
         (Path(t) / "deck.json").write_text(json.dumps({**head, "kind": "deck", "name": "資料", "theme": "visual", "pages": ["pages_a.json", "cover.json"]}))
         for bad, want in [({"kind": "page", "title": "t"}, "apiVersion がない"), ({"apiVersion": "slides/v2", "kind": "page", "title": "t"}, "apiVersion 'slides/v2' は読めない"),
                           ({**head, "kind": "Slide", "title": "t"}, "kind 'Slide' はない"), ([{"title": "t"}], "ファイルの頭は")]:
@@ -5098,7 +5098,7 @@ def selftest_diff():
             assert live[0] != first and link == {"pageObjectId": live[1]} and len(live) == 2, (first, live, link)  # S を作り直し、残ったページを指す
             # ファイルを選んで組む: 選んだページだけを作り直し、選んでいないページは中身が変わっていても前のスライドを残す（ID のファイル名の印で探す）
             with tempfile.TemporaryDirectory() as t:
-                page = lambda n, title: Path(t, f"{n}.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "page", "title": title, "note": "ノート。"}))
+                page = lambda n, title: Path(t, f"{n}.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "page", "title": title, "speakerNotes": "ノート。"}))
                 Path(t, "deck.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "deck", "name": "選ぶ", "pages": ["p1.json", "p2.json", "p3.json"]}))
                 for n in ("p1", "p2", "p3"):
                     page(n, f"{n} の前")
@@ -5126,7 +5126,7 @@ def selftest_diff():
                         except SystemExit as e:
                             assert want and want in str(e), str(e)
                     # 選んでいないページは、中身の同じページへのリンクを持っていても前のまま（twins の作り直しは、作り直すページにだけ当てる）
-                    Path(t, "p1.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "page", "title": "p1 の前", "note": "ノート。",
+                    Path(t, "p1.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "page", "title": "p1 の前", "speakerNotes": "ノート。",
                                                              "body": [{"type": "text", "text": "[p2 へ](#p2)"}]}))
                     page("p2", "同じ")
                     page("p3", "同じ")

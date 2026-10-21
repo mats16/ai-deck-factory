@@ -61,8 +61,8 @@ cd <ワークスペース> && (printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"
 
 | フォルダ | 出たスキル | hook |
 |---|---|---|
-| ワークスペース（信頼した） | `ai-deck-factory:` の 12 個 | `sed -n 1,3p ../skills/deck-practices/visual.md` のあとと、`$ai-deck-factory:factory-doctor` で呼んだときに、`rules/` の目印が差し込まれた |
-| ワークスペースのサブフォルダ | 12 個（親の `.codex/config.toml` も読まれる） | |
+| ワークスペース（信頼した） | `ai-deck-factory:` の 13 個 | `sed -n 1,3p ../skills/deck-practices/visual.md` のあとと、`$ai-deck-factory:factory-doctor` で呼んだときに、`rules/` の目印が差し込まれた |
+| ワークスペースのサブフォルダ | 13 個（親の `.codex/config.toml` も読まれる） | |
 | `/tmp` | 0 | |
 
 ## ワークスペースを作る

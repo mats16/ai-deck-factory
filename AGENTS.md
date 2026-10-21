@@ -9,7 +9,7 @@
 - **Claude Code・Codex・pi で同じソースを使う。** `skills/` はどれも読む。Codex は Claude Code の形（`.claude-plugin/`・`hooks/hooks.json`）をそのまま読むので、Codex のための別のファイルは置かない。`rules/` を続けて出す仕組みは、`hooks/rules_overlay.py` を Claude Code と Codex（`hooks/hooks.json`）と pi（`extensions/rules.ts`）から呼んでいる。どれか 1 つだけに効く直しにしない。
 - **スクリプトは標準ライブラリだけで書く。** Pillow などが要るものだけ、先頭の `# /// script` に依存を書いて `uv run` で回す。Python は 3.11 以上で動かす（README の「入れ方」）。
 - **直したスクリプトは `--selftest` を通す。** 回し方は下の「sandbox で確かめる」の 2。見た目に効く部品（`slides.py`・`template.py`・`docs.py`）を直したら、テンプレートの見本を組み直して画像で見る（`deck-build/slides.md`・`doc-build/SKILL.md`）。JSON のページの形と部品を直したら、sandbox で `python3 ../tests/render/run.py --judge` を回し、`skills/deck-build/samples/json/` の見本を全部組んで、全ページの画像をページごとの見るところ（`tests/render/expect.json`）と比べる（形にキーを足したら見本にも足す。selftest が見る。見本のページを足したら見るところも足す）。部品や書き方の説明を直したら、`docs/fixtures/` の依頼文を会話を持たない子に渡し、説明だけで正しい部品を選べるかを見る（[docs/development.md](docs/development.md) の「依頼文で試す」）。
-- **スキルを足す・外す・名前を変えるときは、数と名前の出てくるところをそろえる。** README の表、`docs/` の「12 個」、`deck-practices` などから指しているパス。
+- **スキルを足す・外す・名前を変えるときは、数と名前の出てくるところをそろえる。** README の表、`docs/` の「13 個」、`deck-practices` などから指しているパス。
 - **PR の本文は `.github/pull_request_template.md` の節で書く。** 回したコマンドと結果はそのまま貼り、「レビューで見てほしいところ」にファイル:行と確信のない判断を書く。レビューする人も AI も、そこから読む。
 - **ユーザーが決めたことは、README の「決めたこと」に日付とユーザーの発言（原文）で残す。** 後回しにしたものは「残っている課題」に書く。
 - **日本語と英語は、下の「言葉の使い分け」に従う。** 日本語で書くところは、平易な和文で、言い切りの「〜する」。漢語やカタカナ語より、やさしい言い方を選ぶ（「検証」より「確かめる」、「ルール」より「決まり」）。例外: `/deck-review` を回す単位は「ラウンド」（README の「決めたこと」の 2026-10-19）。
@@ -67,7 +67,7 @@ worktree の直下に検証用のワークスペース `sandbox/` を置き、wo
    claude --plugin-dir ..
    ```
 
-   読まれたスキルが worktree のものかは、次で確かめる（worktree のパスと、`ai-deck-factory:` の 12 個が出る）。
+   読まれたスキルが worktree のものかは、次で確かめる（worktree のパスと、`ai-deck-factory:` の 13 個が出る）。
 
    ```sh
    claude --plugin-dir .. -p ok --model haiku --max-turns 1 --output-format stream-json --verbose 2>/dev/null \
@@ -86,14 +86,14 @@ worktree の直下に検証用のワークスペース `sandbox/` を置き、wo
      | python3 -c "import json,os,sys; r=os.path.realpath('..'); e=next(e for e in map(json.loads, sys.stdin) if e.get('command')=='get_commands'); print(sorted(c['name'] for c in e['data']['commands'] if c.get('sourceInfo',{}).get('path','').startswith(r)))"
    ```
 
-   worktree から読まれた 12 個のスキルが出る。足りないときは、同じ名前のスキルがほかにあって負けている（パッケージのものはいちばん優先が低い）か、trust を保存していない（[docs/pi.md](docs/pi.md)）。
+   worktree から読まれた 13 個のスキルが出る。足りないときは、同じ名前のスキルがほかにあって負けている（パッケージのものはいちばん優先が低い）か、trust を保存していない（[docs/pi.md](docs/pi.md)）。
 
 5. **Codex で開く。** `sandbox/` で、本番とぶつからないように `CODEX_HOME` を分けて worktree を入れる。Codex は写しを読むので、直したら `codex plugin add` を回し直す。
 
    ```sh
    export CODEX_HOME=/tmp/adf-codex-$(basename "$(dirname "$PWD")") && mkdir -p $CODEX_HOME   # 会話を回すなら、~/.codex の auth.json か config.toml のモデルの設定を写す
    codex plugin marketplace add .. && codex plugin add ai-deck-factory@ai-deck-factory
-   codex debug prompt-input ok | grep -oE 'ai-deck-factory:[a-z-]+: ' | sort -u   # 12 個が出る（モデルは呼ばない）
+   codex debug prompt-input ok | grep -oE 'ai-deck-factory:[a-z-]+: ' | sort -u   # 13 個が出る（モデルは呼ばない）
    ```
 
    hook は、対話の Codex の `/hooks` で信頼するまで動かない（`codex exec` で試すだけなら `--dangerously-bypass-hook-trust`）。詳しいことは [docs/development.md](docs/development.md) の「Codex」。
