@@ -1,11 +1,11 @@
 ---
 name: slides-speaker-notes
-description: Write the speaker notes of a built Google Slides deck as the script for Google Vids' AI voiceover (when Vids makes a video from slides, each page becomes a scene and its notes become the scene's voiceover). Use when asked to write or rewrite notes for a video 「字幕」「ナレーション」「読み上げ」「Vids」「動画にする」, or to fix audio tags in them. Covers the story across scenes, what to leave out of the voice, writing for speech, the audio tags Vids reads, the per-scene limit, one review by a child agent, and replacing only the notes without rebuilding pages (`scripts/speaker_notes.py pull`, `lint`, `push`). Rules that depend on the language (tone, length, readings, symbols) are in ja.md and en.md. The slides themselves are not changed.
+description: Write the speaker notes of Google Slides decks as the script for Google Vids' AI voiceover (when Vids makes a video from slides, each page becomes a scene and its notes become the scene's voiceover). Every deck's notes follow these rules by default, also when deck-build writes them. Use when asked to write or rewrite notes for a video 「字幕」「ナレーション」「読み上げ」「Vids」「動画にする」, or to fix audio tags in them. Covers the story across scenes, what to leave out of the voice, writing for speech, the audio tags Vids reads, the per-scene limit, one review by a child agent, and replacing only the notes without rebuilding pages (`scripts/speaker_notes.py pull`, `lint`, `push`). Rules that depend on the language (tone, length, readings, symbols) are in ja.md and en.md. The slides themselves are not changed.
 ---
 
 # Speaker notes for Google Vids
 
-When Google Vids makes a video from slides, each page becomes a scene and its speaker notes become the scene's voiceover script. This skill rewrites the notes of a built deck as that script. Run the request through the normal flow in `../deck-practices/SKILL.md` (read the history, route corrections to the ledger); this file covers only the notes.
+When Google Vids makes a video from slides, each page becomes a scene and its speaker notes become the scene's voiceover script. Every deck's notes are that script by default, so that the same deck can become a video without changing it: deck-build writes `speakerNotes` by "How to write" and "Audio tags" below (`../deck-practices/content.md` §5). The steps rewrite the notes of a built deck, for example one built before this default. Run the request through the normal flow in `../deck-practices/SKILL.md` (read the history, route corrections to the ledger); this file covers only the notes.
 
 ## Steps
 

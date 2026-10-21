@@ -1509,7 +1509,7 @@ class SpecPage:
                 if not 1 <= m["at"] <= n + 1:
                     sys.exit(f"{l}.marks[{j}].at: 1〜{n + 1}（today と同じ。1 が 1 列目の左端、1.5 が 1 列目の中ほど）")
                 if "\n" in m["text"]:
-                    sys.exit(f"{l}.marks[{j}].text: 節目の言葉は 1 行（短い名前にし、詳しいことは補足の列かノートに書く）")
+                    sys.exit(f"{l}.marks[{j}].text: 節目の言葉は 1 行（短い名前にし、詳しいことは補足の列に書く）")
                 if re.search(r"\*\*|`|\]\(|<br>", m["text"]):  # 言葉は記法を解かずに描く（項目・補足と同じ）
                     sys.exit(f"{l}.marks[{j}].text: 節目の言葉には記法を書けない: {m['text']!r}")
         if "today" in e and not 1 <= e["today"] <= n + 1:
