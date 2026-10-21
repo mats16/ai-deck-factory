@@ -7,9 +7,10 @@ usage（資料のフォルダで）:
   comments.py reply <URL か ID> <コメントの ID> <文> [--resolve]   返信する。--resolve を付けると、返信と一緒に解決する
   comments.py watch <URL か ID>... [--hours <時間>] [--start]   --new を 90 秒ごとに回し、新しいコメントが出たら出して返る。出なければ 270 秒で
                                       「まだ」と返る（見張りの子が呼び直す。../prompt_watch.md）。最後のコメント（なければ見張り始め。--start で今にする）から
-                                      --hours（既定は factory.toml の [feedback.google_comments] watch_hours）のあいだ新しいコメントがなければ、「見張りを終える」と返る
+                                      --hours（既定は factory.toml の [feedback.google_comments] watch_hours）のあいだ新しいコメントがなければ、「見張りを終える」と返る。
+                                      資料には、AI が見張っていることと終える時刻をコメントに書き（知らせ）、終える時刻が延びたら返信し、終えたら返信して解決する
   comments.py --selftest
-前に取った時刻、reply で送った返信の ID（--new で新しいと数えない）、見張りの起点は、ワークスペースの .factory/comments.json に残す。"""
+前に取った時刻、reply で送った返信の ID（--new で新しいと数えない）、見張りの起点、知らせのコメントの ID と書いた終える時刻は、ワークスペースの .factory/comments.json に残す。"""
 import contextlib, datetime, html, json, math, os, re, sys, time, urllib.parse
 from pathlib import Path
 
@@ -20,6 +21,8 @@ from gapi import DRIVE, SLIDES, file_id, run
 WAIT, POLL = 270, 90  # 1 回の watch で待つ秒（呼び直す子のプロンプトのキャッシュが 5 分で切れる前に返る）と、そのあいだに Drive を見る間隔
 FIELDS = ("nextPageToken,comments(id,content,author(displayName,me),createdTime,modifiedTime,resolved,anchor,quotedFileContent(value),"
           "replies(id,content,author(displayName,me),modifiedTime,deleted))")
+NOTICE = ("AI がこの資料のコメントを見張っています。付いたコメントは自動で読み、直せるものは資料を直して反映し、返信して解決します。"
+          "見張りを終える時刻: {}（新しいコメントが来たら延ばし、ここに返信します）")
 
 
 def fetch(fid, since=None):
@@ -49,19 +52,22 @@ def state():
             fcntl.flock(lock, fcntl.LOCK_EX)
         except ImportError:  # Windows。錠はかけない（同時に動かすことはまれ）
             pass
-        st = {"seen": {}, "sent": [], "watch": {}} | (json.loads(p.read_text()) if p.is_file() else {})
+        st = {"seen": {}, "sent": [], "watch": {}, "notice": {}} | (json.loads(p.read_text()) if p.is_file() else {})
         yield st
         tmp = p.with_suffix(".tmp")
         tmp.write_text(json.dumps(st, indent=1))
         os.replace(tmp, p)
 
 
+def post(fid, cid, text, resolve=False):  # 返信を送り、その ID を返す（resolve なら、返信と一緒に解決する。Drive は解決を返信の action で受ける）
+    return gapi.request("POST", f"{DRIVE}/files/{fid}/comments/{cid}/replies?fields=id", {"content": text, **({"action": "resolve"} if resolve else {})})["id"]
+
+
 def reply(fid, cid, text, resolve=False):
-    """返信する（resolve なら、返信と一緒に解決する。Drive は解決を返信の action で受ける）。送った返信の ID を残し、--new で新しいと数えない。
+    """返信する。送った返信の ID を残し、--new で新しいと数えない。
     送るところから錠の中でする（送ってから ID を残すまでに見張りの子が取ると、自分の返信を新しいと数える）。"""
     with state() as st:
-        r = gapi.request("POST", f"{DRIVE}/files/{fid}/comments/{cid}/replies?fields=id", {"content": text, **({"action": "resolve"} if resolve else {})})
-        st["sent"].append(r["id"])
+        st["sent"].append(post(fid, cid, text, resolve))
 
 
 def bare(s):
@@ -135,7 +141,7 @@ def show(url, cs, seen, src, only_new, sent=(), page=None):
         return 0
     print(f"{url}（" + (f"新しい未解決 {len(new)} 件" if only_new else f"未解決 {len(unresolved)} 件、うち新しい {len(new)} 件") + "）")
     for c in shown:
-        t = datetime.datetime.fromisoformat(c["modifiedTime"].replace("Z", "+00:00")).astimezone().strftime("%m-%d %H:%M")
+        t = unstamp(c["modifiedTime"]).astimezone().strftime("%m-%d %H:%M")
         q = html.unescape(c.get("quotedFileContent", {}).get("value", ""))  # 付いた文は text/html で来る
         loc = page(sid) if page and (sid := anchored(c)) else ""
         quoted = f"「{one_line(q)[:40]}」" if q else ""
@@ -160,11 +166,11 @@ def scan(urls, src, only_new):
     """コメントを取って出す。出した件数と、ファイルごとの最後の書き込みの時刻（reply で送った返信は除く）を返す。"""
     n, last = 0, {}
     with state() as st:
-        sent = set(st["sent"])
+        sent, notice = set(st["sent"]), {n["id"] for n in st["notice"].values()}
         for u in urls:
             fid = file_id(u)
             seen = st["seen"].get(fid, "")
-            cs = fetch(fid, seen if only_new and seen else None)
+            cs = [c for c in fetch(fid, seen if only_new and seen else None) if c["id"] not in notice]  # 見張りの知らせは、直すコメントではない
             n += show(u, cs, seen, src, only_new, sent, pager(fid, src))
             if cs:
                 st["seen"][fid] = max([seen] + [c["modifiedTime"] for c in cs])
@@ -176,6 +182,44 @@ def stamp(t):  # epoch 秒を Drive の時刻の形（2026-10-19T00:24:21.986Z�
     return datetime.datetime.fromtimestamp(t, datetime.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
+def unstamp(t):  # stamp の逆。Drive の時刻を datetime に
+    return datetime.datetime.fromisoformat(t.replace("Z", "+00:00"))
+
+
+def when(t):  # Drive の時刻を、コメントに書く手元の時刻（10月23日 18:00（JST））に
+    d = unstamp(t).astimezone()
+    return f"{d.month}月{d.day}日 {d:%H:%M}（{d:%Z}）"
+
+
+def alive(fid, cid):
+    """知らせのコメントが Drive に残っていて、解決されていない。読む人が消したか解決した知らせには、返信しない。"""
+    try:
+        c = gapi.request("GET", f"{DRIVE}/files/{fid}/comments/{cid}?fields=resolved,deleted")
+    except gapi.ApiError as e:
+        if str(e).startswith("404 "):
+            return False
+        raise
+    return not c.get("resolved") and not c.get("deleted")
+
+
+def announce(fids, hours):
+    """見張る資料に、AI が見張っていることと終える時刻（起点の最後 + hours）を知らせのコメントに書く。もう書いてあり、終える時刻が変わったら
+    （コメントを直したあとの --start で延びる）、知らせに返信する（知らせが消されたか解決されていたら、書き直す）。
+    資料ごとに書き残す（2 つ目の資料で止まっても、1 つ目に書いた知らせを忘れて、もう 1 件書くことがないように）。
+    もう終える時刻を過ぎていたら書かない（終える途中で止まって呼び直したとき、終えた資料にまた知らせを書かず、そのまま終える）。"""
+    for f in fids:
+        with state() as st:
+            until = stamp(unstamp(max(st["watch"][g] for g in fids)).timestamp() + hours * 3600)
+            note = st["notice"].get(f)
+            if until <= stamp(time.time()) or note and when(until) == when(note["until"]):
+                continue
+            if note and alive(f, note["id"]):
+                post(f, note["id"], f"見張りを終える時刻を {when(until)} に{'延ばし' if until > note['until'] else '変え'}ます")
+                note["until"] = until
+            else:
+                st["notice"][f] = {"id": gapi.request("POST", f"{DRIVE}/files/{f}/comments?fields=id", {"content": NOTICE.format(when(until))})["id"], "until": until}
+
+
 def watch(urls, src, hours, start=False):
     """新しいコメントが出るか、WAIT 秒たつか、期限が来るまで、POLL 秒ごとに見る。起点は .factory/comments.json の watch（ファイルごと）。"""
     fids = [file_id(u) for u in urls]
@@ -183,6 +227,7 @@ def watch(urls, src, hours, start=False):
         for f in fids:
             if start or f not in st["watch"]:
                 st["watch"][f] = stamp(time.time())
+    announce(fids, hours)
     end = time.time() + WAIT
     while True:
         n, last = scan(urls, src, True)
@@ -190,13 +235,20 @@ def watch(urls, src, hours, start=False):
             for f, t in last.items():
                 st["watch"][f] = max(st["watch"].get(f, ""), t)
             expired = not n and max(st["watch"].get(f, "") for f in fids) < stamp(time.time() - hours * 3600)
-            if expired:
+        closed = 0
+        for f in fids if expired else []:
+            with state() as st:  # 資料ごとに書き残す（2 つ目で止まっても、1 つ目の知らせにもう一度返信しない）
+                if (note := st["notice"].pop(f, None)) and alive(f, note["id"]):
+                    post(f, note["id"], f"コメントの見張りを終えます（{hours:g} 時間、新しいコメントがありませんでした）。このあとのコメントは、自動では直しません。", resolve=True)
+                    closed += 1
+        if expired:
+            with state() as st:  # 起点は、全部の知らせを閉じてから消す（途中で止まって呼び直すと、起点が残っているので、続きから終える）
                 for f in fids:
                     st["watch"].pop(f, None)
         if n:
             return
         if expired:
-            return print(f"見張りを終える: 最後のコメント（なければ見張り始め）から {hours:g} 時間、新しいコメントがない")
+            return print(f"見張りを終える: 最後のコメント（なければ見張り始め）から {hours:g} 時間、新しいコメントがない" + ("（知らせのコメントに返信して解決した）" if closed else ""))
         if time.time() + POLL > end:
             return print("まだ新しいコメントはない。同じ watch をもう一度呼ぶ（--start は付けない）")
         time.sleep(POLL)
@@ -274,10 +326,17 @@ def selftest():
               {"id": "D", "content": "色", "author": {}, "createdTime": T(3), "modifiedTime": T(3), "anchor": '{"type":"page","pages":["gone"]}'},
               {"id": "E", "content": "語", "author": {}, "createdTime": T(2), "modifiedTime": T(2), "anchor": "kix.abc"}]
         pages, asked = [{"comments": cs[:2], "nextPageToken": "t+1"}, {"comments": cs[2:]}], []
+        notes, fail = {}, set()  # 知らせのコメントを 1 件取ったときの答え（なければ未解決で残っている）と、書くと 500 になる資料
 
         def fake(m, url, body=None, **k):
             asked.append((m, url, body))
+            if m == "GET" and (one := re.search(r"/comments/(\w+)\?fields=resolved", url)):
+                if isinstance(v := notes.get(one[1], {}), Exception):
+                    raise v
+                return v
             if m == "POST":
+                if any(f"/files/{f}/" in url for f in fail):
+                    raise gapi.ApiError(f"500 POST {url}")
                 return {"id": "r9"}
             if url.startswith(SLIDES):
                 return {"slides": [{"objectId": "s1"}, {"objectId": "s2"}]}
@@ -302,7 +361,7 @@ def selftest():
             assert "消えたページ（組み直して作り直した） に: 色" in s and "（付いた先が分からない。画面で見る）: 語" in s, s
             assert "pageToken=t%2B1" in asked[1][1] and "startModifiedTime" not in asked[0][1]  # 初めては全部を頼む
             assert sum(u.startswith(SLIDES) for _, u, _ in asked) == 1  # スライドの並びは 1 回だけ取る
-            assert saved() == {"seen": {"X1": T(3)}, "sent": [], "watch": {}}  # 解決済みも含めた最後の時刻
+            assert saved() == {"seen": {"X1": T(3)}, "sent": [], "watch": {}, "notice": {}}  # 解決済みも含めた最後の時刻
             cs[0]["replies"].append({"id": "r3", "content": "やはり図に", "author": {}, "modifiedTime": T(4)})  # A に返信があった
             cs[0]["modifiedTime"] = T(4)
             pages[:], asked[:] = [{"comments": [cs[0], cs[2]]}], []  # C は境目なので Drive からまた返る
@@ -328,15 +387,66 @@ def selftest():
             t0, asked[:] = clock[0], []
             s, _ = call("watch", "X1")
             assert s.startswith("まだ新しいコメントはない") and saved()["watch"]["X1"] == stamp(t0), s
-            assert sum("/comments?" in u for _, u, _ in asked) == 4 and clock[0] - t0 == WAIT  # 0・90・180・270 秒に見て、270 秒で返る
+            assert sum(m == "GET" and "/comments?" in u for m, u, _ in asked) == 4 and clock[0] - t0 == WAIT  # 0・90・180・270 秒に見て、270 秒で返る
+            m, u, body = asked[0]  # 見張り始めに、資料へ知らせのコメントを書く（終える時刻は起点の 48 時間あと）
+            assert (m, u) == ("POST", f"{DRIVE}/files/X1/comments?fields=id") and body["content"] == NOTICE.format(when(stamp(t0 + 48 * 3600))), asked[0]
+            assert saved()["notice"] == {"X1": {"id": "r9", "until": stamp(t0 + 48 * 3600)}}
+            pages[:], asked[:] = [{"comments": [{"id": "r9", "content": "AI が", "author": {"me": True}, "createdTime": T(23), "modifiedTime": T(23)}]}], []
+            s, _ = call("watch", "X1")
+            assert s.startswith("まだ") and not any(m == "POST" for m, _, _ in asked), (s, asked)  # 知らせは新しいコメントと数えず、終える時刻も変わらない
             with state() as st:
                 st["watch"]["X1"] = "2026-01-01T00:00:00.000Z"  # 最後のコメントから 48 時間を過ぎた
+            asked[:] = []
             s, _ = call("watch", "X1")
-            assert s.startswith("見張りを終える: 最後のコメント（なければ見張り始め）から 48 時間") and "X1" not in saved()["watch"], s
+            assert s.startswith("見張りを終える: 最後のコメント（なければ見張り始め）から 48 時間") and s.rstrip().endswith("（知らせのコメントに返信して解決した）") and "X1" not in saved()["watch"], s
+            assert [b for m, _, b in asked if m == "POST"][-1] == {"content": "コメントの見張りを終えます（48 時間、新しいコメントがありませんでした）。このあとのコメントは、自動では直しません。",
+                                                                    "action": "resolve"} and saved()["notice"] == {}  # 知らせに返信して解決する
             with state() as st:
                 st["watch"]["X1"] = "2026-01-01T00:00:00.000Z"
             s, _ = call("watch", "--start", "--hours", "1", "X1")  # --start なら起点を今にする
-            assert s.startswith("まだ") and saved()["watch"]["X1"] > "2026-01-01T00:00:00.000Z", s
+            assert s.startswith("まだ") and saved()["watch"]["X1"] > "2026-01-01T00:00:00.000Z" and "X1" in saved()["notice"], s
+            asked[:] = []
+            s, _ = call("watch", "--start", "--hours", "1", "X1")  # 直したあとに --start で呼び直すと、終える時刻が延びる
+            until = saved()["notice"]["X1"]["until"]
+            posts = [a for a in asked if a[0] == "POST"]
+            assert posts == [("POST", f"{DRIVE}/files/X1/comments/r9/replies?fields=id", {"content": f"見張りを終える時刻を {when(until)} に延ばします"})], posts
+            pages[:] = [{}, {"comments": [{"id": "r9", "content": "AI が", "author": {"me": True}, "createdTime": T(23), "modifiedTime": T(23)}]}]  # 版、コメントの順に取る
+            assert gapi.guard("X1", "v", "k", "build", stop=False) is None and not pages  # 組むときも、知らせは未解決のコメントと数えない
+            notes["r9"], asked[:] = {"resolved": True}, []  # 読む人が知らせを解決した
+            call("watch", "--start", "--hours", "1", "X1")
+            assert [u for m, u, _ in asked if m == "POST"] == [f"{DRIVE}/files/X1/comments?fields=id"], asked  # 閉じた知らせに返信せず、書き直す
+            notes["r9"] = gapi.ApiError("404 GET x")  # 読む人が知らせを消した
+            with state() as st:
+                st["watch"]["X1"] = "2026-01-01T00:00:00.000Z"
+            asked[:] = []
+            s, _ = call("watch", "--hours", "1", "X1")
+            assert s.startswith("見張りを終える") and "知らせ" not in s and not any("/replies" in u for _, u, _ in asked) and saved()["notice"] == {}, (s, asked)  # 消えた知らせで止まらない
+            notes.clear()
+            fail.add("X2")
+            try:
+                call("watch", "--start", "--hours", "1", "X1", "X2")
+                raise AssertionError("X2 に書けないのに通した")
+            except gapi.ApiError:
+                pass
+            assert list(saved()["notice"]) == ["X1"]  # 1 つ目の資料に書いた知らせは残す
+            fail.clear()
+            asked[:] = []
+            call("watch", "--hours", "1", "X1", "X2")
+            assert [u for m, u, _ in asked if m == "POST"] == [f"{DRIVE}/files/X2/comments?fields=id"], asked  # X1 にもう 1 件書かない
+            with state() as st:  # 終える時刻を過ぎた。X1 の知らせは閉じられ、X2 の知らせへの返信が 500 になる
+                st["watch"].update(X1="2026-01-01T00:00:00.000Z", X2="2026-01-01T00:00:00.000Z")
+            fail.add("X2")
+            try:
+                call("watch", "--hours", "1", "X1", "X2")
+                raise AssertionError("X2 に返せないのに通した")
+            except gapi.ApiError:
+                pass
+            assert list(saved()["notice"]) == ["X2"] and {"X1", "X2"} <= saved()["watch"].keys()  # X1 は閉じた。起点は残す
+            fail.clear()
+            asked[:] = []
+            s, _ = call("watch", "--hours", "1", "X1", "X2")  # 呼び直すと、X1 にまた知らせを書かず、X2 を閉じて終える
+            assert [u for m, u, _ in asked if m == "POST"] == [f"{DRIVE}/files/X2/comments/r9/replies?fields=id"] and s.startswith("見張りを終える"), (s, asked)
+            assert saved()["notice"] == {} and not {"X1", "X2"} & saved()["watch"].keys()
             cs.append({"id": "F", "content": "表を足して", "author": {"displayName": "相手"}, "createdTime": T(23), "modifiedTime": T(23)})
             pages[:] = [{"comments": [cs[-1]]}]
             s, _ = call("watch", "X1")

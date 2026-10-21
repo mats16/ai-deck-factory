@@ -213,8 +213,10 @@ def guard(fid, rev, key, src, stop=True):
     """前に組んだあとに画面で直されていたら（rev が key に残した版か指紋と違う）、または未解決のコメントがあれば、止める。
     組み直すと画面での直しは消え、コメントは付け先を失う。src は直しを入れる先（pages.py・doc.md）。stop=False なら止めずに理由の並びを返す（slides.py plan）。"""
     last = request("GET", f"{DRIVE}/files/{fid}?supportsAllDrives=true&fields=appProperties").get("appProperties", {}).get(key)
-    comments = [c for c in request("GET", f"{DRIVE}/files/{fid}/comments?pageSize=100&fields=comments(resolved,deleted,content,quotedFileContent(value))")
-                .get("comments", []) if not c.get("resolved") and not c.get("deleted")]
+    st = factory_path().parent / ".factory" / "comments.json"  # 見張りの知らせ（deck-comments の comments.py watch）は、直すコメントでないので数えない
+    notice = {n["id"] for n in json.loads(st.read_text()).get("notice", {}).values()} if st.is_file() else set()
+    comments = [c for c in request("GET", f"{DRIVE}/files/{fid}/comments?pageSize=100&fields=comments(id,resolved,deleted,content,quotedFileContent(value))")
+                .get("comments", []) if not c.get("resolved") and not c.get("deleted") and c.get("id") not in notice]
     for c in comments[:5]:  # どの文に付いた、どんなコメントか（直す先を探しやすいように）
         print(f"コメント: 「{c.get('quotedFileContent', {}).get('value', '')[:30]}」に「{c.get('content', '')[:60]}」", file=sys.stderr)
     why = (["前に組んだあとに画面で直されている"] if last and last != rev else []) + ([f"未解決のコメントが {len(comments)} 件ある"] if comments else [])
