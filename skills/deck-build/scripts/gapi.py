@@ -19,6 +19,7 @@ WAITED = []  # 429・5xx・回線のエラーで取り直す前に待った秒�
 _HOLD = [0.0]  # 429 の分の枠が明ける時刻。並べて取るほかの取り手も、それまで送らない
 _LOCK = threading.Lock()
 TIMEOUT = 120  # urlopen の秒。付けないと、つながったまま返事が来ないとき止まり続ける
+SLOW = 600  # POST の urlopen の秒。pptx の変換や大きい batchUpdate は、返事が 2 分を超えうる。POST は送ったあとに切れても取り直さないので、長く待つ
 RETRY = {500, 502, 503, 504}  # 一時的なサーバーのエラー。待って取り直す
 # 返事を待つあいだに切れた・5xx が返ったものを取り直してよい方法（同じものを 2 回送っても結果が変わらない。PATCH も、ここでは決まった値を置くか中身を差し替えるだけ）。
 # POST（batchUpdate・コピー・作る・コメントと返信）は、サーバーが受けて入れたあとに切れることがあり、取り直すと二重に入る（insertText が 2 回入る、
@@ -150,7 +151,7 @@ def request(method, url, body=None, raw=None, ctype="application/json", binary=F
         if paced:
             pace()
         try:
-            with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=headers, method=method), timeout=TIMEOUT) as r:
+            with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=headers, method=method), timeout=TIMEOUT if method in SAFE else SLOW) as r:
                 b = r.read()
                 return b if binary else (json.loads(b) if b else {})
         except urllib.error.HTTPError as e:
@@ -347,7 +348,7 @@ def selftest():
             _HOLD[0] = 0.0
 
             def f(req, *a, timeout=None, **k):
-                assert timeout == TIMEOUT
+                assert timeout == (TIMEOUT if req.get_method() in SAFE else SLOW)
                 r = rs[min(len(calls), len(rs) - 1)]
                 calls.append(req)
                 if isinstance(r, int):

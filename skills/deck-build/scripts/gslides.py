@@ -24,7 +24,7 @@ THREADS = 6  # サムネイルを並べて取る数。12 枚で約 5 秒（2026-
 
 def save_thumb(pid, obj, out):
     meta = thumbnail(pid, obj)
-    with urllib.request.urlopen(meta["contentUrl"]) as r, open(out, "wb") as f:
+    with urllib.request.urlopen(meta["contentUrl"], timeout=gapi.TIMEOUT) as r, open(out, "wb") as f:
         f.write(r.read())
     return meta
 
