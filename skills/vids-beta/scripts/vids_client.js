@@ -220,7 +220,7 @@
         181, `${title} (Provided by Shutterstock)`, 184, sceneIds[0], 190, 2, 200, 1, 204, -6, 58, p]]);
     }
 
-    // 元からあるシーン（空の Vids の 5 秒の空シーン "p"、--rebuild の古いシーン）を消す。[13, 今の並びの位置, 0, null, id] は画面の Delete と同じ
+    // 元からあるシーン（空の Vids の 5 秒の空シーン "p"）を消す。[13, 今の並びの位置, 0, null, id] は画面の Delete と同じ
     // 同じ保存に入れると 550 になるので、組んだあとの保存で消す。音声の付いたシーンは消せない（550）ので、先に音声を [59] で消す（avatar も先に消す）
     const st = state(doc.model), old = st.scenes;
     await save(doc, [[20], [4, groups.flat()], [4, audio]], blobIdMap); // [20] は画面の最初の保存にあった。文字のコマンドと一緒に送ると 550

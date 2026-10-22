@@ -10,13 +10,14 @@ Slides のページをすべてシーンにし、ページごとのスピーカ�
 usage（ワークスペースの下で）:
   uv run vids.py create <Slides の URL か ID> [--name 名前] [--voice Elio | --avatar Oliver --layout <avatar_layout.json>] [--no-music]
       Slides と同じフォルダに Vids を作る。作ったあと読み直して、全シーンの音声（avatar）が台本と合っているかを確かめる。
-      元の Slides の ID と声と avatar は、Vids の appProperties に残す（update が読む）
+      元の Slides の ID と声と avatar は、Vids の appProperties に残す（update が読む）。同じ Slides から前に作った Vids は、元の Slides の控えを外す
+      （ページを足した・消した・並べ替えた・見た目を直したあとは、組み直さずに create で作り直す。前の Vids は消さずに残る）
   uv run vids.py layout <Slides の URL か ID> --pages 1,5|all [--out build/vids_avatar] [--reset]
       --pages のページに avatar を置く隅と大きさを、Google が描いたページの画像の空きから決め（表紙は大きいものから試す。ほかのページは音声だけ）、
       <out>/avatar_layout.json と、円を描いた一覧の画像 <out>/avatar_sheet*.png を作る。JSON があれば、その置き方のまま描き直す（--reset で決め直す）
-  uv run vids.py update <Vids か元の Slides の URL か ID> [--voice 名前 | --avatar 名前|none] [--layout <avatar_layout.json>] [--rebuild]
+  uv run vids.py update <Vids か元の Slides の URL か ID> [--voice 名前 | --avatar 名前|none] [--layout <avatar_layout.json>]
       ノートの変わったシーンだけ、台本と音声（avatar）を差し替える（声・avatar を替えると全シーン。--layout の置き方と違う avatar は動かす）。
-      ページの数が変わったか、ページの見た目を直したときは --rebuild（同じ URL のまま、シーンと音声を作り直す）
+      ページには追従しない（作ったときからページが変わっていれば止まる。ノートは比べない）
   uv run vids.py check <Vids か元の Slides の URL か ID> [<Slides の URL か ID>]    シーンの数と、各シーンの音声（avatar）が台本と合っているか
   uv run vids.py voices                                                 選べる声（Conversational voices の 30 種）
   uv run vids.py avatars                                                選べる AI avatar（Conversational voices で話す 30 体）
@@ -24,7 +25,7 @@ usage（ワークスペースの下で）:
   uv run vids.py --selftest
 create・update・check は --browser <URL> を取る。--browser、環境変数 VIDS_BROWSER、factory.toml の [vids] browser の順で、なければ http://127.0.0.1:9222。
 """
-import asyncio, json, os, shutil, subprocess, sys, time, urllib.parse, urllib.request
+import asyncio, hashlib, json, os, re, shutil, subprocess, sys, time, urllib.parse, urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -36,6 +37,7 @@ from gapi import DRIVE, SLIDES, file_id, request  # noqa: E402
 
 MAX = 2500  # Vids の 1 シーンの台本の上限（字。slides-speaker-notes の lint と同じ）
 SLIDES_KEY, VOICE_KEY, AVATAR_KEY = "vidsSlides", "vidsVoice", "vidsAvatar"  # Vids の appProperties: 元の Slides の ID、声の表示名、avatar の表示名（音声だけならない）
+PAGES_KEY = "vidsPages"  # Vids の appProperties: 作ったときのページの印（look）。update は、今のページの印と違えば止まる
 # Conversational voices（Gemini の TTS）。表示名 → (Gemini の声の名前, 画面の説明)。画面の「Select a voice」の並び（Gemini の名前の ABC 順）と、
 # 試聴の音声のファイル名（…/voice_samples/gemini-v4s-tts/1.1/en/<名前>.wav）で対応を取った（2026-10-21）。音声を作って確かめたのは Elio だけ
 VOICES = {
@@ -227,6 +229,29 @@ def scenes_of(slides_id):
     return out
 
 
+def look(slides, image):
+    """ページの見た目の印（ノートを除く）。ID（…ObjectId）と URL は外し、画像（contentUrl）は image(URL) が返す中身の印で比べる。
+    deck-build の build は、ノートだけを直してもページを新しい ID で作り直し、手元の画像を組むたびに違う URL で入れる（slides.py の carry）。
+    contentUrl も 30 分で切れる一時 URL。どちらも、ID や URL のままでは、ノートの直しとページの直しを見分けられない。"""
+    def strip(x):
+        if isinstance(x, dict):
+            return {k: image(v) if k == "contentUrl" else strip(v) for k, v in x.items()
+                    if k == "contentUrl" or not re.search(r"(?i)(objectids?|url)$", k)}
+        return [strip(v) for v in x] if isinstance(x, list) else x
+    return hashlib.sha256(json.dumps(strip(slides), sort_keys=True).encode()).hexdigest()[:16]
+
+
+def look_of(slides_id):
+    seen = {}
+
+    def image(url):  # contentUrl は、取った人のアカウントで読める（認証のヘッダーは要らない）
+        if url not in seen:
+            with urllib.request.urlopen(url, timeout=60) as r:
+                seen[url] = hashlib.sha256(r.read()).hexdigest()
+        return seen[url]
+    return look(request("GET", f"{SLIDES}/{slides_id}?fields=slides(pageElements,pageProperties)").get("slides", []), image)
+
+
 def stamp(vid, props):
     """Vids の appProperties に書く。空の Vids を作るときに付けたら最初の保存が 550 になった（2026-10-21、1 回）ので、組んだあとに書く。
     書けないと、組み終えた Vids を update が扱えないので、3 回まで送り直す。"""
@@ -243,14 +268,21 @@ def props_of(vid):
     return request("GET", f"{DRIVE}/files/{vid}?supportsAllDrives=true&fields=appProperties").get("appProperties", {})
 
 
+def made_from(slides_id):
+    """その Slides から create した Vids（appProperties の vidsSlides）。"""
+    q = urllib.parse.quote(f"appProperties has {{ key='{SLIDES_KEY}' and value='{slides_id}' }} and trashed = false")
+    return request("GET", f"{DRIVE}/files?q={q}&corpora=allDrives&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name)")["files"]
+
+
 def vids_of(fid):
-    """Vids の ID。Slides を渡したら、それから create した Vids（appProperties の vidsSlides）を Drive で探す。なければ止める。2 つ以上なら止める。"""
+    """Vids の ID。Slides を渡したら、それから create した Vids を Drive で探す。なければ止める。2 つ以上なら止める。"""
     if request("GET", f"{DRIVE}/files/{fid}?supportsAllDrives=true&fields=mimeType")["mimeType"] != gapi.GSLIDES:
         return fid
-    q = urllib.parse.quote(f"appProperties has {{ key='{SLIDES_KEY}' and value='{fid}' }} and trashed = false")
-    found = request("GET", f"{DRIVE}/files?q={q}&corpora=allDrives&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name)")["files"]
-    if len(found) != 1:
-        sys.exit(f"この Slides から作った Vids が {len(found)} 個ある（{'、'.join(f['name'] + ' ' + f['id'] for f in found) or 'vids.py create で作る'}）。Vids の URL を渡す")
+    found = made_from(fid)
+    if not found:
+        sys.exit("この Slides から作った Vids はない（動画は、頼まれたときだけ vids.py create で作る）")
+    if len(found) > 1:
+        sys.exit(f"この Slides から作った Vids が {len(found)} 個ある（{'、'.join(f['name'] + ' ' + f['id'] for f in found)}）。Vids の URL を渡す")
     print(f"Vids: {found[0]['name']}", flush=True)
     return found[0]["id"]
 
@@ -343,7 +375,7 @@ def in_tab(browser, *calls):
 
 
 def build_call(vid, slides_id, scenes, label, music, avatar=None, places=None):
-    """createFromSlides の呼び出し。前からあるシーン（空の Vids の空シーン、--rebuild の古いシーン）は、組んだあとに消える。
+    """createFromSlides の呼び出し。前からあるシーン（空の Vids の空シーン）は、組んだあとに消える。
     avatar（表示名）があれば、places（シーンごとの変換、None はそのシーンだけ音声）のシーンを AI avatar が読む。"""
     return "createFromSlides", {"vidsId": vid, "slidesId": slides_id, "voice": VOICES[label][0], "label": label, "music": music,
                                 "scenes": [s | {"place": places[i] if places else None} for i, s in enumerate(scenes)],
@@ -415,14 +447,14 @@ def create(args):
     if args.layout and not avatar:
         sys.exit("--layout は --avatar と一緒に使う（avatar を選ばないと、置き方は使わない）")
     meta = request("GET", f"{DRIVE}/files/{slides_id}?fields=name,parents&supportsAllDrives=true")
-    scenes = scenes_of(slides_id)
+    scenes, pages = scenes_of(slides_id), look_of(slides_id)
     places = places_of(args.layout, scenes) if avatar else None
     vid = request("POST", f"{DRIVE}/files?fields=id&supportsAllDrives=true",
                   {"name": args.name or f"{meta['name']}_動画", "mimeType": "application/vnd.google-apps.vid", "parents": meta.get("parents", [])[:1]})["id"]
     print(f"空の Vids を作った: https://docs.google.com/videos/d/{vid}/edit", flush=True)
     try:
         r, c = in_tab(args.browser, build_call(vid, slides_id, scenes, label, not args.no_music, avatar, places), inspect_call(vid, scenes))
-        stamp(vid, {SLIDES_KEY: slides_id, VOICE_KEY: label, AVATAR_KEY: avatar})
+        stamp(vid, {SLIDES_KEY: slides_id, PAGES_KEY: pages, VOICE_KEY: label, AVATAR_KEY: avatar})
         report(c, scenes, readers(label, avatar))
     except BaseException:  # Ctrl-C・接続の切れ・ブラウザーの落ちも
         try:
@@ -432,6 +464,14 @@ def create(args):
             print(f"作りかけの Vids をゴミ箱に移せなかった。手で移す: https://docs.google.com/videos/d/{vid}/edit", file=sys.stderr)
         raise
     summary(r, label, avatar)
+    # 新しい Vids だけを update が探すように。組んだあとに探す（組む間に別の create が作ったものも外す）。前の Vids は消さない（共有した URL かもしれない）
+    try:
+        for f in (f for f in made_from(slides_id) if f["id"] != vid):
+            stamp(f["id"], {SLIDES_KEY: None})
+            print(f"前の Vids の控えを外した（もう update しない）: {f['name']} https://docs.google.com/videos/d/{f['id']}/edit")
+    except BaseException as e:  # 回線の切れ・Ctrl-C も。新しい Vids はできているので、どれを update に渡すかを残す
+        sys.exit(f"新しい Vids はできた: https://docs.google.com/videos/d/{vid}/edit 。前の Vids の控えを外し終えなかった（{e!r}）。"
+                 "update にはこの Slides でなく新しい Vids の URL を渡す")
     print(f"https://docs.google.com/videos/d/{vid}/edit")
 
 
@@ -450,17 +490,16 @@ def sync_avatar(vid, c, avatar):
 
 
 def update(args):
-    if args.no_music and not args.rebuild:
-        sys.exit("--no-music は --rebuild と一緒に使う（--rebuild なしの update は音楽に触らない）")
     vid = vids_of(file_id(args.vids))
     p = props_of(vid)
     if SLIDES_KEY not in p:
-        sys.exit("この Vids には元の Slides の控えがない（vids.py create で作ったものだけ更新できる）")
+        sys.exit("この Vids には元の Slides の控えがない（vids.py create で作ったものだけ更新できる。同じ Slides から create で作り直したら、前の Vids の控えは外してある）")
     slides_id, old = p[SLIDES_KEY], (p.get(VOICE_KEY, DEFAULT_VOICE), p.get(AVATAR_KEY))
+    if PAGES_KEY in p and look_of(slides_id) != p[PAGES_KEY]:  # 印のない Vids（この印を残す前に作ったもの）は見ない
+        sys.exit("要修正: 動画を作ったあと、ページが変わった（足した・消した・並べ替えた・見た目を直した。前の会話での直しも）。"
+                 "動画はページに追従しないので、update しない。頼まれたら vids.py create で作り直す")
     label, avatar = mode_of(args, *old)
     scenes = scenes_of(slides_id)
-    if avatar and args.rebuild and not args.layout:
-        sys.exit("--rebuild で avatar を置き直すには --layout が要る（vids.py layout --reset で決め直し、一覧の画像で見てから渡す）")
     if avatar and not old[1] and not args.layout:  # 音声だけの Vids には置き場所がない（--layout なしでは声だけ替わって終わる）
         sys.exit("音声だけの Vids に avatar を足すには --layout が要る（vids.py layout --pages … で決め、一覧の画像で見てから渡す）")
     if args.layout and not avatar:
@@ -469,9 +508,8 @@ def update(args):
     not_open(args.browser, vid)  # 声の控えを書く前に、よくある止まり方を先に見る
     if (label, avatar) != old:  # 書く前に残す。途中で止まっても、次の update が同じ声で残りのシーンを差し替える（シーンの声は音声の名札と avatar の ID で見る）
         stamp(vid, {VOICE_KEY: label, AVATAR_KEY: avatar})
-    work = build_call(vid, slides_id, scenes, label, not args.no_music, avatar, places) if args.rebuild else \
-        ("updateScenes", {"vidsId": vid, "scripts": [s["script"] for s in scenes], "voice": VOICES[label][0], "label": label,
-                          "avatar": avatar_arg(avatar) if avatar else None, "places": places})
+    work = ("updateScenes", {"vidsId": vid, "scripts": [s["script"] for s in scenes], "voice": VOICES[label][0], "label": label,
+                             "avatar": avatar_arg(avatar) if avatar else None, "places": places})
     try:
         r, c = in_tab(args.browser, work, inspect_call(vid, scenes))
     except BaseException:
@@ -482,15 +520,12 @@ def update(args):
                 pass
         raise
     sync_avatar(vid, c, avatar)
-    if args.rebuild:
-        summary(r, label, avatar)
-    else:
-        if r.get("sceneCount") != len(scenes):
-            if (label, avatar) != old:
-                stamp(vid, {VOICE_KEY: old[0], AVATAR_KEY: old[1]})  # どのシーンも替えていないので、声の控えを戻す
-            sys.exit(f"要修正: Vids のシーンは {r.get('sceneCount')}、Slides のページは {len(scenes)}。ページの数が変わったら --rebuild で組み直す")
-        waited(r)
-        print(f"台本と音声（avatar）を差し替えたシーン: {r['updated'] or 'なし'}（{avatar or label}）" + (f"、avatar を動かしたシーン: {r['moved']}" if r.get("moved") else ""))
+    if r.get("sceneCount") != len(scenes):
+        if (label, avatar) != old:
+            stamp(vid, {VOICE_KEY: old[0], AVATAR_KEY: old[1]})  # どのシーンも替えていないので、声の控えを戻す
+        sys.exit(f"要修正: Vids のシーンは {r.get('sceneCount')}、Slides のページは {len(scenes)}。動画はページに追従しない（頼まれたら vids.py create で作り直す）")
+    waited(r)
+    print(f"台本と音声（avatar）を差し替えたシーン: {r['updated'] or 'なし'}（{avatar or label}）" + (f"、avatar を動かしたシーン: {r['moved']}" if r.get("moved") else ""))
     report(c, scenes, readers(label, avatar))
     print(f"https://docs.google.com/videos/d/{vid}/edit")
 
@@ -579,6 +614,13 @@ def selftest():
     finally:
         stamp = real_stamp
     assert stamps == [{AVATAR_KEY: None}], stamps  # 声の控え（avatar の声）は残す
+    # ページの印: ID と URL が変わっても同じ。文字・位置・画像の中身が変われば、並べ替えても変わる
+    body = {"a": "logo", "b": "logo", "c": "logo", "d": "photo"}.get  # contentUrl → 画像の中身
+    pg = lambda t, oid="a": {"objectId": oid, "pageElements": [{"objectId": oid + "_1", "shape": {"text": t},
+                                                               "image": {"contentUrl": oid, "sourceUrl": oid + "?tmp"}}]}
+    assert look([pg("x"), pg("y")], body) == look([pg("x", "b"), pg("y", "c")], body)
+    assert look([pg("x"), pg("y")], body) != look([pg("y"), pg("x")], body) and look([pg("x")], body) != look([pg("z")], body)
+    assert look([pg("x")], body) != look([pg("x", "d")], body)  # 同じ位置・大きさで画像だけを替えた
     # 置き方: 隅と直径 → 変換。右下の 0.3 は、右と下から高さの 4% 空ける
     assert place_tf("br", 0.3) == [0.51435, 0, 0, 0.51435, 295808, 135788] and place_tf("tl", 0.3)[4:] == [8230, 8230]
     assert box_px("br", 0.3, 1600, 900) == (1294, 594, 1564, 864)
@@ -663,14 +705,14 @@ def main():
         return selftest()
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
-    c = sub.add_parser("create"); c.add_argument("slides"); c.add_argument("--name")
-    u = sub.add_parser("update"); u.add_argument("vids"); u.add_argument("--rebuild", action="store_true")
+    c = sub.add_parser("create"); c.add_argument("slides"); c.add_argument("--name"); c.add_argument("--no-music", action="store_true")
+    u = sub.add_parser("update"); u.add_argument("vids")
     k = sub.add_parser("check"); k.add_argument("vids"); k.add_argument("slides", nargs="?")
     lo = sub.add_parser("layout"); lo.add_argument("slides"); lo.add_argument("--out", default="build/vids_avatar"); lo.add_argument("--reset", action="store_true"); lo.add_argument("--pages")
     sub.add_parser("voices"); sub.add_parser("avatars")
     dl = sub.add_parser("download"); dl.add_argument("vids"); dl.add_argument("out")
     for x in (c, u):
-        x.add_argument("--no-music", action="store_true"); x.add_argument("--voice"); x.add_argument("--avatar"); x.add_argument("--layout")
+        x.add_argument("--voice"); x.add_argument("--avatar"); x.add_argument("--layout")
     for x in (c, u, k):
         x.add_argument("--browser")
     a = p.parse_args()
