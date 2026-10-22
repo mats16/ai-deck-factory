@@ -17,7 +17,7 @@ usage（ワークスペースの下で）:
       <out>/avatar_layout.json と、円を描いた一覧の画像 <out>/avatar_sheet*.png を作る。JSON があれば、その置き方のまま描き直す（--reset で決め直す）
   uv run vids.py update <Vids か元の Slides の URL か ID> [--voice 名前 | --avatar 名前|none] [--layout <avatar_layout.json>]
       ノートの変わったシーンだけ、台本と音声（avatar）を差し替える（声・avatar を替えると全シーン。--layout の置き方と違う avatar は動かす）。
-      ページには追従しない（ページの数が Slides と違えば止まる）
+      ページには追従しない（作ったときからページが変わっていれば止まる。ノートは比べない）
   uv run vids.py check <Vids か元の Slides の URL か ID> [<Slides の URL か ID>]    シーンの数と、各シーンの音声（avatar）が台本と合っているか
   uv run vids.py voices                                                 選べる声（Conversational voices の 30 種）
   uv run vids.py avatars                                                選べる AI avatar（Conversational voices で話す 30 体）
@@ -25,7 +25,7 @@ usage（ワークスペースの下で）:
   uv run vids.py --selftest
 create・update・check は --browser <URL> を取る。--browser、環境変数 VIDS_BROWSER、factory.toml の [vids] browser の順で、なければ http://127.0.0.1:9222。
 """
-import asyncio, json, os, shutil, subprocess, sys, time, urllib.parse, urllib.request
+import asyncio, hashlib, json, os, re, shutil, subprocess, sys, time, urllib.parse, urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -37,6 +37,7 @@ from gapi import DRIVE, SLIDES, file_id, request  # noqa: E402
 
 MAX = 2500  # Vids の 1 シーンの台本の上限（字。slides-speaker-notes の lint と同じ）
 SLIDES_KEY, VOICE_KEY, AVATAR_KEY = "vidsSlides", "vidsVoice", "vidsAvatar"  # Vids の appProperties: 元の Slides の ID、声の表示名、avatar の表示名（音声だけならない）
+PAGES_KEY = "vidsPages"  # Vids の appProperties: 作ったときのページの印（look）。update は、今のページの印と違えば止まる
 # Conversational voices（Gemini の TTS）。表示名 → (Gemini の声の名前, 画面の説明)。画面の「Select a voice」の並び（Gemini の名前の ABC 順）と、
 # 試聴の音声のファイル名（…/voice_samples/gemini-v4s-tts/1.1/en/<名前>.wav）で対応を取った（2026-10-21）。音声を作って確かめたのは Elio だけ
 VOICES = {
@@ -226,6 +227,20 @@ def scenes_of(slides_id):
     if long:
         sys.exit(f"台本が {MAX} 字を超えるページ: {long}（slides-speaker-notes の lint で直す）")
     return out
+
+
+def look(slides):
+    """ページの見た目の印（ノートを除く）。ID（…ObjectId）と URL（画像の一時 URL など）は外して比べる。deck-build の build は、ノートだけを直しても
+    ページを新しい ID で作り直すので、ID の並びでは、ノートの直しとページの直しを見分けられない。"""
+    def strip(x):
+        if isinstance(x, dict):
+            return {k: strip(v) for k, v in x.items() if not re.search(r"(?i)(objectids?|url)$", k)}
+        return [strip(v) for v in x] if isinstance(x, list) else x
+    return hashlib.sha256(json.dumps(strip(slides), sort_keys=True).encode()).hexdigest()[:16]
+
+
+def look_of(slides_id):
+    return look(request("GET", f"{SLIDES}/{slides_id}?fields=slides(pageElements,pageProperties)").get("slides", []))
 
 
 def stamp(vid, props):
@@ -423,14 +438,14 @@ def create(args):
     if args.layout and not avatar:
         sys.exit("--layout は --avatar と一緒に使う（avatar を選ばないと、置き方は使わない）")
     meta = request("GET", f"{DRIVE}/files/{slides_id}?fields=name,parents&supportsAllDrives=true")
-    scenes = scenes_of(slides_id)
+    scenes, pages = scenes_of(slides_id), look_of(slides_id)
     places = places_of(args.layout, scenes) if avatar else None
     vid = request("POST", f"{DRIVE}/files?fields=id&supportsAllDrives=true",
                   {"name": args.name or f"{meta['name']}_動画", "mimeType": "application/vnd.google-apps.vid", "parents": meta.get("parents", [])[:1]})["id"]
     print(f"空の Vids を作った: https://docs.google.com/videos/d/{vid}/edit", flush=True)
     try:
         r, c = in_tab(args.browser, build_call(vid, slides_id, scenes, label, not args.no_music, avatar, places), inspect_call(vid, scenes))
-        stamp(vid, {SLIDES_KEY: slides_id, VOICE_KEY: label, AVATAR_KEY: avatar})
+        stamp(vid, {SLIDES_KEY: slides_id, PAGES_KEY: pages, VOICE_KEY: label, AVATAR_KEY: avatar})
         report(c, scenes, readers(label, avatar))
     except BaseException:  # Ctrl-C・接続の切れ・ブラウザーの落ちも
         try:
@@ -471,6 +486,9 @@ def update(args):
     if SLIDES_KEY not in p:
         sys.exit("この Vids には元の Slides の控えがない（vids.py create で作ったものだけ更新できる。同じ Slides から create で作り直したら、前の Vids の控えは外してある）")
     slides_id, old = p[SLIDES_KEY], (p.get(VOICE_KEY, DEFAULT_VOICE), p.get(AVATAR_KEY))
+    if PAGES_KEY in p and look_of(slides_id) != p[PAGES_KEY]:  # 印のない Vids（この印を残す前に作ったもの）は見ない
+        sys.exit("要修正: 動画を作ったあと、ページが変わった（足した・消した・並べ替えた・見た目を直した。前の会話での直しも）。"
+                 "動画はページに追従しないので、update しない。頼まれたら vids.py create で作り直す")
     label, avatar = mode_of(args, *old)
     scenes = scenes_of(slides_id)
     if avatar and not old[1] and not args.layout:  # 音声だけの Vids には置き場所がない（--layout なしでは声だけ替わって終わる）
@@ -587,6 +605,10 @@ def selftest():
     finally:
         stamp = real_stamp
     assert stamps == [{AVATAR_KEY: None}], stamps  # 声の控え（avatar の声）は残す
+    # ページの印: ID と URL が変わっても同じ。文字・位置が変われば、並べ替えても変わる
+    pg = lambda t, oid="a": {"objectId": oid, "pageElements": [{"objectId": oid + "_1", "shape": {"text": t}, "image": {"contentUrl": oid}}]}
+    assert look([pg("x"), pg("y")]) == look([pg("x", "b"), pg("y", "c")])
+    assert look([pg("x"), pg("y")]) != look([pg("y"), pg("x")]) and look([pg("x")]) != look([pg("z")])
     # 置き方: 隅と直径 → 変換。右下の 0.3 は、右と下から高さの 4% 空ける
     assert place_tf("br", 0.3) == [0.51435, 0, 0, 0.51435, 295808, 135788] and place_tf("tl", 0.3)[4:] == [8230, 8230]
     assert box_px("br", 0.3, 1600, 900) == (1294, 594, 1564, 864)
