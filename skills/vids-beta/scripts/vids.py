@@ -229,18 +229,27 @@ def scenes_of(slides_id):
     return out
 
 
-def look(slides):
-    """ページの見た目の印（ノートを除く）。ID（…ObjectId）と URL（画像の一時 URL など）は外して比べる。deck-build の build は、ノートだけを直しても
-    ページを新しい ID で作り直すので、ID の並びでは、ノートの直しとページの直しを見分けられない。"""
+def look(slides, image):
+    """ページの見た目の印（ノートを除く）。ID（…ObjectId）と URL は外し、画像（contentUrl）は image(URL) が返す中身の印で比べる。
+    deck-build の build は、ノートだけを直してもページを新しい ID で作り直し、手元の画像を組むたびに違う URL で入れる（slides.py の carry）。
+    contentUrl も 30 分で切れる一時 URL。どちらも、ID や URL のままでは、ノートの直しとページの直しを見分けられない。"""
     def strip(x):
         if isinstance(x, dict):
-            return {k: strip(v) for k, v in x.items() if not re.search(r"(?i)(objectids?|url)$", k)}
+            return {k: image(v) if k == "contentUrl" else strip(v) for k, v in x.items()
+                    if k == "contentUrl" or not re.search(r"(?i)(objectids?|url)$", k)}
         return [strip(v) for v in x] if isinstance(x, list) else x
     return hashlib.sha256(json.dumps(strip(slides), sort_keys=True).encode()).hexdigest()[:16]
 
 
 def look_of(slides_id):
-    return look(request("GET", f"{SLIDES}/{slides_id}?fields=slides(pageElements,pageProperties)").get("slides", []))
+    seen = {}
+
+    def image(url):  # contentUrl は、取った人のアカウントで読める（認証のヘッダーは要らない）
+        if url not in seen:
+            with urllib.request.urlopen(url, timeout=60) as r:
+                seen[url] = hashlib.sha256(r.read()).hexdigest()
+        return seen[url]
+    return look(request("GET", f"{SLIDES}/{slides_id}?fields=slides(pageElements,pageProperties)").get("slides", []), image)
 
 
 def stamp(vid, props):
@@ -605,10 +614,13 @@ def selftest():
     finally:
         stamp = real_stamp
     assert stamps == [{AVATAR_KEY: None}], stamps  # 声の控え（avatar の声）は残す
-    # ページの印: ID と URL が変わっても同じ。文字・位置が変われば、並べ替えても変わる
-    pg = lambda t, oid="a": {"objectId": oid, "pageElements": [{"objectId": oid + "_1", "shape": {"text": t}, "image": {"contentUrl": oid}}]}
-    assert look([pg("x"), pg("y")]) == look([pg("x", "b"), pg("y", "c")])
-    assert look([pg("x"), pg("y")]) != look([pg("y"), pg("x")]) and look([pg("x")]) != look([pg("z")])
+    # ページの印: ID と URL が変わっても同じ。文字・位置・画像の中身が変われば、並べ替えても変わる
+    body = {"a": "logo", "b": "logo", "c": "logo", "d": "photo"}.get  # contentUrl → 画像の中身
+    pg = lambda t, oid="a": {"objectId": oid, "pageElements": [{"objectId": oid + "_1", "shape": {"text": t},
+                                                               "image": {"contentUrl": oid, "sourceUrl": oid + "?tmp"}}]}
+    assert look([pg("x"), pg("y")], body) == look([pg("x", "b"), pg("y", "c")], body)
+    assert look([pg("x"), pg("y")], body) != look([pg("y"), pg("x")], body) and look([pg("x")], body) != look([pg("z")], body)
+    assert look([pg("x")], body) != look([pg("x", "d")], body)  # 同じ位置・大きさで画像だけを替えた
     # 置き方: 隅と直径 → 変換。右下の 0.3 は、右と下から高さの 4% 空ける
     assert place_tf("br", 0.3) == [0.51435, 0, 0, 0.51435, 295808, 135788] and place_tf("tl", 0.3)[4:] == [8230, 8230]
     assert box_px("br", 0.3, 1600, 900) == (1294, 594, 1564, 864)
