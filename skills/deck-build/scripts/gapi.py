@@ -15,9 +15,15 @@ GSLIDES = "application/vnd.google-apps.presentation"
 GDOCS = "application/vnd.google-apps.document"
 FOLDER = "application/vnd.google-apps.folder"
 _TOK = None
-WAITED = []  # 429 で待った秒（request が足す。Clock が回数と秒を出す）
+WAITED = []  # 429・5xx・回線のエラーで取り直す前に待った秒（request が足す。Clock が回数と秒を出す）
 _HOLD = [0.0]  # 429 の分の枠が明ける時刻。並べて取るほかの取り手も、それまで送らない
 _LOCK = threading.Lock()
+TIMEOUT = 120  # urlopen の秒。付けないと、つながったまま返事が来ないとき止まり続ける
+RETRY = {500, 502, 503, 504}  # 一時的なサーバーのエラー。待って取り直す
+# 返事を待つあいだに切れた・5xx が返ったものを取り直してよい方法（同じものを 2 回送っても結果が変わらない。PATCH も、ここでは決まった値を置くか中身を差し替えるだけ）。
+# POST（batchUpdate・コピー・作る・コメントと返信）は、サーバーが受けて入れたあとに切れることがあり、取り直すと二重に入る（insertText が 2 回入る、
+# コピーやコメントが 2 つできる）ので、送り終える前に切れたもの（URLError）と 429（入れる前に断る）だけを取り直す
+SAFE = {"GET", "PUT", "PATCH", "DELETE"}
 
 
 def window_end(body, now=None):
@@ -50,7 +56,7 @@ class Clock:
         self.t = now
 
     def show(self, what):
-        waits = (f"・429 の待ち {len(WAITED)} 回・計 {sum(WAITED):.0f} 秒" if WAITED else "") + (f"・上限を見越した待ち {len(PACED)} 回・計 {sum(PACED):.0f} 秒" if PACED else "")
+        waits = (f"・取り直しの待ち {len(WAITED)} 回・計 {sum(WAITED):.0f} 秒" if WAITED else "") + (f"・上限を見越した待ち {len(PACED)} 回・計 {sum(PACED):.0f} 秒" if PACED else "")
         print(f"{what}の時間（秒）: " + "・".join(f"{n} {s:.1f}" for n, s in self.parts) + f"・計 {sum(s for _, s in self.parts):.1f}{waits}"
               + ("（待ちは並べた取り手ごとの合計）" if waits else ""), file=sys.stderr)
 
@@ -107,7 +113,7 @@ def refresh(creds):
         raise ApiError(f"認証情報の type が {creds.get('type')}。authorized_user だけ扱う（サービスアカウントはトークンを GOOGLE_OAUTH_ACCESS_TOKEN で渡す）")
     body = urllib.parse.urlencode({k: creds[k] for k in ("client_id", "client_secret", "refresh_token")} | {"grant_type": "refresh_token"}).encode()
     try:
-        with urllib.request.urlopen(urllib.request.Request("https://oauth2.googleapis.com/token", data=body, method="POST")) as r:
+        with urllib.request.urlopen(urllib.request.Request("https://oauth2.googleapis.com/token", data=body, method="POST"), timeout=TIMEOUT) as r:
             return json.loads(r.read())["access_token"]
     except urllib.error.HTTPError as e:
         raise ApiError(f"トークンを取れない（{e.code}）。認証情報を作り直す: {LOGIN}\n{e.read().decode(errors='replace')[:500]}") from None
@@ -130,7 +136,8 @@ def token():
 
 
 def request(method, url, body=None, raw=None, ctype="application/json", binary=False, paced=False):
-    """JSON を辞書で返す（binary=True ならバイト列）。429 は待って取り直す（サムネイルは 1 分あたりの上限がある）。
+    """JSON を辞書で返す（binary=True ならバイト列）。429 は待って取り直す（サムネイルは 1 分あたりの上限がある）。5xx と回線のエラーも
+    待って取り直す（POST は送り終える前に切れたものだけ。SAFE）。4 回待っても通らなければ、HTTP のエラーは ApiError、回線のエラーはそのまま上げる。
     paced=True（ページの画像）なら、送るたびに（429 の取り直しも）上限を見越して待つ（pace）。待った秒は WAITED・PACED に足す。"""
     data = raw if raw is not None else (json.dumps(body).encode() if body is not None else None)
     headers = {"Authorization": f"Bearer {token()}", "Content-Type": ctype}
@@ -143,7 +150,7 @@ def request(method, url, body=None, raw=None, ctype="application/json", binary=F
         if paced:
             pace()
         try:
-            with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=headers, method=method)) as r:
+            with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=headers, method=method), timeout=TIMEOUT) as r:
                 b = r.read()
                 return b if binary else (json.loads(b) if b else {})
         except urllib.error.HTTPError as e:
@@ -159,7 +166,19 @@ def request(method, url, body=None, raw=None, ctype="application/json", binary=F
                 WAITED.append(w)
                 time.sleep(w)
                 continue
+            if e.code in RETRY and wait and method in SAFE:
+                WAITED.append(wait)
+                time.sleep(wait)
+                continue
             raise ApiError(f"{e.code} {method} {url}\n{body[:2000]}") from None
+        except (urllib.error.URLError, ConnectionError, TimeoutError) as e:
+            # urllib は、つなぐ・送るあいだのエラーを URLError に包み、送ったあと（返事を待つ・読むあいだ）のエラー（RemoteDisconnected・
+            # ConnectionResetError・TimeoutError）はそのまま上げる
+            if wait and (method in SAFE or isinstance(e, urllib.error.URLError)):
+                WAITED.append(wait)
+                time.sleep(wait)
+                continue
+            raise
 
 
 def batch(pid, reqs):
@@ -301,7 +320,7 @@ def selftest():
     assert window_end('"window_start_time": "1760000000000"', t0) == t0 + 61 and window_end('"window_start_time": 1760000000', t0) == t0 + 61
     assert window_end('"window_start_time": "%d"' % (t0 + 3600), t0) is None  # 1 時間先は読み違え（そこまで待たない）
     assert window_end("{}", t0) is None and window_end('"window_start_time": "x"', t0) is None and window_end('"window_start_time": "1"', t0) is None
-    import io
+    import http.client, io
     real = urllib.request.urlopen, time.sleep, factory, globals()["_TOK"], globals()["pace"]
     calls, slept, paced = [], [], []
 
@@ -320,6 +339,40 @@ def selftest():
         _HOLD[0] = time.time() + 30  # ほかの取り手が 429 で枠を待っている
         calls.append(0)  # 1 回目を 429 にしない
         assert request("GET", "https://example.invalid") == {} and 25 < slept[-1] <= 30 and len(WAITED) == 2  # 枠を待った秒も数える
+
+        def answers(*rs):  # urlopen が順に返すもの（例外なら上げる）。最後のものを繰り返す
+            calls.clear()
+            slept.clear()
+            WAITED.clear()
+            _HOLD[0] = 0.0
+
+            def f(req, *a, timeout=None, **k):
+                assert timeout == TIMEOUT
+                r = rs[min(len(calls), len(rs) - 1)]
+                calls.append(req)
+                if isinstance(r, int):
+                    raise urllib.error.HTTPError(req.full_url, r, "x", {}, io.BytesIO(b"{}"))
+                if isinstance(r, Exception):
+                    raise r
+                return io.BytesIO(r)
+            urllib.request.urlopen = f
+        answers(http.client.RemoteDisconnected("Remote end closed connection without response"), b'{"a": 1}')
+        assert request("GET", "https://example.invalid") == {"a": 1} and slept == [5] and WAITED == [5]
+        answers(503)
+        try:
+            request("GET", "https://example.invalid")
+            raise AssertionError("503 が続いても通した")
+        except ApiError as e:
+            assert str(e).startswith("503 GET") and len(calls) == 5 and slept == [5, 15, 30, 60]
+        for r, method in ((400, "GET"), (http.client.RemoteDisconnected("x"), "POST"), (503, "POST")):  # 400 と、送ったあとの POST は取り直さない
+            answers(r, b"{}")
+            try:
+                request(method, "https://example.invalid", {})
+                raise AssertionError(f"{r} の {method} を取り直した")
+            except (ApiError, ConnectionError):
+                assert len(calls) == 1 and not slept
+        answers(urllib.error.URLError(ConnectionRefusedError()), b"{}")  # 送る前に切れた POST は取り直す
+        assert request("POST", "https://example.invalid", {}) == {} and len(calls) == 2
     finally:
         urllib.request.urlopen, time.sleep = real[0], real[1]
         globals().update(factory=real[2], _TOK=real[3], pace=real[4])
