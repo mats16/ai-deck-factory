@@ -440,11 +440,12 @@ def has_avatar(c):
     return any(w and w.startswith("actor") for w in c["who"])
 
 
-def sync_avatar(vid, c, label, avatar, old):
+def sync_avatar(vid, c, avatar):
     """update のあと、Vids の控えの avatar を、Vids に実際に avatar があるかに合わせる（控えだけ avatar のままだと、次の update が
-    置き場所を求めて止まる。PR #91 の指摘）。avatar が 1 つもなければ外す。音声だけから替える途中で止まって 1 つもないなら、声の控えも戻す。"""
+    置き場所を求めて止まる。PR #91 の指摘）。avatar が 1 つもなければ外す。声の控えは触らない（音声はもう新しい声で、途中で止まっても
+    次の update が同じ声で残りを仕上げる）。"""
     if avatar and not has_avatar(c):
-        stamp(vid, {VOICE_KEY: old[0] if not old[1] else label, AVATAR_KEY: None})
+        stamp(vid, {AVATAR_KEY: None})
         print("Vids に avatar が 1 つもないので、控えを音声だけにした（avatar を足すなら --avatar と --layout を渡す）")
 
 
@@ -476,11 +477,11 @@ def update(args):
     except BaseException:
         if avatar:  # 止まっても、控えを Vids の実際に合わせる（読み直せなければそのまま）
             try:
-                sync_avatar(vid, in_tab(args.browser, inspect_call(vid, scenes))[0], label, avatar, old)
+                sync_avatar(vid, in_tab(args.browser, inspect_call(vid, scenes))[0], avatar)
             except BaseException:
                 pass
         raise
-    sync_avatar(vid, c, label, avatar, old)
+    sync_avatar(vid, c, avatar)
     if args.rebuild:
         summary(r, label, avatar)
     else:
@@ -566,19 +567,18 @@ def selftest():
         report(av, [{"script": "a"}, {"script": ""}], readers("Elio", "Oliver"))
         assert stops(av, [{"script": "a"}, {"script": ""}], readers("Elio", None))  # 音声だけのはずが avatar
         assert stops(av | {"both": [1]}, [{"script": "a"}, {"script": ""}], readers("Elio", "Oliver"))  # avatar と音声の両方
-    # update のあと控えを実際に合わせる: avatar が残っていれば何もしない。なくなれば外す（音声だけから替える途中なら声も戻す）
+    # update のあと控えを実際に合わせる: avatar が残っていれば何もしない。なくなれば avatar だけ外す（声の控えは触らない）
     stamps = []
     global stamp
     real_stamp, stamp = stamp, lambda vid, props: stamps.append(props)
     try:
         with contextlib.redirect_stdout(io.StringIO()):
-            sync_avatar("V", {"who": ["actor50", "Elio"]}, "Elio", "Oliver", ("Elio", "Oliver"))
-            sync_avatar("V", {"who": ["Elio", None]}, "Elio", "Oliver", ("Elio", "Oliver"))   # 最後の avatar のノートを空にした
-            sync_avatar("V", {"who": ["Nyla", None]}, "Elio", "Oliver", ("Nyla", None))       # 音声だけから替える途中で止まった
-            sync_avatar("V", {"who": ["Elio"]}, "Elio", None, ("Elio", None))
+            sync_avatar("V", {"who": ["actor50", "Elio"]}, "Oliver")
+            sync_avatar("V", {"who": ["Elio", None]}, "Oliver")  # 最後の avatar のノートを空にした・全ページ none で Nyla から替えた
+            sync_avatar("V", {"who": ["Elio"]}, None)
     finally:
         stamp = real_stamp
-    assert stamps == [{VOICE_KEY: "Elio", AVATAR_KEY: None}, {VOICE_KEY: "Nyla", AVATAR_KEY: None}], stamps
+    assert stamps == [{AVATAR_KEY: None}], stamps  # 声の控え（avatar の声）は残す
     # 置き方: 隅と直径 → 変換。右下の 0.3 は、右と下から高さの 4% 空ける
     assert place_tf("br", 0.3) == [0.51435, 0, 0, 0.51435, 295808, 135788] and place_tf("tl", 0.3)[4:] == [8230, 8230]
     assert box_px("br", 0.3, 1600, 900) == (1294, 594, 1564, 864)
