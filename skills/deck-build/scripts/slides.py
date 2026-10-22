@@ -107,7 +107,7 @@ THEMES_DIR = "Themes"  # template.py --from-base がテンプレートを作る 
 BUILTIN_THEMES = Path(__file__).resolve().parent.parent / "themes"
 WS_THEMES = ("themes", "slides")
 THEME_KEYS = ("description", "font", "mono", "copyright", "colors", "cover", "section")
-READ_ERRORS = (gapi.ApiError, urllib.error.URLError)  # Drive を読めない（権限・URL・認証・回線）。request は HTTP のエラーだけを ApiError にする
+READ_ERRORS = (gapi.ApiError, OSError)  # Drive を読めない（権限・URL・認証・回線）。request は HTTP のエラーだけを ApiError にし、取り直しても通らない回線のエラー（URLError・ConnectionError・TimeoutError。どれも OSError）はそのまま上げる
 # 会社のテンプレートから残した表紙・扉のレイアウト（図形・ロゴ・写真付き。パターンごとに番号）。template.py がそのレイアウトのページ番号の枠の
 # 代替テキストに書く。w は元のタイトルの枠の右端までの文字の幅（in）、tone は地の明るさ（文字の色を決める）。なければ表紙・扉も Blank に組む
 # （2026-10-13、ユーザー「元の図形が入ったタイトルスライドなどを、維持して欲しい」「セクション区切りで異なる背景の区切りページを使い分けることはよくします」）
@@ -3998,6 +3998,9 @@ def selftest():
     # 共有テーマのフォルダと自分の Themes は、[slides.templates] にないものを探すときだけ読む
     def gone(*_):
         raise gapi.ApiError("404 GET x")
+
+    def cut(*_):  # request が取り直しても通らない回線のエラーは、ApiError でなくそのまま上がる
+        raise TimeoutError("timed out")
     saved = (templates, shared_files, own_files, theme_list)
     files = [{"id": "t1", "properties": {THEME_PROP: "acme"}}, {"id": "t2", "description": "新しい", "properties": {THEME_PROP: "corp"}}]
     own = [{"id": "t5", "properties": {THEME_PROP: "mine"}}, {"id": "t6", "properties": {THEME_PROP: "mine"}}, {"id": "t7", "properties": {THEME_PROP: "acme"}},
@@ -4023,6 +4026,8 @@ def selftest():
         assert "mine（個人。" in out.getvalue() and "own（共有。[slides.templates] の同じ名前は別のテンプレート）" in out.getvalue()
         globals().update(shared_files=gone, own_files=gone)
         assert unlisted() == []  # 共有テーマのフォルダと Themes を読めなくても、themes と new は止めない
+        globals().update(own_files=cut)
+        assert unlisted() == []
     finally:
         globals().update(templates=saved[0], shared_files=saved[1], own_files=saved[2], theme_list=saved[3])
     # slides.py theme: デッキかテンプレートが持つテーマを、ワークスペースのテーマのファイルに書く。テンプレートなら [slides.templates] にも書く
