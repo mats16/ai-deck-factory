@@ -3,7 +3,7 @@
 認証は単独で動く（gcloud も、ほかの Google のスキルも要らない）。トークンは、環境変数 GOOGLE_OAUTH_ACCESS_TOKEN、なければ
 authorized_user の認証情報の JSON（GOOGLE_APPLICATION_CREDENTIALS、なければ gcloud の ADC のファイル）の refresh_token で取る。401・403 や認証情報がないときは factory-doctor で確かめる。
 usage: python3 gapi.py --selftest"""
-import datetime, functools, getpass, json, os, re, sys, tempfile, threading, time, tomllib, urllib.error, urllib.parse, urllib.request, uuid
+import datetime, functools, getpass, json, os, re, socket, sys, tempfile, threading, time, tomllib, urllib.error, urllib.parse, urllib.request, uuid
 from pathlib import Path
 
 SLIDES = "https://slides.googleapis.com/v1/presentations"
@@ -23,8 +23,11 @@ SLOW = 600  # POST の urlopen の秒。pptx の変換や大きい batchUpdate �
 RETRY = {500, 502, 503, 504}  # 一時的なサーバーのエラー。待って取り直す
 # 返事を待つあいだに切れた・5xx が返ったものを取り直してよい方法（同じものを 2 回送っても結果が変わらない。PATCH も、ここでは決まった値を置くか中身を差し替えるだけ）。
 # POST（batchUpdate・コピー・作る・コメントと返信）は、サーバーが受けて入れたあとに切れることがあり、取り直すと二重に入る（insertText が 2 回入る、
-# コピーやコメントが 2 つできる）ので、送り終える前に切れたもの（URLError）と 429（入れる前に断る）だけを取り直す
+# コピーやコメントが 2 つできる）ので、送る前に止まったもの（UNSENT）と 429（入れる前に断る）だけを取り直す
 SAFE = {"GET", "PUT", "PATCH", "DELETE"}
+# 確かに送る前に止まった回線のエラー（名前を引けない・つなぐのを断られた）。urllib は送る途中のエラー（BrokenPipeError・TimeoutError）も
+# URLError に包むが、socket.sendall は失敗したときにどこまで届いたかが分からないので、POST はこれだけを取り直す
+UNSENT = (socket.gaierror, ConnectionRefusedError)
 
 
 def window_end(body, now=None):
@@ -138,7 +141,7 @@ def token():
 
 def request(method, url, body=None, raw=None, ctype="application/json", binary=False, paced=False):
     """JSON を辞書で返す（binary=True ならバイト列）。429 は待って取り直す（サムネイルは 1 分あたりの上限がある）。5xx と回線のエラーも
-    待って取り直す（POST は送り終える前に切れたものだけ。SAFE）。4 回待っても通らなければ、HTTP のエラーは ApiError、回線のエラーはそのまま上げる。
+    待って取り直す（POST は送る前に止まったものだけ。SAFE・UNSENT）。4 回待っても通らなければ、HTTP のエラーは ApiError、回線のエラーはそのまま上げる。
     paced=True（ページの画像）なら、送るたびに（429 の取り直しも）上限を見越して待つ（pace）。待った秒は WAITED・PACED に足す。"""
     data = raw if raw is not None else (json.dumps(body).encode() if body is not None else None)
     headers = {"Authorization": f"Bearer {token()}", "Content-Type": ctype}
@@ -175,7 +178,7 @@ def request(method, url, body=None, raw=None, ctype="application/json", binary=F
         except (urllib.error.URLError, ConnectionError, TimeoutError) as e:
             # urllib は、つなぐ・送るあいだのエラーを URLError に包み、送ったあと（返事を待つ・読むあいだ）のエラー（RemoteDisconnected・
             # ConnectionResetError・TimeoutError）はそのまま上げる
-            if wait and (method in SAFE or isinstance(e, urllib.error.URLError)):
+            if wait and (method in SAFE or isinstance(getattr(e, "reason", None), UNSENT)):
                 WAITED.append(wait)
                 time.sleep(wait)
                 continue
@@ -365,15 +368,19 @@ def selftest():
             raise AssertionError("503 が続いても通した")
         except ApiError as e:
             assert str(e).startswith("503 GET") and len(calls) == 5 and slept == [5, 15, 30, 60]
-        for r, method in ((400, "GET"), (http.client.RemoteDisconnected("x"), "POST"), (503, "POST")):  # 400 と、送ったあとの POST は取り直さない
+        sending = (urllib.error.URLError(BrokenPipeError()), urllib.error.URLError(TimeoutError("timed out")))  # 送る途中で切れた（どこまで届いたか分からない）
+        for r, method in ((400, "GET"), (http.client.RemoteDisconnected("x"), "POST"), (503, "POST"), *((e, "POST") for e in sending)):  # 400 と、送ったかもしれない POST は取り直さない
             answers(r, b"{}")
             try:
                 request(method, "https://example.invalid", {})
                 raise AssertionError(f"{r} の {method} を取り直した")
-            except (ApiError, ConnectionError):
+            except (ApiError, OSError):
                 assert len(calls) == 1 and not slept
-        answers(urllib.error.URLError(ConnectionRefusedError()), b"{}")  # 送る前に切れた POST は取り直す
-        assert request("POST", "https://example.invalid", {}) == {} and len(calls) == 2
+        for e in (urllib.error.URLError(ConnectionRefusedError()), urllib.error.URLError(socket.gaierror(8, "nodename nor servname"))):  # 送る前に止まった POST は取り直す
+            answers(e, b"{}")
+            assert request("POST", "https://example.invalid", {}) == {} and len(calls) == 2
+        answers(*sending, b"{}")  # GET なら、送る途中で切れても取り直す
+        assert request("GET", "https://example.invalid") == {} and len(calls) == 3
     finally:
         urllib.request.urlopen, time.sleep = real[0], real[1]
         globals().update(factory=real[2], _TOK=real[3], pace=real[4])
