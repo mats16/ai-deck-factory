@@ -7,4 +7,4 @@
     {"type": "stat", "value": "40", "unit": "%", "label": "減った作業の時間", "fill": "NAVY", "align": "center"},
     {"type": "stat", "value": "2", "unit": "倍", "label": "画面の表示の速さ", "size": 28, "color": "NAVY", "line": "RULE"}]}],
  "source": "見本の値（実の数字ではない）。[Medallion Architecture](https://docs.databricks.com/aws/en/lakehouse/medallion)",
- "speakerNotes": "数字は見本のために作った値。"}
+ "authorNotes": ["数字は見本のために作った値。"]}

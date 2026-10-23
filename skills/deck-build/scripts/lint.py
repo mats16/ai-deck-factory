@@ -37,7 +37,6 @@ WARN = {
     "社外秘の表示": re.compile(r"Internal Only|Internal Use|Confidential|社外秘|社内限り", re.I),
 }
 SLIDE_ONLY = {"スライドに です・ます": re.compile(r"(です|ます|でした|ました|ません|ください)(。|$|」)")}
-NOTES_ONLY = {"ノートに だ・である": re.compile(r"(だ|である|だった)。")}
 NUM = re.compile(r"\d[\d,.]*\s?(%|％|倍|億|万|兆|円|ドル|USD|ms|TB|GB|PB|K\b|M\b)|[$＄]\s?\d")  # 統計らしい数字だけ（「2 時間」「3 社」は数えない）
 URL = re.compile(r"https?://\S+")
 
@@ -66,7 +65,6 @@ SHORT_CH = "扉のあとが 1 枚だけの章"
 NO_COVER = "1 枚目が表紙（濃紺の地）でない"
 ARROW_MID = "横向きの矢印が、両側の箱の上下の中央にない"
 LINE_GRID = "格子を線で組んでいる（標準の表にできないか）"
-NO_NOTES = "ノートがない"
 NO_SOURCE = "数字に出典の行がない"
 # [lint-026] ページの数字は出典の表にあるものだけ。足すときは先に表へ足す（deck-practices/content.md の content-064）。表は refs.py が資料のフォルダから読む
 NOT_IN_FACTS = "出典の表にない数字"
@@ -96,12 +94,12 @@ STAGE_NG = "提供ステージの札の塗りが言葉と合わない"  # [lint-
 MANY_BANDS = "結論バンドが本文の 3 分の 1 を超える"  # [lint-012] visual.md の 1「要るページにだけ」
 GAP_BELOW, GAP_BOX = 1.0 * EMU, 0.6 * EMU  # 本文の下（本文の領域 5 in の 2 割）と、箱の中の文字より下
 GAP_HOLE, GAP_TOP = 0.65 * EMU, 1.0 * EMU  # 要素の間の穴と、本文の上の空き
-THIN = 0.05 * EMU  # これより細い四角は線として数える（四角で罫線や軸を引いても、格子と矢印の確かめから漏れないように）  # 全ページにスピーカーノートを書く（visual.md の 1）
+THIN = 0.05 * EMU  # これより細い四角は線として数える（四角で罫線や軸を引いても、格子と矢印の確かめから漏れないように）
 MONO = MONO_DEFAULT  # 見ている資料の等幅の書体。lint_slides がデッキのテーマから入れ直す（is_mono などが読む。ponytail: 1 つずつ見る前提の大域の値）
 FONT_NG = f"書体が {FONT} でない"  # スライドはテンプレートの書体（deck_font）と比べる。Google Fonts にない書体は、API が受け付けても黙って別の書体で描かれる（slides.md の 5）。英数字だけの MONO（コード）は通す
 MONO_NG = f"等幅の {MONO_DEFAULT} に和文"  # 名前は既定の書体のまま（台帳と lint_runs.jsonl が名前で数える）。テーマの mono なら指摘にその名前を出す。MONO に和文の字形はなく、Google が別の書体で描く。和文は FONT にする（slides.py の mono_reqs。visual.md の 2）
 DECK_WIDE = {NO_COVER, NO_DIVIDER, SHORT_CH, MANY_BANDS, HEAD_CLAIMS}  # デッキ全体を見て出す規則。lint_slides の only で絞らない（ページの番号が付いていても、ほかのページで決まる）
-PAGE_ONLY = {NO_NOTES, NO_SOURCE, NOT_IN_FACTS, NO_LINK, TALK, TWO_LINES, HEAD_PERIOD, HEAD_POLITE, EMPTY_BELOW, EMPTY_HOLE}  # ページを見て出す規則。部品だけを見るときは出さない
+PAGE_ONLY = {NO_SOURCE, NOT_IN_FACTS, NO_LINK, TALK, TWO_LINES, HEAD_PERIOD, HEAD_POLITE, EMPTY_BELOW, EMPTY_HOLE}  # ページを見て出す規則。部品だけを見るときは出さない
 ESTIMATE = {TWO_LINES, BODY_LINES, PHRASE_BREAK, EMPTY_BELOW, EMPTY_BOX, EMPTY_HOLE, TEXT_OVER}  # 字幅と行の高さの見積もりから出す指摘。Google が描いた画像で確定する（ほかは JSON で決まる）
 HARD_NAMES = set(HARD) | {HEAD_PERIOD, HEAD_POLITE, f"{MIN_PT}pt 未満の文字", f"{DOC_MIN_PT}pt 未満の文字", COPYRIGHT_NG, FONT_NG, MONO_NG, "用紙が A4 でない", "追跡の印の付いたリンク"}
 INS = INSET * 72  # 文字の枠の内側の余白（pt）。Slides API の既定は 0.1 in で、変えられない
@@ -744,12 +742,9 @@ def lint_slides(p, r, reuse=False, talk=False, only=None, scope="deck", facts=No
             r.hits[NO_SOURCE].append(f"p{i}: 「{nums[0][:30]}」")
         if facts is not None and (miss := not_in_facts(fact_nums, facts)):
             r.hits[NOT_IN_FACTS].append(facts_hit(f"p{i}", miss, facts))
-        note = note_text(s)
-        if not note.strip() and not reuse:
-            r.hits[NO_NOTES].append(f"p{i}")
-        for t in note.split("\n"):
+        for t in note_text(s).split("\n"):
             if t.strip():
-                r.scan(f"p{i} のノート", t, {**HARD, **NOTES_ONLY})
+                r.scan(f"p{i} のノート", t, HARD)
 
     if dark and not dark[0] and not reuse:  # [lint-018] どの資料にも表紙を付ける（visual.md の 1）
         r.hits[NO_COVER].append("p1 が濃紺の地でない。表紙を付ける（定例の資料も）")
@@ -795,7 +790,7 @@ def lint_slides(p, r, reuse=False, talk=False, only=None, scope="deck", facts=No
     print(f"\n== 本文の字数（見出し・リード・出典・フッターを除く。話す資料は {TALK_MAX} 字まで） ==")
     print(" / ".join(chars))
     hard = r.show(list(HARD) + [f"{MIN_PT}pt 未満の文字", COPYRIGHT_NG, FONT_NG, MONO_NG, HEAD_PERIOD, HEAD_POLITE], "要修正")
-    r.show(list(WARN) + list(SLIDE_ONLY) + list(NOTES_ONLY) + [NO_SOURCE, NOT_IN_FACTS, NO_LINK, BODY_LINES, TWO_LINES, HEAD_CLAIMS, BULLET_PERIOD, TALK, NO_NOTES, ARROW_MID, TEXT_OVER, LINE_GRID, EMPTY_BELOW, EMPTY_BOX, EMPTY_HOLE, PAD_NG, NUM_NO_UNIT, OPEN_HEAD, PHRASE_BREAK, COL_SHIFT, DASH_ROUND, STAGE_NG, CODE_NOT_MONO, BLOCK_ON_NAVY, MANY_BANDS, NO_COVER, NO_DIVIDER, SHORT_CH], "要確認")
+    r.show(list(WARN) + list(SLIDE_ONLY) + [NO_SOURCE, NOT_IN_FACTS, NO_LINK, BODY_LINES, TWO_LINES, HEAD_CLAIMS, BULLET_PERIOD, TALK, ARROW_MID, TEXT_OVER, LINE_GRID, EMPTY_BELOW, EMPTY_BOX, EMPTY_HOLE, PAD_NG, NUM_NO_UNIT, OPEN_HEAD, PHRASE_BREAK, COL_SHIFT, DASH_ROUND, STAGE_NG, CODE_NOT_MONO, BLOCK_ON_NAVY, MANY_BANDS, NO_COVER, NO_DIVIDER, SHORT_CH], "要確認")
     hard += workspace_checks("slides", p, r)
     print("\n== 文字サイズ（pt: run の数） ==")
     print(", ".join(f"{k:g}: {v}" for k, v in sorted(sizes.items())))
@@ -1235,7 +1230,6 @@ def selftest():
     for y, size, text, expected in ((7.08, 9, copyright_text, 0), (7.08, 8, copyright_text, 1),
                                     (2, 9, copyright_text, 1), (7.08, 9, "資料名", 1)):
         assert run(deck([(NAVY, [title(), shape(1, y=y, size=size, text=[text])])]))[2] == expected  # 9pt の例外は著作権フッターだけ
-    assert len(run(deck([(NAVY, [title()])], notes=None))[0].hits[NO_NOTES]) == 1
     oat = rgb("F9F7F4")
     assert len(run(deck([(NAVY, [title()]), (oat, [title(), shape(1, size=36, text=["55"])])]))[0].hits[NUM_NO_UNIT]) == 1
     assert not run(deck([(NAVY, [title()]), (oat, [title(), shape(1, size=36, text=["55 モデル"])])]))[0].hits[NUM_NO_UNIT]

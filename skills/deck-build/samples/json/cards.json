@@ -13,4 +13,4 @@
       {"type": "card", "icon": "tabler:cloud", "head": "データレイク", "valign": "middle", "fill": "NAVY"}]},
     {"type": "card", "head": "地の色を替えたカード", "text": "PANEL の地には枠線が付かない", "fill": "PANEL"}]}],
  "band": {"text": "印のあるカードは、見出しと本文を印の横にそろえる", "sub": "番号の円は地によらず赤"},
- "speakerNotes": "上の列は矢印でつないだ流れ。下の列は step で項目の上端をそろえたカードと、上下の中央にそろえた小さなカード。"}
+ "authorNotes": ["上の列は矢印でつないだ流れ。下の列は step で項目の上端をそろえたカードと、上下の中央にそろえた小さなカード。"]}

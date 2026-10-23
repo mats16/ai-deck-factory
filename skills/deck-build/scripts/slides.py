@@ -1089,12 +1089,12 @@ NO_ESC = (*CONTAINERS, "list")  # raw を書けない（並べ方の箱は Deck 
 NO_H = ("row", "stack", "grid", "gantt", "list")  # h を書かない（高さは中身から決まる。中身より小さい h は次の部品と重なる。frame だけは h が要る）
 STRETCH = ("card", "stat", "box", "label", "code", "frame", "stack")  # row・grid で行の高さまで伸ばす（text は塗りか枠線のあるときだけ）
 SPEC_PAGE = {
-    "page": ({"title": "s"}, {"lead": "s", "kicker": "s", "body": "els", "band": "band", "source": "md", "speakerNotes": "s"}),
-    "cover": ({"title": "s", "kicker": "s"}, {"sub": "s", "variant": "pi", "speakerNotes": "s"}),
-    "divider": ({"num": "s", "title": "s"}, {"sub": "s", "variant": "pi", "speakerNotes": "s"}),
-    "slide": ({}, {"bg": "c", "foot": "b", "body": "els", "source": "md", "speakerNotes": "s"}),
+    "page": ({"title": "s"}, {"lead": "s", "kicker": "s", "body": "els", "band": "band", "source": "md", "speakerNotes": "s", "authorNotes": "strs"}),
+    "cover": ({"title": "s", "kicker": "s"}, {"sub": "s", "variant": "pi", "speakerNotes": "s", "authorNotes": "strs"}),
+    "divider": ({"num": "s", "title": "s"}, {"sub": "s", "variant": "pi", "speakerNotes": "s", "authorNotes": "strs"}),
+    "slide": ({}, {"bg": "c", "foot": "b", "body": "els", "source": "md", "speakerNotes": "s", "authorNotes": "strs"}),
 }
-SPEC_DECK = ({"name": "s", "pages": "pages"}, {"theme": "s"})  # theme はいちばん上のデッキのファイルのもの（slides.py themes の名前）
+SPEC_DECK = ({"name": "s", "pages": "pages"}, {"theme": "s", "authorNotes": "strs"})  # theme はいちばん上のデッキのファイルのもの（slides.py themes の名前）。authorNotes はどこにも組まない（ページの authorNotes と同じ）
 # テーマのファイル（read_theme）。colors は役割の名前（ROLE）・テーマに入れない色（FIXED）・名前で引く役割（NAMED）→ 6 桁。cover・section は
 # 会社のテンプレートから残す表紙・扉のレイアウトの名前の並び（template.py が文字の幅 w と地の明るさ tone を測って書き込む。../../deck-template/SKILL.md）
 SPEC_THEME = ({}, {"description": "s", "font": "s", "mono": "s", "copyright": "s", "colors": "colors", "cover": "layouts", "section": "layouts"})
@@ -1133,7 +1133,7 @@ SPEC_OK = {"s": lambda v: isinstance(v, str), "md": lambda v: isinstance(v, str)
            "pt": lambda v: isinstance(v, str) or isinstance(v, list) and len(v) == 2 and all(map(_num, v)),
            "items": lambda v: isinstance(v, list) and all(_strs(x, 2) for x in v),
            "litems": lambda v: isinstance(v, list) and bool(v) and all(isinstance(x, (str, dict)) for x in v),
-           "cols": lambda v: _strs(v) and bool(v), "grows": lambda v: isinstance(v, list) and bool(v) and all(isinstance(x, dict) for x in v),
+           "strs": _strs, "cols": lambda v: _strs(v) and bool(v), "grows": lambda v: isinstance(v, list) and bool(v) and all(isinstance(x, dict) for x in v),
            "gbars": lambda v: isinstance(v, list) and all(isinstance(x, dict) for x in v), "gmarks": lambda v: isinstance(v, list) and all(isinstance(x, dict) for x in v),
            "bline": lambda v: isinstance(v, dict), "bthr": lambda v: isinstance(v, dict),
            "bvals": lambda v: isinstance(v, list) and bool(v) and all(_num(x) and x >= 0 for x in v),
@@ -1173,7 +1173,7 @@ def spec_check(o, schema, loc, extra=None):
 
 SPEC_TYPES = {"s": "文字列", "md": "記法つきの文字列", "n": "0 以上の数", "f": "数（負の数も書ける）", "p": "0 より大きい数", "i": "整数", "pi": "1 以上の整数", "b": "true か false", "c": f"色の名前（{'・'.join(COLOR_NAMES)}。6 桁は書けない。値はテーマのファイルで決める）",
               "w": '0 より大きい数（in）か "fit"（label だけ。中身の文字の幅にする）', "nh": "0 より大きい数（in）か、行ごとのその並び",
-              "els": "部品の並び", "kids": "1 つ以上の部品の並び", "pages": "ページかデッキのファイルのパス（.json）の並び", "pt": "部品の id（\"<id>.<辺>\" で出る辺・入る辺。辺は top・bottom・left・right）か [x, y]", "items": '[["見出し", "説明"], …]',
+              "els": "部品の並び", "kids": "1 つ以上の部品の並び", "pages": "ページかデッキのファイルのパス（.json）の並び", "pt": "部品の id（\"<id>.<辺>\" で出る辺・入る辺。辺は top・bottom・left・right）か [x, y]", "items": '[["見出し", "説明"], …]', "strs": '文字列の並び（["…", "…"]）',
               "litems": '["文字", {"head": 見出し, "text": 文字, "icon"・"num"・"image": 印}, …]（文字は記法が書ける）',
               "rows": '[["見出しの行", …], ["セル", {"text": "セル", "colspan": 2}, …], …]（セルは記法つきの文字か {"text": …, …}）', "hn": "true・false か、見出しの行の数（0 以上の整数）", "nums": "正の数の並び",
               "cols": '列の名前の並び（["10 月", "11 月", …]）', "grows": '[{"head": 項目, "bars": [{"from": 列, "to": 列, …}], "marks": [{"at": 位置, "text": 言葉}], "note": 補足}, …]',
@@ -2313,7 +2313,7 @@ def spec_page(d, p, base, loc, name=None):
     if kind not in SPEC_PAGE:
         sys.exit(f"{loc}: type「{kind}」はない（ページは {'・'.join(SPEC_PAGE)}、部品は {'・'.join(SPEC_EL)}）")
     spec_check(p, SPEC_PAGE[kind], f"{loc}（{kind}）")
-    kw = {k: spec_color(v) if k == "bg" else v for k, v in p.items() if k not in ("type", "body", "band", "source", "speakerNotes")}
+    kw = {k: spec_color(v) if k == "bg" else v for k, v in p.items() if k not in ("type", "body", "band", "source", "speakerNotes", "authorNotes")}
     sid = getattr(d, kind)(**kw)
     if name:
         if name in d.page_names:
@@ -2372,7 +2372,8 @@ def spec_where(deck):
 
 SPEC_UNIT = {"w": "幅（in）", "h": "高さ（in）", "x": "frame の左上からの位置（in。frame の中だけ）", "y": "frame の左上からの位置（in。frame の中だけ）",
              "size": "pt", "icon.size": "in", "num.size": "small は図の中の印、medium はカードと手順（既定）、large は大きな段",
-             "variant": "会社のテンプレートの表紙・扉のパターンの番号（テンプレートの見本のページにある。テンプレートがなければ 1 だけ）", "gap": "部品の間（in）", "id": "矢印の from・to で指す名前", "spacing": "行間（%）", "para_gap": "段落の間（pt）",
+             "variant": "会社のテンプレートの表紙・扉のパターンの番号（テンプレートの見本のページにある。テンプレートがなければ 1 だけ）", "gap": "部品の間（in）", "id": "矢印の from・to で指す名前", "spacing": "行間（%）",
+             "authorNotes": "スライドにもノートにも組まない注記（スライドから外した事実・断り書き・そのページで言いたいこと）。書き換えてもページを作り直さない", "para_gap": "段落の間（pt）",
              "pad": "箱の端と文字の間（in）", "radius": "角の丸み（in）", "step": "項目の間隔（in）",
              "route": "bent は折れ線（両端を id でつないだとき）。id の両端が箱なら、線は箱につながる。出る辺・入る辺を決めるときは、route を書かずに from・to を \"<id>.<辺>\" にする", "today": "今日の縦線の位置（1 が 1 列目の左端、1.5 が 1 列目の中ほど）",
              "label_side": "札の置き場所。横の線は top（既定）か bottom、縦の線は right（既定）か left",
@@ -2400,7 +2401,7 @@ def spec_brief():
     """書く形の早見表（slides.py schema --brief）。SPEC_EL・SPEC_PAGE・SPEC_DECK と型の説明から作るので、形と食い違わない。* は要るキー。
     pom の llm.txt にならい、ページを書く子が JSON Schema の全文の代わりに読む（prompt_pages.md）。"""
     short = {"s": "文字", "md": "記法", "n": "数", "f": "正か負の数", "p": "正の数", "i": "整数", "pi": "1 以上", "b": "真偽", "c": "色", "els": "部品の並び", "kids": "部品の並び",
-             "w": '正の数か "fit"', "nh": "正の数か行ごとの並び", "ints": "1 からの番号の並び", "nums": "比の並び", "ns": "文字か整数", "hn": "真偽か行の数", "rows": "行の並び。セルは記法か {…}", "litems": "項目の並び。記法か {…}", "pt": "id（id.辺）か [x, y]"}
+             "w": '正の数か "fit"', "nh": "正の数か行ごとの並び", "ints": "1 からの番号の並び", "nums": "比の並び", "ns": "文字か整数", "hn": "真偽か行の数", "rows": "行の並び。セルは記法か {…}", "strs": "文字の並び", "litems": "項目の並び。記法か {…}", "pt": "id（id.辺）か [x, y]"}
     def keys(schema, kind=""):
         need, opt = schema
         out = []
@@ -2435,6 +2436,7 @@ def spec_schema():
          "els": {"type": "array", "items": {"$ref": "#/$defs/element"}}, "kids": {"type": "array", "items": {"$ref": "#/$defs/element"}, "minItems": 1}, "pages": {"type": "array", "items": {"type": "string", "pattern": "\\.json$"}, "minItems": 1, "description": "ページかデッキのファイルのパス"},
          "pt": {"anyOf": [{"type": "string", "description": "部品の id。\"<id>.<辺>\"（辺は top・bottom・left・right）で出る辺・入る辺を指す（両端に書く）"}, {"type": "array", "items": num, "minItems": 2, "maxItems": 2}]},
          "items": {"type": "array", "items": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 2, "description": "[見出し, 説明（記法つき）]"}},
+         "strs": {"type": "array", "items": {"type": "string"}},
          "hn": {"anyOf": [{"type": "boolean"}, {"type": "integer", "minimum": 0}]},
          "nums": {"type": "array", "items": {"type": "number", "exclusiveMinimum": 0}, "description": "比"},
          "cols": {"type": "array", "items": {"type": "string"}, "minItems": 1, "description": "列の名前（月・週）。左から 1 列目"},
@@ -3232,7 +3234,7 @@ def build(pid, deck, force=False, theme=None, only=None):
                "pages": [{"page": i, "objectId": ids[s]} for i, s in enumerate(deck.slides, 1) if s not in keep]}, open(f"{d}/changed.json", "w"), indent=1)
     print(json.dumps({"presentationId": pid, "url": f"https://docs.google.com/presentation/d/{pid}/edit",
                       "slides": len(deck.slides), "rebuilt": x.rebuilt, "frozen": [i for i, s in enumerate(deck.slides, 1) if s in x.frozen], "removed": len(old),
-                      "requests": len(send) + len(nreqs), "notes_rewritten": renoted, "pages_without_notes": missing_notes(deck),
+                      "requests": len(send) + len(nreqs), "notes_rewritten": renoted,
                       "warnings": len(deck.warnings)}, ensure_ascii=False))
     gapi.CLOCK.show("build ")
 
@@ -3561,13 +3563,8 @@ def default_pages():
     return have[0]
 
 
-def missing_notes(deck):
-    """ノートのないページの番号（1 始まり）。"""
-    return [i for i, s in enumerate(deck.slides, 1) if not deck.notes.get(s)]
-
-
 def dry(path="pages.py", url=None, show=False):
-    """[slides_py-015] 組まずに path の make(d) を走らせ、組むときの警告・枚数・ノートのないページを出す（Google には書かない。アイコンの名前だけは確かめる）。
+    """[slides_py-015] 組まずに path の make(d) を走らせ、組むときの警告と枚数を出す（Google には書かない。アイコンの名前だけは確かめる）。
     子が担当のページを別のファイルに書いたとき、親が組む前に子が自分で確かめる（../slides.md の 2）。番号は担当の中の何枚目。finish は呼ばない（ページへのリンクは、親が組むときに確かめる）。
     テーマ・表紙と扉のパターンは deck_context（テーマのファイルがあれば Google を読まない。url はテーマのファイルがないデッキだけに要る）。"""
     if Path(path).parent != Path("."):  # 今いるフォルダから読むので、別のフォルダのファイルを黙って取り違えない
@@ -3577,7 +3574,7 @@ def dry(path="pages.py", url=None, show=False):
     load_make(path).make(d)
     if show:  # slides.py resolve: JSON のページの解いた形
         print(json.dumps(d.resolved, ensure_ascii=False, indent=1))
-    print(json.dumps({"file": path, "slides": len(d.slides), "pages_without_notes": missing_notes(d), "warnings": len(d.warnings)}, ensure_ascii=False), file=sys.stderr if show else sys.stdout)
+    print(json.dumps({"file": path, "slides": len(d.slides), "warnings": len(d.warnings)}, ensure_ascii=False), file=sys.stderr if show else sys.stdout)
     return d
 
 
@@ -4177,7 +4174,7 @@ def selftest():
         try:
             m = load_pages()
             assert len(make_deck(m.make, m.NAME).slides) == 3
-            assert missing_notes(dry("pages_a.py")) == [2]  # 番号は担当の中の何枚目
+            assert len(dry("pages_a.py").slides) == 2
             Path(t, "pages_s.py").write_text('def make(d):\n    d.divider("02", "扉", variant=2)\n')  # テンプレートの扉のパターン 2
             saved = default_theme, ws_themes
             globals().update(default_theme=lambda: "visual", ws_themes=lambda: None)  # 回すワークスペースの既定のテーマに左右されない（組み込みの visual には扉のパターンがない）
@@ -4271,7 +4268,7 @@ def selftest_sample():
     finally:
         globals().update(real)
     assert len(d.slides) == len(json.loads((root / "deck.json").read_text())["pages"]) and not d.warnings and not c.warnings, d.warnings + c.warnings
-    assert not missing_notes(d) and "diagram" in d.page_names
+    assert "diagram" in d.page_names
 
 
 def selftest_spec():
@@ -4294,6 +4291,8 @@ def selftest_spec():
                      {"type": "text", "text": "下の文は ***強調*** と `uv run` を含む", "fill": "PANEL"},
                      {"type": "arrow", "from": "B", "to": "S"}]}
     d, els = run(page)
+    da, _ = run({**page, "authorNotes": ["外した事実"]})
+    assert da.resolved == d.resolved and list(da.notes.values()) == list(d.notes.values())  # authorNotes はページにもノートにも組まない
     cards, (txt,), (arr,) = [e for e in els if e["call"] == "card"], [e for e in els if e["call"] == "text"], [e for e in els if e["call"] == "arrow"]
     h = max(card_h(w, hd, body=b) for (_, w), hd, b in zip(cols(3), "BSG", body))
     assert all(near(c["x"], x) and near(c["w"], w) and near(c["h"], h) for c, (x, w) in zip(cards, cols(3))) and cards[0]["y"] == Y_BODY  # 列は cols、高さは最大にそろえる
@@ -5033,8 +5032,7 @@ def selftest_diff():
     import lint
     with contextlib.redirect_stdout(io.StringIO()):
         lint.lint_slides(q, r := lint.Report(), only={3})
-    assert not r.hits[lint.NO_NOTES] or all(h.startswith("p3") for h in r.hits[lint.NO_NOTES])  # 選んだページの指摘だけ
-    assert "p3" in r.hits[lint.NO_NOTES]
+    assert r.hits[lint.EMPTY_BELOW] and all(h.startswith("p3") for h in r.hits[lint.EMPTY_BELOW])  # 選んだページの指摘だけ（全体では p1 にも出る）
     with contextlib.redirect_stdout(io.StringIO()):
         lint.lint_slides(dict(q, slides=q["slides"][1:]), r := lint.Report(), only={2})  # 表紙を外したデッキの 2 枚目だけを見ても
     assert r.hits[lint.NO_COVER]  # 「1 枚目が表紙でない」（デッキ全体の規則）は絞らない

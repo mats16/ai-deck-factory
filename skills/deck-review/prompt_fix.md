@@ -20,7 +20,6 @@ You fix slides. Fix only the rows under "Your rows", editing your page files (<y
 
 ## How to fix
 - Fix only your files.
-- When you fix the body, also match the same spot in that page's note (counts, ranges, names, assertions).
 - Do not shrink text to fit (consider rephrasing, then a diagram). Use the JSON components (slides-034).
 - Return the following rows without fixing them: ones that conflict with the outline's claims, numbers, or order or with the corrections, ones that change a heading or what the page says, ones that add or split pages, ones that cannot be fixed without touching anything outside your files (other pages, deck.json), and ones whose fix conflicts with a rule. Do not decide them yourself.
 - After writing, run `python3 <deck-build folder>/scripts/slides.py lint <your file>` in <build> for each file, and confirm that it does not stop on a JSON error and that `要修正` is 0 (this lints locally without building; errors and findings come out with their location).
@@ -51,7 +50,6 @@ You fix slides. Fix only the rows under "Your rows", and write the fixed page fu
 
 ## How to fix
 - Write only your functions, whole, from def to the last line. Do not write functions you do not fix. Do not write imports, constants, or make. For slides.py names (such as `card_h`) that are not in pages.py's imports, use them as they are and list them on the docstring's 「import:」 line (the parent adds them to the imports).
-- When you fix the body, also match the same spot in that page's d.note (counts, ranges, names, assertions).
 - Do not shrink text to fit (consider rephrasing, then a diagram). Use components that exist in slides.py and the shared functions in pages.py.
 - Return the following rows without fixing them: ones that conflict with the outline's claims, numbers, or order or with the corrections, ones that change a heading or what the page says, ones that add or split pages, ones that cannot be fixed without touching anything outside your functions (shared functions, constants, other pages), and ones whose fix conflicts with a rule. Do not decide them yourself.
 - After writing, check only for syntax errors with `python3 -c "import ast; ast.parse(open('<build>/fix_<owner>.py').read())"`.
