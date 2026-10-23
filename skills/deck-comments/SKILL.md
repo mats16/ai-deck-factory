@@ -9,7 +9,7 @@ Use this after delivering a material, when the user has asked people (on Slack o
 
 ## What happens to comments when you rebuild
 
-- For slides, pages you did not change are kept as they were, so their comments stay attached. Pages you changed are deleted and recreated, so the comments on them lose their anchor. If you pass no files to `--force`, every page is recreated and every comment loses its anchor.
+- For slides, pages you did not change are kept as they were, so their comments stay attached. Pages you changed are deleted and recreated, so the comments on them lose their anchor (a change only in the speaker notes keeps the page). If you pass no files to `--force`, every page is recreated and every comment loses its anchor.
 - For documents, the whole body is replaced, so every comment loses its anchor.
 - A comment that lost its anchor is not deleted; it stays unresolved (the API still returns it, and the quoted text remains). It cannot be reattached, so after fixing, write in the reply which page you changed and how, then resolve it.
 
