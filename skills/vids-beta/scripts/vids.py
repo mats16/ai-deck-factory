@@ -273,7 +273,7 @@ def props_of(vid):
 def made_from(slides_id):
     """その Slides から create した Vids（appProperties の vidsSlides）。"""
     q = urllib.parse.quote(f"appProperties has {{ key='{SLIDES_KEY}' and value='{slides_id}' }} and trashed = false")
-    return request("GET", f"{DRIVE}/files?q={q}&corpora=allDrives&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name)")["files"]
+    return request("GET", f"{DRIVE}/files?q={q}&corpora=allDrives&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name,createdTime)")["files"]
 
 
 def vids_of(fid):
@@ -519,8 +519,11 @@ def mode_of(args, voice_default, avatar_default=None):
 
 
 def adopt(slides_id, vid):
-    """その Slides から作った Vids のうち、vid のほかの控えを外す（update <Slides> が vid だけを探すように）。前の Vids は消さない（共有した URL かもしれない）。"""
-    for f in (f for f in made_from(slides_id) if f["id"] != vid):
+    """その Slides から作った Vids のうち、vid より前に作ったものの控えを外す（update <Slides> が新しい Vids だけを探すように）。
+    後から作ったもの（重なった create）は外さない。いちばん後に作った Vids を残す（重なった create が互いに外し合って、どれにも控えが残らなくならないように。
+    PR #95 の Pullfrog の指摘）。前の Vids は消さない（共有した URL かもしれない）。"""
+    mine = (request("GET", f"{DRIVE}/files/{vid}?fields=createdTime&supportsAllDrives=true")["createdTime"], vid)
+    for f in (f for f in made_from(slides_id) if (f["createdTime"], f["id"]) < mine):
         stamp(f["id"], {SLIDES_KEY: None})
         print(f"前の Vids の控えを外した（もう update しない）: {f['name']} https://docs.google.com/videos/d/{f['id']}/edit", flush=True)
 
@@ -782,17 +785,25 @@ def selftest():
                 assert "2 回とも" in str(e) and len(tries) == 2
     finally:
         in_tab, tabs_of = real
-    # 前の Vids の控えを外す: 新しい Vids のほかの、同じ Slides の控えを外す（新しい Vids は外さない）
-    global made_from
-    real_made = made_from
-    stamps.clear()
-    made_from, stamp = (lambda sid: [{"id": "OLD", "name": "前"}, {"id": "NEW", "name": "新"}]), (lambda vid, props: stamps.append((vid, props)))
+    # 前の Vids の控えを外す: 前に作ったものだけを外す。同じ Slides の create が重なっても（A の音声の間に B が作り、A・B の順に最後の adopt）、
+    # 後に作った B の控えが残る（PR #95 の Pullfrog の指摘: 互いに外し合うと、どちらにも残らなかった）
+    global made_from, request
+    real_made, real_request = made_from, request
+    store = {"OLD": ("1", "S"), "A": ("2", "S"), "B": ("3", "S")}  # Vids → (作った時刻, 控えの Slides)
+
+    def put(vid, props):
+        if SLIDES_KEY in props:
+            store[vid] = (store[vid][0], props[SLIDES_KEY])
+    made_from = lambda sid: [{"id": v, "name": v, "createdTime": t} for v, (t, x) in store.items() if x == sid]
+    request, stamp = (lambda method, url, body=None: {"createdTime": store[url.split("/files/")[1].split("?")[0]][0]}), put
     try:
         with contextlib.redirect_stdout(io.StringIO()):
-            adopt("S", "NEW")
+            adopt("S", "A")
+            assert [f["id"] for f in made_from("S")] == ["A", "B"]  # 後に作った B は外さない
+            adopt("S", "B"), adopt("S", "A"), adopt("S", "B")
     finally:
-        made_from, stamp = real_made, real_stamp
-    assert stamps == [("OLD", {SLIDES_KEY: None})], stamps
+        made_from, request, stamp = real_made, real_request, real_stamp
+    assert [k for k, (t, x) in store.items() if x == "S"] == ["B"], store
     # create: 1 回目の adopt が失敗し、音声の途中でも止まったとき、最後の adopt が前の Vids の控えを外し、止まった理由はそのまま上がる
     g, calls = globals(), {"made": 0}
     saved = {k: g[k] for k in ("request", "scenes_of", "look_of", "in_tab", "again", "stamp", "made_from")}
@@ -801,12 +812,12 @@ def selftest():
         calls["made"] += 1
         if calls["made"] == 1:
             raise gapi.ApiError("一時的なエラー")
-        return [{"id": "OLD", "name": "前"}, {"id": "NEW", "name": "新"}]
+        return [{"id": "OLD", "name": "前", "createdTime": "1"}, {"id": "NEW", "name": "新", "createdTime": "2"}]
 
     def stops(*a):
         raise SystemExit("音声の途中で止まった")
     stamps.clear()
-    g.update(request=lambda method, url, body=None: {"name": "資料", "parents": ["F"], "id": "NEW"}, scenes_of=lambda sid: [{"pageId": "p", "script": "a"}],
+    g.update(request=lambda method, url, body=None: {"name": "資料", "parents": ["F"], "id": "NEW", "createdTime": "2"}, scenes_of=lambda sid: [{"pageId": "p", "script": "a"}],
              look_of=lambda sid: "L", in_tab=lambda browser, *calls: [{"scenes": 1, "musicMs": 30000, "waited": []}], again=stops,
              stamp=lambda vid, props: stamps.append((vid, props)), made_from=made)
     try:
