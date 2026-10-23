@@ -3,7 +3,7 @@
 台本は {"1": "…", "2": "…", …}（ページの番号 → そのページのノート）の JSON。
 usage（資料の build/ で）:
   speaker_notes.py pull <URL か ID>              今のノートを台本の形で標準出力に出す。deck.json のページの speakerNotes と違うページを標準エラーに出す（画面でノートが直されている）
-  speaker_notes.py lint <台本.json> [--lang ja|en]   台本を確かめる（要修正: 1 シーン 2,500 字を超える。要確認: 空のシーン、確かめていないタグ、続けて置いたタグ、
+  speaker_notes.py lint <台本.json> [--lang ja|en]   台本を確かめる（要修正: 1 シーン 2,500 字を超える、最後に [short pause] がない。要確認: 空のシーン、確かめていないタグ、続けて置いたタグ、
                                          1 シーンに 2 つ以上の感情のタグ、読み上げる記号、ページの参照、ja では英字。記号と参照は言語ごと〔既定は ja〕）。字数の合計も出す
   speaker_notes.py push <URL か ID> <台本.json>  ノートを台本に書き換え、deck.json のページの speakerNotes も書き換える。資料のフォルダ（build/ の上）の md に
                                          デッキの ID がなければ、何も書かずに止める（別の資料の build/ で回していないか）。初めての push では、今のノートを
@@ -15,9 +15,9 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "deck-build" / "scripts"))
-import gapi, lint
+import gapi
 from gapi import SLIDES, batch, file_id, request, run
-from slides import DECK_FIELDS, PAGE_KEY, STAMP, deck_font, page_key, revision
+from slides import DECK_FIELDS, PAGE_KEY, STAMP, deck_font, note_reqs, notes_of, page_key, revision
 
 MAX = 2500  # Vids の 1 シーンの voiceover の上限
 PAUSES = {"short pause", "medium pause", "long pause"}
@@ -36,10 +36,6 @@ SCREEN = "前に組んだあとに画面で直されている"
 def live(pid):
     """スライドの並び（ノートの枠まで）と、デッキの書体の要るマスター。"""
     return request("GET", f"{SLIDES}/{pid}?fields=slides(objectId,slideProperties(notesPage(notesProperties,pageElements(objectId,shape(text))))),{DECK_FIELDS}")
-
-
-def notes_of(slides):
-    return {str(i): lint.note_text(s).rstrip("\n") for i, s in enumerate(slides, 1)}
 
 
 def read_json(path):
@@ -118,6 +114,8 @@ def check(script, lang="ja"):
         body = TAG.sub("", t)
         if not body.strip():  # 要確認にとどめる（前のノートの控えには、ノートのない表紙・扉がある。控えに戻す push を止めない）
             ask.append(f"p{k}: 空のシーン（扉でも話す）")
+        elif not t.rstrip().endswith("[short pause]"):
+            fix.append(f"p{k}: 最後に [short pause] がない（シーンの終わりに短い間を置く）")
         if len(t) > MAX:
             fix.append(f"p{k}: {len(t)} 字（Vids の 1 シーンの上限は {MAX} 字）")
         if bad := sorted({x for x in tags if x not in PAUSES | EMOTIONS}):
@@ -158,21 +156,6 @@ def cmd_pull(pid):
     print(json.dumps(s, ensure_ascii=False, indent=1))
 
 
-def note_reqs(slides, script, font):
-    """ノートを script に書き換える要求。変わらないページは書かない。"""
-    reqs, before = [], notes_of(slides)
-    for i, s in enumerate(slides, 1):
-        if (t := script[str(i)]) == before[str(i)]:
-            continue
-        nid = s["slideProperties"]["notesPage"]["notesProperties"]["speakerNotesObjectId"]  # 枠がまだなくても、insertText が作る
-        if before[str(i)]:
-            reqs.append({"deleteText": {"objectId": nid, "textRange": {"type": "ALL"}}})
-        if t:
-            reqs += [{"insertText": {"objectId": nid, "insertionIndex": 0, "text": t}},
-                     {"updateTextStyle": {"objectId": nid, "textRange": {"type": "ALL"}, "style": {"fontFamily": font}, "fields": "fontFamily"}}]
-    return reqs
-
-
 def cmd_push(pid, path):
     script = load(path)
     p = live(pid)
@@ -199,16 +182,17 @@ def cmd_push(pid, path):
         if f:
             set_note(f, script[str(i)])
     if miss := [i for i, f in enumerate(files, 1) if f is None]:
-        print(f"p{', p'.join(map(str, miss))}: ページのファイルが分からない。そのページの speakerNotes（pages.py なら d.note）は手で台本にする", file=sys.stderr)
+        print(f"p{', p'.join(map(str, miss))}: ページのファイルが分からない。そのページの speakerNotes（pages.py なら d.note）は手で台本にする（次の slides.py build が、ファイルのノートで書き戻す）", file=sys.stderr)
     print(json.dumps({"presentationId": pid, "slides": len(slides), "changed": [int(k) for k, t in before.items() if t != script[k]],
                       "screen_edits": screen}, ensure_ascii=False))
 
 
 def selftest():
     import tempfile, os
-    fix, ask = check({"1": "[short pause] はじめに。[enthusiasm] ようこそ。", "2": "", "3": "あ" * 2501,
-                      "4": "[sigh] 12 ページを見てください。[short pause][medium pause] /path", "5": "[curiosity] なぜ。[determination] だから。"})
-    assert fix == ["p3: 2501 字（Vids の 1 シーンの上限は 2500 字）"], fix
+    fix, ask = check({"1": "[short pause] はじめに。[enthusiasm] ようこそ。[short pause]\n", "2": "", "3": "あ" * 2501,
+                      "4": "[sigh] 12 ページを見てください。[short pause][medium pause] /path", "5": "[curiosity] なぜ。[determination] だから。 [short pause]"})
+    assert fix == ["p3: 最後に [short pause] がない（シーンの終わりに短い間を置く）", "p3: 2501 字（Vids の 1 シーンの上限は 2500 字）",
+                   "p4: 最後に [short pause] がない（シーンの終わりに短い間を置く）"], fix  # 空のシーンには求めない
     assert [a.split(":")[0] for a in ask] == ["p2"] + ["p4"] * 5 + ["p5"] and "空のシーン" in ask[0] and "[sigh]" in ask[1] and "続けて" in ask[2] and "「/」" in ask[3] and "12 ページ" in ask[4], ask
     assert ask[5] == "p4: カタカナにする英語 path（画面の表示を指すなら残す）", ask  # タグの英字は見ない
     assert check({"1": "Cafe\u0301 と ＧＣＰ と S3、deck-review と Wi-Fi、GPT-4o の v2.5 を Việt で。32 ドル、3.5 倍、２０２６ 年、2026-10-21、２０２６－１０、々、ㇰ〻、my_var、Ｗｉ－Ｆｉ、Wi‐Fi。"})[1] == [

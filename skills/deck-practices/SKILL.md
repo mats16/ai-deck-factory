@@ -101,7 +101,7 @@ After applying them, list all pages in `pages` of `deck.json` and build once to 
 
 - Look at each build warning (`slides.py` prints them to stderr: a last line of 2 characters or fewer, content that does not fit in `h`, etc.) one by one.
 - Bring the `要修正` of `gslides.py check <URL> --all` to 0 and look at each `要確認` one by one.
-- For decks written by split child agents, find and fix variation between child agents (size and position of same-type components, characters in cards, phrasing, tone of the notes) with the warnings, a search of `build/*.json`, and the contact sheet.
+- For decks written by split child agents, find and fix variation between child agents (size and position of same-type components, characters in cards, phrasing) with the warnings, a search of `build/*.json`, and the contact sheet.
 - In the contact sheet of all pages (`sheet.py`), check the size and position of same-type components, the density, and the color.
 - Do not open each page at full size. The full-size images are viewed by the review child agent in round 1 of 9. The parent opens at full size only the pages flagged above (the case in deck-build-005 for building the whole for the first time and going straight into `/deck-review`).
 
@@ -110,6 +110,11 @@ Evidence: in 21 logged materials, about 60% of the every-page defects found afte
 ### 9. Review the whole with `/deck-review` before delivering
 
 Run it by the steps in `../deck-review/SKILL.md`, and start pass 2 of the source check together with round 1 (deck-practices-019). Another subagent's eyes and the contact sheet of all pages also catch cross-page defects. Run up to the `[review] deck_review_max_rounds` rounds in `factory.toml` (3 rounds if unset); if fixing increases the defects, revert. After fixing, rebuild decks and documents to the same URL ("Deliverables" in `../deck-build/SKILL.md`). For decks that went through the three representative pages, write the every-page defects found in the review under 「あと」 in the same section of the three-representative-pages log (if something remained even though it was applied in 8, say so).
+
+[deck-practices-021] **Write the speaker-note script for the whole deck while round 1 runs (decks only).** The pages hold only draft notes (content.md §5). Right after asking for round 1 (and pass 2 of the source check), write the script for every page at once by steps 1–4 of `../slides-speaker-notes/SKILL.md`, reading the outline, `$D/deck.md`, and the contact sheet from the first page to the last, because the opening, the closing, and the bridges between scenes depend on the whole deck, and the wait for round 1 costs no extra time. Write it yourself and not by child agents, so that the whole video has one voice.
+
+- When putting in round 1's fixes, apply the body fixes to the same spot in the script too (deck-review-005), bring `lint` to zero `要修正`, and `push` the script before the round's build. `build` keeps pages whose only change is the notes, so the script rebuilds no page and adds no images to the next round.
+- Ask for the script's review (step 5 of slides-speaker-notes) in the same message as round 2, and put its findings in with round 2's fixes. If there is no round 2 (the round limit is 1, or round 1 had nothing to fix), ask right after the push and wait for it before delivering.
 
 ### 10. Deliver
 
@@ -123,6 +128,7 @@ Put the final report in one message. Include:
 - The key points of the three-representative-pages log (up to 3 lines; deck-practices-009)
 - Which correction was routed to which rule (「修正の指示」 in AGENTS.md)
 - What the source check changed, and the rows still 「照合中」 or `確かめられない` (deck-practices-019)
+- For decks, the speaker-note script: what step 7 of `../slides-speaker-notes/SKILL.md` lists (deck-practices-021)
 
 If `[feedback.google_comments] watch_hours` in `factory.toml` is greater than 0, start watching comments after delivery (deck-comments-004 in `../deck-comments/SKILL.md`). If it is 0 or unset, do not watch.
 
@@ -202,7 +208,7 @@ Do not wait for skills to be called automatically; open the following file when 
 | Building, checking, delivering | `deck-build/SKILL.md` (three layers of checks, reading `gslides.py check` and lint, deliverables, placing files on Drive); for documents, `doc-build/SKILL.md` |
 | Review before delivery | `deck-review/SKILL.md` |
 | Fixing from comments on a built material, watching comments | `deck-comments/SKILL.md` (fetching comments, treating them as corrections, replying and resolving) |
-| Writing the notes (every deck's notes are the Google Vids voiceover script; content.md §5), or rewriting the notes of a built deck | `slides-speaker-notes/SKILL.md` (story across scenes, writing for speech, audio tags, replacing only the notes) |
+| Writing the notes (every deck's notes are the Google Vids voiceover script, written for the whole deck while round 1 of `/deck-review` runs; content.md §5, deck-practices-021), or rewriting the notes of a built deck | `slides-speaker-notes/SKILL.md` (story across scenes, writing for speech, audio tags, replacing only the notes) |
 | Making a Google Vids video from a deck (only when the user explicitly asks, also when building or fixing a deck), or, after the notes of a deck change, updating the video made from it (without asking) | `vids-beta/SKILL.md` (beta; when to make or update, setup, `create`, `update`, voices) |
 | Creating or adjusting a template (from a company template) | `deck-template/SKILL.md` (the three cases, mapping colors to roles, fonts, fixing contrast) |
 | Received a correction, adding a rule | `deck-practices/rules.md` (rule layers, routing corrections, verifying rules) |

@@ -3046,9 +3046,10 @@ PAGE_HASH = re.compile(r"h([0-9a-f]{16})$")  # build がページの ID の末�
 
 
 def pages_of(deck, reqs):
-    """(要求ごとの持ち主のページ, ページごとの中身のハッシュ, ページごとのリンク先のページ)。build が、変わったページだけを作り直すのに使う。
+    """(要求ごとの持ち主のページ, ページごとの中身のハッシュ, ページごとのリンク先のページ, ノートも入れたハッシュ)。build が、変わったページだけを作り直すのに使う。
     ハッシュは、そのページの要求の ID を出てくる順の番号に、手元の画像を中身のハッシュに置き換えて取る（組むたびに変わる ID で変わらない）。
-    ページへのリンクは、リンクの場所にリンク先のハッシュを入れる。ノートも入れる。"""
+    ページへのリンクは、リンクの場所にリンク先のハッシュを入れる。ノートは入れない（ノートだけ変わったページは、build が残してノートを書き換える）。
+    ノートも入れたハッシュは、2026-10-23 より前の build が ID に付けたもの（そのページを残すため）と、lint の変わったページ。"""
     own, owner, per, links = {}, [], defaultdict(list), defaultdict(set)
     for r in reqs:
         (k, v), = r.items()
@@ -3074,16 +3075,42 @@ def pages_of(deck, reqs):
         return json.dumps(f"@IMG:{files[f]}")
 
     sha = lambda t: hashlib.sha256(t.encode()).hexdigest()
-    body, base = {}, {}
+    body = {}
     for s in deck.slides:
         ids = {}
         b = re.sub(r'"link": \{"pageObjectId": "([^"]+)"\}', r'"link": {"pageObjectId": "@LINK:\1"}', json.dumps(per[s], sort_keys=True))  # リンク先は下でハッシュにする
         b = re.sub(rf'"{deck.run}_\d+', lambda m: '"#' + str(ids.setdefault(m.group(), len(ids))), b)
-        body[s] = re.sub(r'"@IMG(\d+)"', img, b) + json.dumps(deck.notes.get(s))
-        base[s] = sha(re.sub(r'@LINK:[^"]+', "@LINK", body[s]))
-    # リンク先のページのハッシュを、リンクの出てくる場所に入れる（リンク先が変われば、リンク元も変わる。1 ページの中でリンク先を入れ替えても変わる）
-    digest = {s: sha(re.sub(r'@LINK:([^"]+)', lambda m: base[m.group(1)], body[s]))[:16] for s in deck.slides}
-    return owner, digest, links
+        body[s] = re.sub(r'"@IMG(\d+)"', img, b)
+
+    keys = {sid: page_key(n) for n, sid in deck.page_names.items()}
+
+    def digest(notes):  # リンク先のページのハッシュを、リンクの出てくる場所に入れる（リンク先が変われば、リンク元も変わる。1 ページの中でリンク先を入れ替えても変わる）
+        b = {s: body[s] + (json.dumps(deck.notes.get(s)) if notes else "") for s in deck.slides}
+        base = {s: sha(re.sub(r'@LINK:[^"]+', "@LINK", b[s])) for s in deck.slides}
+        # JSON のページへのリンクは、ファイル名の印も入れる（ノートだけ違う同じ見た目のページのどれへのリンクかを分ける。前の build のハッシュには入れない）
+        return {s: sha(re.sub(r'@LINK:([^"]+)', lambda m: base[m.group(1)] + ("" if notes else keys.get(m.group(1), "")), b[s]))[:16] for s in deck.slides}
+    return owner, digest(False), links, digest(True)
+
+
+def notes_of(slides):
+    """ページの番号（"1" から）→ スピーカーノートの文字（末尾の改行は落とす。Slides が読み返すときに付ける）。"""
+    import lint
+    return {str(i): lint.note_text(s).rstrip("\n") for i, s in enumerate(slides, 1)}
+
+
+def note_reqs(slides, script, font):
+    """ノートを script（ページの番号 → 文字。None のページは触らない）に書き換える要求。変わらないページは書かない。"""
+    reqs, before = [], notes_of(slides)
+    for i, s in enumerate(slides, 1):
+        if (t := script[str(i)]) is None or t == before[str(i)]:
+            continue
+        nid = s["slideProperties"]["notesPage"]["notesProperties"]["speakerNotesObjectId"]  # 枠がまだなくても、insertText が作る
+        if before[str(i)]:
+            reqs.append({"deleteText": {"objectId": nid, "textRange": {"type": "ALL"}}})
+        if t:
+            reqs += [{"insertText": {"objectId": nid, "insertionIndex": 0, "text": t}},
+                     {"updateTextStyle": {"objectId": nid, "textRange": {"type": "ALL"}, "style": {"fontFamily": font}, "fields": "fontFamily"}}]
+    return reqs
 
 
 PAGE_KEY = re.compile(r"k([0-9a-f]{8})h[0-9a-f]{16}$")  # JSON のページのファイル名の印（page_key）。中身のハッシュの前に入れる
@@ -3104,13 +3131,14 @@ def build_plan(pid, deck, force=False, theme=None, only=None):
     themed = theme_diff(*theme, p) if theme else []
     q = {**p, "masters": theme_pages(*theme)["masters"]} if themed else p  # マスターをテーマの値にしたあとの書体
     reqs = json.loads(resolved(deck, q))
-    owner, digest, links = pages_of(deck, reqs)
+    owner, digest, links, full = pages_of(deck, reqs)
     olds, have, keep = [s["objectId"] for s in p.get("slides", [])], defaultdict(list), {}
     for o in olds if not force else []:
         if m := PAGE_HASH.search(o):
             have[m.group(1)].append(o)
     new_n = Counter(digest.values())
     twins = {h for h in new_n if new_n[h] > 1 or len(have[h]) > 1}  # 中身の同じページ（今の pages.py か、前に組んだデッキに 2 枚以上）
+    twins |= {digest[s] for s in deck.slides if len(have[full[s]]) > 1}  # 前の build の ID（ノートも入れたハッシュ）で 2 枚以上
     names = {sid: n for n, sid in deck.page_names.items()}
     key = lambda o: m.group(1) if (m := PAGE_KEY.search(o)) else None
     by_key, claimed, frozen = {k: o for o in olds if (k := key(o))}, set(), set()
@@ -3119,14 +3147,20 @@ def build_plan(pid, deck, force=False, theme=None, only=None):
             if s in names and names[s] not in only and (o := by_key.get(page_key(names[s]))):
                 keep[s] = o
                 claimed.add(o)
-                if PAGE_HASH.search(o).group(1) != digest[s]:
+                if PAGE_HASH.search(o).group(1) not in (digest[s], full[s]):
                     frozen.add(s)
-    for s in deck.slides:  # 中身のハッシュが同じ前のページを残す。同じファイル名の印のものを先に選ぶ（同じ中身のページが 2 枚以上あっても、元のページに戻す）
-        if s not in keep and (cands := [o for o in have[digest[s]] if o not in claimed]):
-            keep[s] = next((o for o in cands if s in names and key(o) == page_key(names[s])), cands[0])
-            claimed.add(keep[s])
+    # 中身のハッシュが同じ前のページを残す。同じファイル名の印のものを、先に全ページで選ぶ（同じ中身のページが 2 枚以上あっても、どれも元のページに戻す）
+    for by_name in (True, False):
+        for s in deck.slides:
+            if s not in keep and (cands := [o for o in have[digest[s]] + have[full[s]] if o not in claimed]):
+                if o := next((o for o in cands if s in names and key(o) == page_key(names[s])), None if by_name else cands[0]):
+                    keep[s] = o
+                    claimed.add(o)
     chose = lambda s: only is None or names.get(s) in only
-    for s in [s for s in keep if chose(s) and any(digest[t] in twins for t in links[s])]:  # 中身の同じページのどれへのリンクかはハッシュで分からないので、リンク元を作り直す（選んでいないページは前のリンクのまま）
+    # 中身の同じページのどれへのリンクかはハッシュで分からないので、リンク元を作り直す。JSON のページは、印で元のページに戻り、リンクのハッシュにも印が入るので要らない
+    # （前の build の ID で残したリンク元は、ハッシュに印がないので作り直す。選んでいないページは前のリンクのまま）
+    told = lambda s, t: t in names and PAGE_HASH.search(keep[s]).group(1) == digest[s]
+    for s in [s for s in keep if chose(s) and any(digest[t] in twins and not told(s, t) for t in links[s])]:
         keep.pop(s)
     # 前のまま残すページは、前の中身のリンク（デッキから読む）で見る。今の中身のリンク（links）とは違うことがある
     old_links = {sl["objectId"]: set(re.findall(r'"pageObjectId": "([^"]+)"', json.dumps(sl)))
@@ -3180,15 +3214,16 @@ def build(pid, deck, force=False, theme=None, only=None):
     finally:
         if carrier:  # 貼った画像はデッキの中に写し取られているので、仮のファイルは消してよい
             delete(carrier)
-    nreqs = []  # ノートの枠はページを作ったあとでないと ID が分からないので、2 回目に書く
-    if todo := {ids[s]: t for s, t in deck.notes.items() if t and s not in keep}:
-        p = request("GET", f"{SLIDES}/{pid}?fields=slides(objectId,slideProperties(notesPage(notesProperties)))")
-        spk = {s["objectId"]: s["slideProperties"]["notesPage"]["notesProperties"]["speakerNotesObjectId"] for s in p["slides"]}
-        for sid, t in todo.items():
-            nreqs += [{"insertText": {"objectId": spk[sid], "insertionIndex": 0, "text": t}},
-                      {"updateTextStyle": {"objectId": spk[sid], "textRange": {"type": "ALL"}, "style": {"fontFamily": font}, "fields": "fontFamily"}}]
+    # ノートは 2 回目に書く（作ったページのノートの枠は、作ったあとでないと ID が分からない）。残したページも、ノートが変わっていれば書き換える（ノートはハッシュに入れない）
+    p = request("GET", f"{SLIDES}/{pid}?fields=slides(objectId,slideProperties(notesPage(notesProperties,pageElements(objectId,shape(text)))))")
+    names = {sid: n for n, sid in deck.page_names.items()}
+    skip = lambda s: s in keep and only is not None and names.get(s) not in only  # 選んでいないページは、ノートも前のまま
+    want = {str(i): None if skip(s) else (deck.notes.get(s) or "").rstrip("\n") for i, s in enumerate(deck.slides, 1)}
+    before = notes_of(p["slides"])
+    renoted = [i for i, s in enumerate(deck.slides, 1) if s in keep and want[str(i)] not in (None, before[str(i)])]  # 残したページで、ノートを書き換えたもの
+    if nreqs := note_reqs(p["slides"], want, font):
         batch(pid, nreqs)
-        gapi.CLOCK.lap("ノート（GET と batchUpdate）")
+    gapi.CLOCK.lap("ノート（GET と batchUpdate）")
     gapi.stamp(pid, revision(pid), STAMP)
     gapi.CLOCK.lap("版の記録")
     d = f"/tmp/slides_{pid[:8]}"  # gslides.py check と同じフォルダ。画像は check が取り、同じファイルに画像のパスと指摘を足して書き直す
@@ -3197,7 +3232,7 @@ def build(pid, deck, force=False, theme=None, only=None):
                "pages": [{"page": i, "objectId": ids[s]} for i, s in enumerate(deck.slides, 1) if s not in keep]}, open(f"{d}/changed.json", "w"), indent=1)
     print(json.dumps({"presentationId": pid, "url": f"https://docs.google.com/presentation/d/{pid}/edit",
                       "slides": len(deck.slides), "rebuilt": x.rebuilt, "frozen": [i for i, s in enumerate(deck.slides, 1) if s in x.frozen], "removed": len(old),
-                      "requests": len(send) + len(nreqs), "pages_without_notes": missing_notes(deck),
+                      "requests": len(send) + len(nreqs), "notes_rewritten": renoted, "pages_without_notes": missing_notes(deck),
                       "warnings": len(deck.warnings)}, ensure_ascii=False))
     gapi.CLOCK.show("build ")
 
@@ -3594,7 +3629,7 @@ def lint_local(path="pages.py", url=None, talk=False, pages=None):
             deck.links.clear()
         deck.finish()
     reqs = json.loads(resolved(deck, p))
-    _, digest, _ = pages_of(deck, reqs)
+    *_, digest = pages_of(deck, reqs)  # ノートだけ変えたページも見る
     ws = gapi.find_factory()
     rules = [Path(__file__).with_name("lint.py"), Path(__file__)] + ([ws.parent / "rules" / "deck-build" / "checks.py"] if ws else [])
     import lint
@@ -5005,7 +5040,7 @@ def selftest_diff():
     assert r.hits[lint.NO_COVER]  # 「1 枚目が表紙でない」（デッキ全体の規則）は絞らない
 
     # ページのハッシュ: 組むたびに変わる ID では変わらず、中身が変わったページと、そこへリンクするページだけが変わる
-    _, h1, links = pages_of(d, json.loads(resolved(d, p)))
+    _, h1, links, n1 = pages_of(d, json.loads(resolved(d, p)))
     e = make_deck(make("リード"), "t")
     assert e.run != d.run  # 続けて作っても、ID の頭は別
     for bad_arg in ([], ["3,x"], ["3,"]):
@@ -5017,11 +5052,15 @@ def selftest_diff():
     assert page_numbers(["lint", "--pages", "3,5", "--talk"]) == {3, 5}
     assert clean_after({"A", "B", "Z"}, ["A", "B", "A", "C"], {3, 4}, {3}) == {"B", "C"}  # 通っていた A も、今回要修正なら外す。消えたページ（Z）は落とす
     assert clean_after(set(), ["A", "A"], {1, 2}, {None, 2}) == set()  # 同じ中身の 2 枚のうち 1 枚が要修正（デッキ全体の要修正の None は数えない）
-    _, h2, _ = pages_of(e, json.loads(resolved(e, p)))
+    _, h2, _, _ = pages_of(e, json.loads(resolved(e, p)))
     f = make_deck(make("別のリード"), "t")
-    _, h3, _ = pages_of(f, json.loads(resolved(f, p)))
+    _, h3, _, _ = pages_of(f, json.loads(resolved(f, p)))
     assert list(h1.values()) == list(h2.values()) and links[d.slides[2]] == {d.slides[1]}
     assert [a == b for a, b in zip(h1.values(), h3.values())] == [True, False, False]
+    d.notes[d.slides[1]] = "別のノート。"
+    _, h4, _, n4 = pages_of(d, json.loads(resolved(d, p)))
+    assert h4 == h1 and [a == b for a, b in zip(n1.values(), n4.values())] == [True, False, False]  # ノートはハッシュに入れない（ノートも入れたほうは、リンク元まで変わる）
+    d.notes[d.slides[1]] = "ノート。"
 
     def swap(a, b):  # 1 枚目から 2 枚目・3 枚目へのリンク（a, b の順に置く）と、手元の画像
         def m(d):
@@ -5043,7 +5082,7 @@ def selftest_diff():
         assert pages_of(e, json.loads(resolved(e, p)))[1][e.slides[0]] != hs[0]
 
     # build: 前に組んだページと同じハッシュのページは残し、変わったページだけを作って、古いページを消し、順をそろえる
-    sent, live, real = [], [], {k: globals()[k] for k in ("request", "batch", "revision")}
+    sent, live, notes, real = [], [], {}, {k: globals()[k] for k in ("request", "batch", "revision")}
     old_g, old_s = gapi.guard, gapi.stamp
 
     def fake_batch(pid, reqs):  # デッキのページの並びだけを手元で動かす
@@ -5054,6 +5093,8 @@ def selftest_diff():
                 live.append(v["objectId"])
             elif k == "deleteObject" and v["objectId"] in live:
                 live.remove(v["objectId"])
+            elif k in ("insertText", "deleteText"):  # ノートの枠（<ページ>_sp）
+                notes[v["objectId"]] = v.get("text", "")
             elif k == "updateSlidesPosition":
                 live.remove(v["slideObjectIds"][0])
                 live.insert(v["insertionIndex"], v["slideObjectIds"][0])
@@ -5061,7 +5102,8 @@ def selftest_diff():
     revs = {"": {"revisions": [{"id": "1"}, {"id": "4"}], "nextPageToken": "t+1"}, "t%2B1": {"revisions": [{"id": "8"}], "nextPageToken": "t2"}, "t2": {}}
     globals()["request"] = lambda m, u, *a, **k: revs[u.partition("pageToken=")[2]]
     assert revision("x") == "8"  # 版の一覧は古い順。最後のページの最後の ID（空のページが続いても前の ID）
-    globals().update(request=lambda m, u, *a, **k: {**p, "slides": [{"objectId": o, "slideProperties": {"notesPage": {"notesProperties": {"speakerNotesObjectId": o + "_sp"}}}} for o in live]},
+    globals().update(request=lambda m, u, *a, **k: {**p, "slides": [{"objectId": o, "slideProperties": {"notesPage": {"notesProperties": {"speakerNotesObjectId": o + "_sp"}, "pageElements": [
+        {"objectId": o + "_sp", "shape": {"text": {"textElements": [{"paragraphMarker": {}}, {"textRun": {"content": notes.get(o + "_sp", "") + "\n"}}]}}}]}}} for o in live]},
                      batch=fake_batch, revision=lambda pid: "rev")
     gapi.guard = gapi.stamp = lambda *a: None
     try:
@@ -5078,10 +5120,27 @@ def selftest_diff():
             assert json.load(open(f"/tmp/slides_{('x' * 10)[:8]}/changed.json"))["pages"] == [{"page": 2, "objectId": new[0]}, {"page": 3, "objectId": new[1]}]
             sent.clear()
             build("x" * 10, make_deck(make("別のリード"), "t"))  # 変えていない
-            assert not any("createSlide" in r for rs in sent for r in rs) and len(live) == 3
+            assert not any(sent) and len(live) == 3, sent  # ノートも書かない
+            nd = make_deck(make("別のリード"), "t")
+            nd.notes[nd.slides[1]] = "台本。[short pause]"
+            with contextlib.redirect_stdout(o := io.StringIO()):
+                build("x" * 10, nd)  # ノートだけ変えた
+            assert json.loads(o.getvalue().splitlines()[-1])["notes_rewritten"] == [2], o.getvalue()  # 残したページのノートを書き換えたら出す（pages.py の d.note で、push した台本を書き戻したときに気づく）
+            assert [list(r) for r in sent[-1]] == [["deleteText"], ["insertText"], ["updateTextStyle"]] and notes[live[1] + "_sp"] == "台本。[short pause]"
+            assert not any("createSlide" in r for rs in sent for r in rs) and len(live) == 3  # ページは作り直さない
+            sent.clear()
+
+            def to_legacy(dk):  # live を、2026-10-23 より前の build の ID（ノートも入れたハッシュ）にする
+                *_, legacy = pages_of(dk, json.loads(resolved(dk, p)))
+                for i, sd in enumerate(dk.slides):
+                    notes[PAGE_HASH.sub("h" + legacy[sd], live[i]) + "_sp"] = notes.get(live[i] + "_sp", "")
+                    live[i] = PAGE_HASH.sub("h" + legacy[sd], live[i])
+            to_legacy(nd)
+            build("x" * 10, nd)
+            assert not any(sent), sent  # 前の ID のページも残す
             g = make_deck(lambda d: [make("別のリード")(d), d.slides.insert(0, d.slides.pop(1))], "t")  # 2 枚目を先頭に（1 枚目の扱いとリンク先が変わる）
             build("x" * 10, g)
-            _, hg, _ = pages_of(g, json.loads(resolved(g, p)))
+            _, hg, _, _ = pages_of(g, json.loads(resolved(g, p)))
             assert [PAGE_HASH.search(o).group(1) for o in live] == [hg[s] for s in g.slides]  # デッキの順が pages.py の順
             sent.clear()
             build("x" * 10, f, force=True)
@@ -5099,6 +5158,11 @@ def selftest_diff():
             build("x" * 10, make_deck(twin(1, 2), "t"))  # 3 枚目を消し、2 枚目へリンクし直す（S のハッシュは変わらない）
             link = next(r["updateTextStyle"]["style"]["link"] for rs in sent for r in rs if "link" in r.get("updateTextStyle", {}).get("style", {}))
             assert live[0] != first and link == {"pageObjectId": live[1]} and len(live) == 2, (first, live, link)  # S を作り直し、残ったページを指す
+            build("x" * 10, td := make_deck(twin(2, 3), "t"), force=True)
+            to_legacy(td)
+            first = live[0]
+            build("x" * 10, make_deck(twin(1, 2), "t"))  # 前の build の ID の、中身の同じ 2 枚でも
+            assert live[0] != first and len(live) == 2, (first, live)
             # ファイルを選んで組む: 選んだページだけを作り直し、選んでいないページは中身が変わっていても前のスライドを残す（ID のファイル名の印で探す）
             with tempfile.TemporaryDirectory() as t:
                 page = lambda n, title: Path(t, f"{n}.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "page", "title": title, "speakerNotes": "ノート。"}))
@@ -5121,8 +5185,12 @@ def selftest_diff():
                         gapi.guard = lambda *a, **k: None
                     got = json.loads(out.getvalue())
                     assert got["rebuild"] == [2] and got["frozen"] == [3] and got["kept"] == 1 and got["screen"] == ["前に組んだあとに画面で直されている"], got
+                    Path(t, "p1.json").write_text(json.dumps({**json.loads(Path(t, "p1.json").read_text()), "speakerNotes": "選んでいない。"}))
+                    dk = spec()
                     build("x" * 10, dk, only=chosen(["p2.json"], dk, None))
                     assert live[0] == before[0] and live[2] == before[2] and live[1] != before[1] and PAGE_KEY.search(live[1]).group(1) == page_key("p2")
+                    assert notes[live[0] + "_sp"] == "ノート。"  # 選んでいないページは、ノートも前のまま
+                    page("p1", "p1 の前")
                     for bad, want in ((["nope.json"], "読めない"), ([str(Path(t, "deck.json"))], None)):
                         try:
                             assert chosen(bad, dk, None) == {"p1", "p2", "p3"} and want is None  # デッキのファイルは、その全ページ
@@ -5170,6 +5238,28 @@ def selftest_diff():
                     assert json.loads(out.getvalue())["frozen"] == [2], out.getvalue()
                     build("x" * 10, dk, only=chosen(["p1.json"], dk, None))
                     assert live == before, (live, before)
+                    # ノートだけ違う同じ見た目のページへのリンク: 組み直すたびにリンク元を作り直さない。リンク先を替えたら作り直す
+                    linker = lambda to: Path(t, "p1.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "page", "title": "p1", "speakerNotes": "ノート。",
+                                                                                   "body": [{"type": "text", "text": f"[先へ](#{to})"}]}))
+                    linker("p2")
+                    for n, note in (("p2", "2 枚目のノート。"), ("p3", "3 枚目のノート。")):
+                        Path(t, f"{n}.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "page", "title": "同じ", "speakerNotes": note}))
+                    build("x" * 10, spec(), force=True)
+                    before = list(live)
+                    sent.clear()
+                    build("x" * 10, spec())
+                    assert live == before and not any("createSlide" in r for rs in sent for r in rs), (live, before)
+                    linker("p3")
+                    build("x" * 10, spec())
+                    assert live[0] != before[0] and live[1:] == before[1:], (live, before)
+                    for n in ("p2", "p3"):  # 前の build の ID では、リンクのハッシュに印がない: 同じ中身の 2 枚のあいだでリンク先を替えたら作り直す
+                        Path(t, f"{n}.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "page", "title": "同じ", "speakerNotes": "同じノート。"}))
+                    build("x" * 10, spec(), force=True)
+                    to_legacy(spec())
+                    before = list(live)
+                    linker("p2")
+                    build("x" * 10, spec())
+                    assert live[0] != before[0] and live[1:] == before[1:], (live, before)
                     # deck.json の theme のファイルがあれば、URL を渡しても Google を読まない
                     Path(t, "d2.json").write_text(json.dumps({"apiVersion": API_VERSION, "kind": "deck", "name": "d", "theme": "visual", "pages": ["p1.json"]}))
                     req0, c0 = globals()["request"], COPYRIGHT

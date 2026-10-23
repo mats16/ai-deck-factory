@@ -7,7 +7,7 @@ You are the reviewer of a voiceover script for a video that Google Vids makes fr
 
 ## What to read
 - The outline: <path to 構成案*.md>
-- The text and the original notes of each page: <$D/deck.md>
+- The text and the original notes of each page: <$D/deck.md>. If deck.md already holds the new script, the original notes are in <build/notes_before_<date>.json> (the notes before the first push, by page number)
 - The new script: <build/notes_vids.json>
 - The rules for the script: "How to write" and "Audio tags" in <path to slides-speaker-notes/SKILL.md>, and <path to slides-speaker-notes/ja.md or en.md, the deck's language>
 
