@@ -1,4 +1,5 @@
 {"apiVersion": "slides/v1", "kind": "deck",
  "name": "JSON のページの見本｜Internal Only",
  "theme": "visual",
+ "authorNotes": ["デッキ全体の注記（どこにも組まない）。見本は slides.py の selftest が全部組む"],
  "pages": ["cover.json", "divider.json", "text.json", "cards.json", "list.json", "stat.json", "table.json", "table_merge.json", "diagram.json", "arrows.json", "gantt.json", "bars.json", "charts.json", "combo.json", "slide.json", "dark.json"]}

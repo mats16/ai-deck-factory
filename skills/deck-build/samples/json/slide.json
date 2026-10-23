@@ -4,4 +4,5 @@
     {"type": "text", "text": "{28:**型のないページ**}"},
     {"type": "text", "text": "見出しもリードもない、自由に置くページ。本文の左端と、リードのないページの上端から並べる", "w": 8}]}],
  "source": "[AI Deck Factory](https://github.com/mats16/ai-deck-factory)",
- "speakerNotes": "型のないページ。全面に画像を置く流用のページは pages.py で組む。"}
+ "speakerNotes": "型のないページ。全面に画像を置く流用のページは pages.py で組む。",
+ "authorNotes": ["型のないページにも書ける"]}

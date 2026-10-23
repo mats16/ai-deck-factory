@@ -18,4 +18,5 @@
     {"type": "text", "text": "**準備**", "shape": "home_plate", "fill": "PANEL", "align": "center"},
     {"type": "text", "text": "**試し**", "shape": "chevron", "fill": "PANEL", "align": "center"},
     {"type": "text", "text": "**定着**", "shape": "chevron", "fill": "NAVY", "align": "center"}]}],
- "speakerNotes": "記法は太字、赤の太字、一部の大きさ、リンク、段落の中の改行。箇条書きは別の text に分ける。"}
+ "speakerNotes": "記法は太字、赤の太字、一部の大きさ、リンク、段落の中の改行。箇条書きは別の text に分ける。",
+ "authorNotes": ["リンクの先は 2026-10 に確かめた（スライドにもノートにも出ない）"]}

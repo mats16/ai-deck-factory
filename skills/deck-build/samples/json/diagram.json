@@ -22,4 +22,4 @@
     {"type": "text", "text": "**取り込み**<br>1 日 1 回", "fill": "PANEL"},
     {"type": "text", "text": "**変換**<br>段ごとに", "fill": "PANEL"},
     {"type": "text", "text": "**配る**<br>画面と API", "fill": "PANEL"}]}],
- "speakerNotes": "囲みの中に見出しと箱を置き、矢印は id でつなぐ。横 1 列の流れなら row の arrows で書く。"}
+ "authorNotes": ["囲みの中に見出しと箱を置き、矢印は id でつなぐ。横 1 列の流れなら row の arrows で書く。"]}
