@@ -103,6 +103,9 @@
     }
   }
 
+  const SAVE_EVERY = 8; // 新しい音声を何シーンずつ保存するか（updateScenes）
+  const MUSIC_MS = 30000; // BGM は鳴り始めから 30 秒で終える（曲のままだと動画の最後まで鳴る）。画面で帯の終わりを引いたときと同じ 122・123
+
   const placeholder = (doc) => `PLACEHOLDER_${doc.sid}_${doc.ph++}`;
 
   async function insertMedia(doc, type, items) { // items: {key: si}。戻り値 {key: {ni: Drive の media ID, sb: バイト数}}
@@ -169,10 +172,10 @@
   const props = (p) => { const o = new Map(); for (let i = 0; i + 1 < p.length; i += 2) o.set(p[i], p[i + 1]); return o; };
   const flat = (m) => [...m].flat();
 
-  // Slides のページをすべて Vids のシーンにし、ページごとの台本を Conversational voice で読ませる。
-  // scenes: [{pageId, script, place}]（Slides のページの objectId と、そのページのノートと、avatar を置く変換 [倍率, 0, 0, 倍率, x, y]）。
-  // voice: genai の声の名前（Elio は Achird）。avatar: {id, voice} を渡すと、place のあるシーンは音声の代わりに AI avatar が読む（place が null のシーンは音声だけ）
-  async function createFromSlides({ vidsId, slidesId, scenes, voice = "Achird", label = "Elio", preset, music = true, avatar = null }) {
+  // Slides のページをすべて Vids のシーンにし、ページごとの台本を入れて保存する（音声と avatar は、このあと updateScenes が入れる）。
+  // 声を作るのが時間の大半（38 ページで 10 分ほど）なので、それより前にシーンを保存しておく。タブが落ちても、続きは updateScenes を回し直せば作れる。
+  // scenes: [{pageId, script}]（Slides のページの objectId と、そのページのノート）。preset: 下書きの声のプリセット（動画の声は決めない。updateScenes が全シーンの声を作る）
+  async function createFromSlides({ vidsId, slidesId, scenes, preset, music = true }) {
     const doc = await openDoc(vidsId);
     const draft = await genai(doc, "streamGenerate", draftBody(vidsId, slidesId, scenes, preset || "docs-preset-voice-achird"));
     const modelStr = findString(draft, (s) => s.startsWith('[["[[4,'));
@@ -201,52 +204,29 @@
       c[4] = flat(p);
     }
 
-    // 音声: avatar のないシーンを Conversational voice で読ませ、取り込んで置く。avatar のシーンは、シーンを保存したあとで作る（下）
-    const audio = [], durations = scenes.map(() => null);
-    const isAvatar = (i) => !!(avatar && scenes[i].place);
-    const jobs = scenes.map((s, i) => i).filter((i) => scenes[i].script);
-    for (const i of jobs.filter((i) => !isAvatar(i))) {
-      const v = await voiceover(doc, blobIdMap, sceneIds[i], scenes[i].script, voice, label, `${sceneIds[i]}_vo`);
-      audio.push(...v.commands); durations[i] = v.ms;
-    }
-
-    // BGM: 下書きが選んだ曲（Shutterstock）
-    const bgm = assets.find((a) => a[0] === "background-audio");
+    // BGM: 下書きが選んだ曲（Shutterstock）。176 は曲の長さのまま、終わり（123）を MUSIC_MS にする
+    const audio = [], bgm = assets.find((a) => a[0] === "background-audio");
+    let musicMs = 0;
     if (music && bgm) {
       const [src, , [sec, nanos], , title] = bgm[3];
       const got = (await insertMedia(doc, "LMS_AUDIO", { [src]: { si: src, ki: 1 } }))[src];
-      const p = placeholder(doc); blobIdMap[p] = got.ni;
-      audio.push([58, `${sceneIds[0]}_bgm`, [118, 20, 158, 2, 173, 0, 175, 1800, 176, sec * 1000 + Math.round((nanos ?? 0) / 1e6), 177, 2,
+      const p = placeholder(doc), ms = sec * 1000 + Math.round((nanos ?? 0) / 1e6); blobIdMap[p] = got.ni;
+      musicMs = Math.min(ms, MUSIC_MS);
+      audio.push([58, `${sceneIds[0]}_bgm`, [118, 20, 158, 2, 173, 0, 175, 1800, 176, ms, 177, 2, 122, 1, 123, musicMs,
         181, `${title} (Provided by Shutterstock)`, 184, sceneIds[0], 190, 2, 200, 1, 204, -6, 58, p]]);
     }
 
     // 元からあるシーン（空の Vids の 5 秒の空シーン "p"）を消す。[13, 今の並びの位置, 0, null, id] は画面の Delete と同じ
     // 同じ保存に入れると 550 になるので、組んだあとの保存で消す。音声の付いたシーンは消せない（550）ので、先に音声を [59] で消す（avatar も先に消す）
     const st = state(doc.model), old = st.scenes;
-    await save(doc, [[20], [4, groups.flat()], [4, audio]], blobIdMap); // [20] は画面の最初の保存にあった。文字のコマンドと一緒に送ると 550
+    await save(doc, [[20], [4, groups.flat()], ...(audio.length ? [[4, audio]] : [])], blobIdMap); // [20] は画面の最初の保存にあった。文字のコマンドと一緒に送ると 550
     const oldMedia = Object.keys(st.media).filter((m) => old.includes(st.media[m]));
     const drop = [...oldMedia.map((m) => [59, m]), ...old.flatMap((id) => unplace(st, id))];
     if (drop.length) await save(doc, [[4, drop]]);
     const now = state((await editPage(doc.id)).chunks.flatMap((c) => c.chunk)).scenes; // 新しいシーンの入った並び
     for (const id of old.filter((x) => now.includes(x)).sort((a, b) => now.indexOf(b) - now.indexOf(a))) // 後ろから消すと、前の位置は変わらない
       await save(doc, [[13, now.indexOf(id), 0, null, id]]);
-
-    // avatar: シーンを保存できてから作る（保存が断られても avatar の回数を使わない）。1 つ 1 分ほどかかるので 3 つずつ並べ、
-    // 最初の 1 つの応答で、残りの回数が足りるかを見る。置くのはシーンごとに 1 回ずつ保存する
-    const quota = {}, avJobs = jobs.filter(isAvatar);
-    const made = await pool(avJobs, 3, async (i) => {
-      const map = {};
-      return { map, ...(await makeAvatar(doc, map, sceneIds[i], scenes[i].script, avatar, scenes[i].place)) };
-    }, (r) => checkQuota(r, avJobs.length - 1, quota));
-    for (const [k, i] of avJobs.entries()) {
-      if (!made[k]) continue;
-      lowest(quota, made[k].quota);
-      await save(doc, [[4, made[k].commands]], made[k].map);
-      durations[i] = made[k].ms;
-    }
-    if (made.stopped) throw made.stopped;
-    return { vidsId, scenes: sceneIds.length, voiced: durations.filter((d) => d).length, avatars: avJobs.length, durationsMs: durations,
-      music: !!(music && bgm), quota, revision: doc.rev, waited: doc.waited };
+    return { vidsId, scenes: sceneIds.length, musicMs, revision: doc.rev, waited: doc.waited };
   }
 
   // 文書のモデル（コマンドの並び）から: シーンの ID（並びの順）、シーンの台本の文字、シーンの音声の要素、シーンの avatar の要素、シーンの時間の並び
@@ -258,7 +238,7 @@
       else if (c[0] === 13 && scenes.includes(c[4])) scenes.splice(scenes.indexOf(c[4]), 1); // シーンを消す [13, 位置, 0, null, ID]
       else if (c[0] === 15) { const t = text[c[1]] ?? ""; text[c[1]] = t.slice(0, c[3]) + c[4] + t.slice(c[3]); } // 文字を入れる [15, 枠, null, 位置, 文字]
       else if (c[0] === 16) { const t = text[c[1]] ?? ""; text[c[1]] = t.slice(0, c[3]) + t.slice(c[4]); }        // 消す [16, 枠, null, 始め, 終わり]
-      else if (c[0] === 58) { const p = props(c[2]); media[c[1]] = p.get(184); if (p.get(177) === 3) voice[p.get(184)] = { id: c[1], md5: p.get(194), label: p.get(181) }; }
+      else if (c[0] === 58) { const p = props(c[2]); media[c[1]] = p.get(184); if (p.get(177) === 3) voice[p.get(184)] = { id: c[1], md5: p.get(194), label: p.get(181), ms: p.get(176) }; }
       else if (c[0] === 59) { delete media[c[1]]; for (const k of Object.keys(voice)) if (voice[k].id === c[1]) delete voice[k]; }
       else if (c[0] === 3 && Array.isArray(c[4]) && props(c[4]).get(202) === 2) // [3, ID, 種類, 変換, 属性, シーン]
         avatar[c[5]] = { id: c[1], md5: props(c[4]).get(194), actor: avatarOf(c[1]), tf: c[3], type: c[2], props: c[4] };
@@ -376,26 +356,32 @@
       if (cur !== s) await save(doc, [...(cur ? [[16, `${id}:notes_text`, null, 0, cur.length]] : []), ...(s ? [[15, `${id}:notes_text`, null, 0, s]] : [])]);
       jobs.push({ i, id, s, want, tf, look: a && { type: a.type, props: a.props }, drop: [...(v ? [[59, v.id]] : []), ...unplace(st, id)] });
     }
-    // 作るのは並べて（avatar は 3 つずつ）、保存は 1 つずつ。avatar の作業を先に回す（最初の 1 つの応答で、残りの回数が足りるかを見る）
+    // 作るのは並べて（avatar は 3 つずつ）、できたものから保存する（タブが落ちても、保存したシーンは残る。回し直すと残りだけ作る）。
+    // 新しい音声は SAVE_EVERY シーンずつ 1 回の保存にまとめる（短い間に保存を重ねると 550 が続く。create は前から全シーンの音声を 1 回で保存していた）。
+    // avatar と、古い音声を外すシーンは 1 つずつすぐ保存する（使った avatar の回数を捨てない。外すのと置くのを何シーンも 1 回にまとめたことはない）。
+    // avatar の作業を先に回す（最初の 1 つの応答で、残りの回数が足りるかを見る）
     jobs.sort((x, y) => y.want - x.want);
-    const quota = {};
+    const quota = {}, ready = [];
+    let saving = Promise.resolve();
+    const flush = () => (saving = saving.then(async () => { // 保存は 1 つずつ順に（版を順に進める）
+      const batch = ready.splice(0), cmds = batch.flatMap((b) => b.cmds);
+      if (cmds.length) await save(doc, [[4, cmds]], Object.assign({}, ...batch.map((b) => b.blobIdMap)));
+    }));
     const made = await pool(jobs, avatar ? 3 : 1, async (j) => {
       const blobIdMap = {};
       const r = !j.s ? null : j.want ? await makeAvatar(doc, blobIdMap, j.id, j.s, avatar, j.tf, j.look) : await voiceover(doc, blobIdMap, j.id, j.s, voice, label, `${j.id}_vo_${doc.sid}`);
-      return { blobIdMap, ...r };
+      lowest(quota, r?.quota);
+      ready.push({ blobIdMap, cmds: [...j.drop, ...(r?.commands ?? (j.drop.length ? [[18, [j.id], [], [16, 5000]]] : []))] }); // 音声を外したシーンは、空の Vids の空シーンと同じ 5 秒にする（古い音声の長さのまま無音にしない）
+      if (j.want || j.drop.length || ready.length >= SAVE_EVERY) await flush();
+      return r ?? {};
     }, (r) => checkQuota(r, jobs.slice(1).filter((j) => j.want).length, quota));
-    for (const [k, j] of jobs.entries()) {
-      if (!made[k]) continue;
-      lowest(quota, made[k].quota);
-      const cmds = [...j.drop, ...(made[k].commands ?? (j.drop.length ? [[18, [j.id], [], [16, 5000]]] : []))]; // 音声を外したシーンは、空の Vids の空シーンと同じ 5 秒にする（古い音声の長さのまま無音にしない）
-      if (cmds.length) await save(doc, [[4, cmds]], made[k].blobIdMap);
-    }
+    await flush(); // 残り。止まったときも、できたものは置いてから投げる
     if (made.stopped) throw made.stopped;
     return { sceneCount: scenes.length, updated: jobs.map((j) => j.i + 1).sort((x, y) => x - y), moved, quota, revision: doc.rev, waited: doc.waited };
   }
 
   // 読み直して確かめる: シーンの数、シーンごとに台本の文字が scripts と合うか、読む要素（avatar か音声）の台本の MD5（194）が合うか（どちらもなければ null）、
-  // 読むのが誰か（avatar の ID か、音声の名札の声。どちらもなければ null）、avatar と音声の両方があるシーン
+  // 読むのが誰か（avatar の ID か、音声の名札の声。どちらもなければ null）、avatar と音声の両方があるシーン、読む要素の長さ（ミリ秒）
   async function inspect({ vidsId, scripts }) {
     const doc = await openDoc(vidsId);
     const { scenes, script, voice, avatar } = state(doc.model);
@@ -403,9 +389,10 @@
     return { scenes: scenes.length, revision: doc.rev, textMatch: scenes.map((id, i) => script(id) === (scripts[i] ?? "")),
       voiceMatch: scenes.map((id, i) => (reader(id) ? reader(id).md5 === md5b64(scripts[i] ?? "") : null)),
       who: scenes.map((id) => avatar[id]?.actor ?? voice[id]?.label?.split(" - ").at(-1) ?? null),
-      both: scenes.flatMap((id, i) => (avatar[id] && voice[id] ? [i + 1] : [])) };
+      both: scenes.flatMap((id, i) => (avatar[id] && voice[id] ? [i + 1] : [])),
+      ms: scenes.map((id) => (avatar[id] ? props(avatar[id].props).get(176) : voice[id]?.ms) ?? null) };
   }
 
-  window.VidsClient = { createFromSlides, updateScenes, inspect, _test: { md5b64, draftBody, ttsBody, avatarBody, avatarElement, state, unplace, pool } };
+  window.VidsClient = { createFromSlides, updateScenes, inspect, _test: { SAVE_EVERY, md5b64, draftBody, ttsBody, avatarBody, avatarElement, state, unplace, pool } };
   return "VidsClient loaded";
 })();

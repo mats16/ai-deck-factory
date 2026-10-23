@@ -9,7 +9,9 @@ Slides のページをすべてシーンにし、ページごとのスピーカ�
 
 usage（ワークスペースの下で）:
   uv run vids.py create <Slides の URL か ID> [--name 名前] [--voice Elio | --avatar Oliver --layout <avatar_layout.json>] [--no-music]
-      Slides と同じフォルダに Vids を作る。作ったあと読み直して、全シーンの音声（avatar）が台本と合っているかを確かめる。
+      Slides と同じフォルダに Vids を作る。先にシーン・台本・画像・BGM を保存し、そのあと音声（avatar）を作ったシーンから保存していく。
+      途中でタブがなくなったら、新しいタブで続きから回し直す。音声の途中で止まったら Vids は残し、続きを作る update のコマンドを出す。
+      作ったあと読み直して、全シーンの音声（avatar）が台本と合っているかを確かめる。
       元の Slides の ID と声と avatar は、Vids の appProperties に残す（update が読む）。同じ Slides から前に作った Vids は、元の Slides の控えを外す
       （ページを足した・消した・並べ替えた・見た目を直したあとは、組み直さずに create で作り直す。前の Vids は消さずに残る）
   uv run vids.py layout <Slides の URL か ID> --pages 1,5|all [--out build/vids_avatar] [--reset]
@@ -271,7 +273,7 @@ def props_of(vid):
 def made_from(slides_id):
     """その Slides から create した Vids（appProperties の vidsSlides）。"""
     q = urllib.parse.quote(f"appProperties has {{ key='{SLIDES_KEY}' and value='{slides_id}' }} and trashed = false")
-    return request("GET", f"{DRIVE}/files?q={q}&corpora=allDrives&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name)")["files"]
+    return request("GET", f"{DRIVE}/files?q={q}&corpora=allDrives&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name,createdTime)")["files"]
 
 
 def vids_of(fid):
@@ -285,6 +287,18 @@ def vids_of(fid):
         sys.exit(f"この Slides から作った Vids が {len(found)} 個ある（{'、'.join(f['name'] + ' ' + f['id'] for f in found)}）。Vids の URL を渡す")
     print(f"Vids: {found[0]['name']}", flush=True)
     return found[0]["id"]
+
+
+class TabLost(Exception):
+    """vids.py の開いたタブが、途中でほかの URL に移ったか閉じられた（ログインの入れ替え、人の操作、Chrome の整理など）。タブの中の作業は消える。"""
+
+
+LOST = ("navigated or closed", "Execution context was destroyed", "Cannot find context", "No target with given id", "Session with given id not found", "Target closed")
+
+
+def lost(error):
+    """CDP のエラーが、タブがなくなったことによるものか。"""
+    return any(w in str(error) for w in LOST)
 
 
 class Tab:
@@ -320,23 +334,57 @@ class Tab:
     async def __aexit__(self, *a):
         try:
             await self.send("Target.closeTarget", {"targetId": self.target}, session=False)
-        except SystemExit:  # タブを閉じられなくても、元のエラーを隠さない
+        except (SystemExit, TabLost):  # タブを閉じられなくても、元のエラーを隠さない
             pass
         finally:
             await self.ws.close()
 
     async def send(self, method, params=None, session=True):
+        import websockets
         self.n += 1
         msg = {"id": self.n, "method": method, "params": params or {}}
-        if session and getattr(self, "sid", None):
+        mine = session and getattr(self, "sid", None)  # タブにつないだあとの呼び出し（タブを見張る）
+        if mine:
             msg["sessionId"] = self.sid
-        await self.ws.send(json.dumps(msg))
-        while True:
-            m = json.loads(await self.ws.recv())
-            if m.get("id") == self.n:
-                if "error" in m:
-                    sys.exit(f"CDP {method}: {m['error']}")
-                return m["result"]
+        try:
+            await self.ws.send(json.dumps(msg))
+            while True:
+                try:
+                    m = json.loads(await asyncio.wait_for(self.ws.recv(), 30))
+                except TimeoutError:  # タブが消えても、待っている応答が来ないことがある（2026-10-23、40 分止まった）。30 秒ごとにタブがあるかを見る
+                    if mine and not self.alive():
+                        raise TabLost(self.where())
+                    continue
+                if m.get("id") == self.n:
+                    break
+                ev = m.get("method")
+                if mine and (ev == "Target.detachedFromTarget" and m.get("params", {}).get("sessionId") == self.sid or ev == "Inspector.detached" and m.get("sessionId") == self.sid):
+                    raise TabLost(self.where())
+        except websockets.ConnectionClosed as e:
+            raise TabLost(f"Chrome との接続が切れた（{e}）")
+        if "error" in m:
+            if lost(m["error"]):
+                raise TabLost(self.where())
+            sys.exit(f"CDP {method}: {m['error']}")
+        return m["result"]
+
+    def now(self):
+        """開いたタブの、Chrome の一覧の行（閉じられていれば {}、一覧を読めなければ None）。"""
+        try:
+            tabs = json.load(urllib.request.urlopen(f"{self.base}/json/list", timeout=5))
+        except OSError:
+            return None
+        return next((t for t in tabs if t.get("id") == self.target), {})
+
+    def alive(self):
+        """開いたタブが、まだ Vids の画面にあるか（一覧を読めなければ、あるとみなす）。"""
+        t = self.now()
+        return t is None or "docs.google.com/videos" in t.get("url", "")
+
+    def where(self):
+        """タブがどうなったか（落ちた理由を出す。次から原因が分かるように）。"""
+        t = self.now()
+        return "タブがなくなった（Chrome の一覧を読めない）" if t is None else f"タブが {t['url'][:120]} に移った" if t else "タブが閉じられた"
 
     async def eval(self, expr):
         r = await self.send("Runtime.evaluate", {"expression": expr, "awaitPromise": True, "returnByValue": True})
@@ -354,13 +402,16 @@ def open_in(tabs, vid):
     return any("/videos/" in t.get("url", "") and f"/d/{vid}" in t["url"] for t in tabs)
 
 
+def tabs_of(browser):
+    try:
+        return json.load(urllib.request.urlopen(f"{browser_url(browser)}/json/list", timeout=5))
+    except OSError:
+        return []  # つながらないときは Tab が理由を出す
+
+
 def not_open(browser, vid):
     """同じ Vids を開いているタブがあれば止める（保存が 550 になる。2026-10-21）。"""
-    try:
-        tabs = json.load(urllib.request.urlopen(f"{browser_url(browser)}/json/list", timeout=5))
-    except OSError:
-        tabs = []  # つながらないときは Tab が理由を出す
-    if open_in(tabs, vid):
+    if open_in(tabs_of(browser), vid):
         sys.exit("この Vids をブラウザーのタブで開いている。閉じてから回す（開いたままだと保存が 550 で失敗する）")
 
 
@@ -374,12 +425,35 @@ def in_tab(browser, *calls):
     return asyncio.run(go())
 
 
-def build_call(vid, slides_id, scenes, label, music, avatar=None, places=None):
-    """createFromSlides の呼び出し。前からあるシーン（空の Vids の空シーン）は、組んだあとに消える。
-    avatar（表示名）があれば、places（シーンごとの変換、None はそのシーンだけ音声）のシーンを AI avatar が読む。"""
-    return "createFromSlides", {"vidsId": vid, "slidesId": slides_id, "voice": VOICES[label][0], "label": label, "music": music,
-                                "scenes": [s | {"place": places[i] if places else None} for i, s in enumerate(scenes)],
-                                "avatar": avatar_arg(avatar) if avatar else None}
+def again(browser, *calls, tries=3, wait=600):
+    """in_tab を、タブが落ちたら新しいタブで回し直す（tries 回まで）。calls は何度回しても同じ結果になるもの（updateScenes・inspect は、
+    Vids の文書を読み直して、まだのシーンだけ作る）。同じ Vids を開いたタブがあれば、閉じられるまで wait 秒待つ（開いたままだと保存が 550 になる）。"""
+    vid = calls[0][1]["vidsId"]
+    for n in range(1, tries + 1):
+        try:
+            return in_tab(browser, *calls)
+        except TabLost as e:
+            if n == tries:
+                sys.exit(f"{e}。{tries} 回とも途中でタブがなくなった")
+            print(f"{e}。新しいタブで続きから回し直す（{n}/{tries - 1}）", file=sys.stderr, flush=True)
+        for waited_s in range(0, wait, 5):
+            if not open_in(tabs_of(browser), vid):
+                break
+            if not waited_s:
+                print(f"この Vids を開いたタブがある。閉じるまで待つ（{wait // 60} 分まで）: https://docs.google.com/videos/d/{vid}/edit", file=sys.stderr, flush=True)
+            time.sleep(5)
+
+
+def build_call(vid, slides_id, scenes, music):
+    """createFromSlides の呼び出し（シーン・台本・画像・BGM を保存する。音声と avatar は fill_call）。前からあるシーン（空の Vids の空シーン）は、組んだあとに消える。"""
+    return "createFromSlides", {"vidsId": vid, "slidesId": slides_id, "music": music, "scenes": [{"pageId": s["pageId"], "script": s["script"]} for s in scenes]}
+
+
+def fill_call(vid, scenes, label, avatar=None, places=None):
+    """updateScenes の呼び出し（台本・音声・avatar がノートと声に合わないシーンだけ作り直す。何度回しても、まだのシーンだけ作る）。
+    avatar（表示名）があれば、places（シーンごとの変換、None はそのシーンだけ音声）のシーンを AI avatar が読む。places がなければ今の avatar の場所のまま。"""
+    return "updateScenes", {"vidsId": vid, "scripts": [s["script"] for s in scenes], "voice": VOICES[label][0], "label": label,
+                            "avatar": avatar_arg(avatar) if avatar else None, "places": places}
 
 
 def inspect_call(vid, scenes):
@@ -416,11 +490,16 @@ def waited(r):
         print(f"avatar の今月の残り: {q['left']} 回（上限 {q['limit']}）")
 
 
-def summary(r, label, avatar=None):
-    waited(r)
-    total = sum(d or 0 for d in r["durationsMs"]) / 1000
-    print(f"シーン {r['scenes']}・音声 {r['voiced']}（{label}）" + (f"・うち avatar {r['avatars']}（{avatar}）" if avatar else "")
-          + f"・BGM {'あり' if r['music'] else 'なし'}・音声の合計 {total:.1f} 秒")
+def music_of(ms):
+    """BGM の長さ（createFromSlides の musicMs）を出す形に。"""
+    return f"{ms / 1000:.0f} 秒" if ms else "なし"
+
+
+def summary(c, music_ms, label, avatar=None):
+    """inspect の結果から。回し直したときも、Vids に今あるものを数える。"""
+    total = sum(d or 0 for d in c["ms"]) / 1000
+    print(f"シーン {c['scenes']}・音声 {sum(1 for w in c['who'] if w)}（{label}）" + (f"・うち avatar {sum(1 for w in c['who'] if w and w.startswith('actor'))}（{avatar}）" if avatar else "")
+          + f"・BGM {music_of(music_ms)}・音声の合計 {total:.1f} 秒")
 
 
 def mode_of(args, voice_default, avatar_default=None):
@@ -439,6 +518,25 @@ def mode_of(args, voice_default, avatar_default=None):
     return AVATARS[avatar][1], avatar
 
 
+def adopt(slides_id, vid):
+    """その Slides から作った Vids のうち、vid より前に作ったものの控えを外す（update <Slides> が新しい Vids だけを探すように）。
+    後から作ったもの（重なった create）は外さない。いちばん後に作った Vids を残す（重なった create が互いに外し合って、どれにも控えが残らなくならないように。
+    PR #95 の Pullfrog の指摘）。前の Vids は消さない（共有した URL かもしれない）。"""
+    mine = (request("GET", f"{DRIVE}/files/{vid}?fields=createdTime&supportsAllDrives=true")["createdTime"], vid)
+    for f in (f for f in made_from(slides_id) if (f["createdTime"], f["id"]) < mine):
+        stamp(f["id"], {SLIDES_KEY: None})
+        print(f"前の Vids の控えを外した（もう update しない）: {f['name']} https://docs.google.com/videos/d/{f['id']}/edit", flush=True)
+
+
+def resume_cmd(vid, avatar=None, layout=None, browser=None):
+    """create が音声の途中で止まったとき、続きを作る update のコマンド。どのフォルダから貼っても回るように、スクリプトの場所を書き、引数は囲む。
+    --layout（置き場所）と --browser（同じ Chrome）は控えにないので渡す。avatar も渡す（avatar を 1 つも置けずに update が止まると、
+    sync_avatar が控えを音声だけに戻すので、控えに頼ると貼り直したときに avatar が抜ける）。声は avatar で決まり、音声だけなら控えの声は書き直されない。"""
+    import shlex
+    return shlex.join(["uv", "run", str(Path(__file__).resolve()), "update", f"https://docs.google.com/videos/d/{vid}/edit",
+                       *(["--avatar", avatar, "--layout", str(Path(layout).resolve())] if avatar else []), *(["--browser", browser] if browser else [])])
+
+
 def create(args):
     slides_id = file_id(args.slides)
     label, avatar = mode_of(args, DEFAULT_VOICE)
@@ -449,29 +547,55 @@ def create(args):
     meta = request("GET", f"{DRIVE}/files/{slides_id}?fields=name,parents&supportsAllDrives=true")
     scenes, pages = scenes_of(slides_id), look_of(slides_id)
     places = places_of(args.layout, scenes) if avatar else None
-    vid = request("POST", f"{DRIVE}/files?fields=id&supportsAllDrives=true",
-                  {"name": args.name or f"{meta['name']}_動画", "mimeType": "application/vnd.google-apps.vid", "parents": meta.get("parents", [])[:1]})["id"]
-    print(f"空の Vids を作った: https://docs.google.com/videos/d/{vid}/edit", flush=True)
-    try:
-        r, c = in_tab(args.browser, build_call(vid, slides_id, scenes, label, not args.no_music, avatar, places), inspect_call(vid, scenes))
-        stamp(vid, {SLIDES_KEY: slides_id, PAGES_KEY: pages, VOICE_KEY: label, AVATAR_KEY: avatar})
-        report(c, scenes, readers(label, avatar))
-    except BaseException:  # Ctrl-C・接続の切れ・ブラウザーの落ちも
+    # 1. シーン・台本・画像・BGM（1 分ほど）。ここで止まった Vids は捨てる（控えがなく update できない）。タブが落ちたら、新しい Vids で作り直す
+    for n in range(1, 4):
+        vid = request("POST", f"{DRIVE}/files?fields=id&supportsAllDrives=true",
+                      {"name": args.name or f"{meta['name']}_動画", "mimeType": "application/vnd.google-apps.vid", "parents": meta.get("parents", [])[:1]})["id"]
+        print(f"空の Vids を作った: https://docs.google.com/videos/d/{vid}/edit", flush=True)
         try:
-            gapi.trash(vid)  # 作りかけを残さない（控えのない Vids は update できず、同じフォルダに名前の同じものが溜まる）
-            print("作りかけの Vids をゴミ箱に移した", file=sys.stderr)
-        except BaseException:  # ゴミ箱に移せなくても、元のエラーを隠さない
-            print(f"作りかけの Vids をゴミ箱に移せなかった。手で移す: https://docs.google.com/videos/d/{vid}/edit", file=sys.stderr)
-        raise
-    summary(r, label, avatar)
-    # 新しい Vids だけを update が探すように。組んだあとに探す（組む間に別の create が作ったものも外す）。前の Vids は消さない（共有した URL かもしれない）
+            b, = in_tab(args.browser, build_call(vid, slides_id, scenes, not args.no_music))
+            stamp(vid, {SLIDES_KEY: slides_id, PAGES_KEY: pages, VOICE_KEY: label, AVATAR_KEY: avatar})
+            break
+        except BaseException as e:  # Ctrl-C・接続の切れ・ブラウザーの落ちも
+            try:
+                gapi.trash(vid)  # 作りかけを残さない（控えのない Vids は update できず、同じフォルダに名前の同じものが溜まる）
+                print("作りかけの Vids をゴミ箱に移した", file=sys.stderr)
+            except BaseException:  # ゴミ箱に移せなくても、元のエラーを隠さない
+                print(f"作りかけの Vids をゴミ箱に移せなかった。手で移す: https://docs.google.com/videos/d/{vid}/edit", file=sys.stderr)
+            if not isinstance(e, TabLost):
+                raise
+            if n == 3:
+                sys.exit(f"{e}。3 回ともシーンを組む前にタブがなくなった")
+            print(f"{e}。新しい Vids で作り直す（{n}/2）", file=sys.stderr, flush=True)
+    # 控えを付けたらすぐ、前の Vids の控えを外す（音声の途中で止まって update で仕上げても、Slides から探して見つかるのが新しい Vids だけになる）
     try:
-        for f in (f for f in made_from(slides_id) if f["id"] != vid):
-            stamp(f["id"], {SLIDES_KEY: None})
-            print(f"前の Vids の控えを外した（もう update しない）: {f['name']} https://docs.google.com/videos/d/{f['id']}/edit")
-    except BaseException as e:  # 回線の切れ・Ctrl-C も。新しい Vids はできているので、どれを update に渡すかを残す
-        sys.exit(f"新しい Vids はできた: https://docs.google.com/videos/d/{vid}/edit 。前の Vids の控えを外し終えなかった（{e!r}）。"
-                 "update にはこの Slides でなく新しい Vids の URL を渡す")
+        adopt(slides_id, vid)
+    except (Exception, SystemExit) as e:  # 外せなくても音声は作る。作り終えたあとにもう一度外す
+        print(f"前の Vids の控えを外せなかった（{e!r}）。音声を作ったあとにもう一度外す", file=sys.stderr, flush=True)
+    waited(b)
+    print(f"シーン {b['scenes']}・台本・画像・BGM（{music_of(b['musicMs'])}）を保存した。続けて音声" + ("と avatar" if avatar else "") + "を作る", flush=True)
+    # 2. 音声と avatar（時間の大半）。作ったシーンから保存していくので、止まっても Vids は捨てない。続きは update で作る（できたシーンは作り直さない）
+    done = False
+    try:
+        try:
+            r, c = again(args.browser, fill_call(vid, scenes, label, avatar, places), inspect_call(vid, scenes))
+        except BaseException:
+            cmd = resume_cmd(vid, avatar, args.layout, args.browser)
+            print(f"音声を作る途中で止まった。Vids は残した（保存したシーンはそのまま）。続きは、理由を直してから: {cmd}", file=sys.stderr)
+            raise
+        report(c, scenes, readers(label, avatar))
+        waited(r)
+        summary(c, b["musicMs"], label, avatar)
+        done = True
+    finally:
+        # もう一度外す。止まったとき（音声の途中・要修正）も、1 回目が失敗していても、音声を作る間に別の create が作ったものも
+        try:
+            adopt(slides_id, vid)
+        except BaseException as e:  # 回線の切れ・Ctrl-C も。どれを update に渡すかを残す
+            why = f"前の Vids の控えを外し終えなかった（{e!r}）。update にはこの Slides でなく新しい Vids の URL を渡す: https://docs.google.com/videos/d/{vid}/edit"
+            if done:
+                sys.exit(f"新しい Vids はできた。{why}")
+            print(why, file=sys.stderr)  # 止まった理由のほうを隠さない
     print(f"https://docs.google.com/videos/d/{vid}/edit")
 
 
@@ -508,10 +632,8 @@ def update(args):
     not_open(args.browser, vid)  # 声の控えを書く前に、よくある止まり方を先に見る
     if (label, avatar) != old:  # 書く前に残す。途中で止まっても、次の update が同じ声で残りのシーンを差し替える（シーンの声は音声の名札と avatar の ID で見る）
         stamp(vid, {VOICE_KEY: label, AVATAR_KEY: avatar})
-    work = ("updateScenes", {"vidsId": vid, "scripts": [s["script"] for s in scenes], "voice": VOICES[label][0], "label": label,
-                             "avatar": avatar_arg(avatar) if avatar else None, "places": places})
     try:
-        r, c = in_tab(args.browser, work, inspect_call(vid, scenes))
+        r, c = again(args.browser, fill_call(vid, scenes, label, avatar, places), inspect_call(vid, scenes))
     except BaseException:
         if avatar:  # 止まっても、控えを Vids の実際に合わせる（読み直せなければそのまま）
             try:
@@ -640,6 +762,79 @@ def selftest():
     assert layout_row(None, 2, "c", None, auto)["corner"] == "none"  # JSON にないページ（足したページ）も none
     assert layout_row(placed, 0, "a", {2}, auto)["corner"] == "none" and layout_row(none, 1, "b", {2}, auto)["corner"] == "tr"
     assert layout_row(placed, 0, "a", {1}, auto)["corner"] == "br"  # 置いてあるページは JSON のまま
+    # タブが落ちたら新しいタブで回し直す。何度も落ちたら止める。タブの消え方は CDP のエラーの文で見分ける
+    assert lost({"code": -32000, "message": "Inspected target navigated or closed"}) and not lost({"message": "Invalid parameters"})
+    global in_tab, tabs_of
+    real = in_tab, tabs_of
+    tries = []
+
+    def flaky(browser, *calls):
+        tries.append(calls)
+        if len(tries) < 3:
+            raise TabLost("タブが閉じられた")
+        return ["r", "c"]
+    in_tab, tabs_of = flaky, lambda browser: []
+    try:
+        with contextlib.redirect_stderr(io.StringIO()):
+            assert again(None, ("updateScenes", {"vidsId": "V"})) == ["r", "c"] and len(tries) == 3
+            tries.clear()
+            try:
+                again(None, ("updateScenes", {"vidsId": "V"}), tries=2)
+                raise AssertionError("落ち続けるタブで回し続けた")
+            except SystemExit as e:
+                assert "2 回とも" in str(e) and len(tries) == 2
+    finally:
+        in_tab, tabs_of = real
+    # 前の Vids の控えを外す: 前に作ったものだけを外す。同じ Slides の create が重なっても（A の音声の間に B が作り、A・B の順に最後の adopt）、
+    # 後に作った B の控えが残る（PR #95 の Pullfrog の指摘: 互いに外し合うと、どちらにも残らなかった）
+    global made_from, request
+    real_made, real_request = made_from, request
+    store = {"OLD": ("1", "S"), "A": ("2", "S"), "B": ("3", "S")}  # Vids → (作った時刻, 控えの Slides)
+
+    def put(vid, props):
+        if SLIDES_KEY in props:
+            store[vid] = (store[vid][0], props[SLIDES_KEY])
+    made_from = lambda sid: [{"id": v, "name": v, "createdTime": t} for v, (t, x) in store.items() if x == sid]
+    request, stamp = (lambda method, url, body=None: {"createdTime": store[url.split("/files/")[1].split("?")[0]][0]}), put
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            adopt("S", "A")
+            assert [f["id"] for f in made_from("S")] == ["A", "B"]  # 後に作った B は外さない
+            adopt("S", "B"), adopt("S", "A"), adopt("S", "B")
+    finally:
+        made_from, request, stamp = real_made, real_request, real_stamp
+    assert [k for k, (t, x) in store.items() if x == "S"] == ["B"], store
+    # create: 1 回目の adopt が失敗し、音声の途中でも止まったとき、最後の adopt が前の Vids の控えを外し、止まった理由はそのまま上がる
+    g, calls = globals(), {"made": 0}
+    saved = {k: g[k] for k in ("request", "scenes_of", "look_of", "in_tab", "again", "stamp", "made_from")}
+
+    def made(sid):
+        calls["made"] += 1
+        if calls["made"] == 1:
+            raise gapi.ApiError("一時的なエラー")
+        return [{"id": "OLD", "name": "前", "createdTime": "1"}, {"id": "NEW", "name": "新", "createdTime": "2"}]
+
+    def stops(*a):
+        raise SystemExit("音声の途中で止まった")
+    stamps.clear()
+    g.update(request=lambda method, url, body=None: {"name": "資料", "parents": ["F"], "id": "NEW", "createdTime": "2"}, scenes_of=lambda sid: [{"pageId": "p", "script": "a"}],
+             look_of=lambda sid: "L", in_tab=lambda browser, *calls: [{"scenes": 1, "musicMs": 30000, "waited": []}], again=stops,
+             stamp=lambda vid, props: stamps.append((vid, props)), made_from=made)
+    try:
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            create(types.SimpleNamespace(slides="S", voice=None, avatar=None, layout=None, browser=None, no_music=False, name=None))
+        raise AssertionError("止まった create が通った")
+    except SystemExit as e:
+        assert str(e) == "音声の途中で止まった", e
+    finally:
+        g.update(saved)
+    assert stamps[0][0] == "NEW" and stamps[1:] == [("OLD", {SLIDES_KEY: None})] and calls["made"] == 2, stamps
+    # 続きのコマンド: 出たとおりに貼れば、同じ Vids・置き場所・Chrome で回る（どのフォルダからでも、空白のあるパスでも）
+    import shlex
+    cmd = shlex.split(resume_cmd("V", "Oliver", "my build/l.json", "http://127.0.0.1:9333"))
+    assert cmd[2] == str(Path(__file__).resolve()) and cmd[4].endswith("/d/V/edit") and cmd[9:] == ["--browser", "http://127.0.0.1:9333"]
+    assert cmd[5:9] == ["--avatar", "Oliver", "--layout", str(Path("my build/l.json").resolve())], cmd  # 控えの avatar が消えても avatar で続ける
+    assert shlex.split(resume_cmd("V", None, "unused.json"))[3:] == ["update", "https://docs.google.com/videos/d/V/edit"]  # 音声だけ: 控えの声で続ける
     assert open_in([{"url": "https://docs.google.com/videos/u/0/d/V1/edit"}], "V1") and open_in([{"url": "https://docs.google.com/videos/d/V1/edit?scene=x"}], "V1")
     assert not open_in([{"url": "https://docs.google.com/videos/d/V2/edit"}, {"url": "https://docs.google.com/presentation/d/V1/edit"}, {}], "V1")
     # JS の部品（MD5 と要求の組み立て）を node で確かめる。通信はしない
@@ -678,6 +873,32 @@ const rp = new Map(); for (let k = 0; k < re[4].length; k += 2) rp.set(re[4][k],
 if (re[2] !== 1 || rp.get(84) !== -0.3 || rp.get(300) !== 9 || rp.get(58) !== "PH2" || rp.get(176) !== 5000 || rp.get(194) !== "m2" || rp.get(202) !== 2) throw new Error("avatar look");
 const gone = t.state([...am, [36, 0, "a"], [0, ["a_av_actor50_s"]]]);
 if ("a" in gone.avatar || gone.timing.a.join() !== "x") throw new Error("state avatar removed");
+// updateScenes: 新しい音声は SAVE_EVERY シーンずつ保存し、途中で止まっても、できたシーンは保存してから止まる。回し直すと残りだけ作る
+// （タブが落ちたときの続き。通信は fetch の差し替えで、Vids の文書のモデルに保存を足していく）
+async function resumes() {
+  const n = t.SAVE_EVERY + 2, model = [], saves = [];
+  let tts = 0, failAt = n;
+  for (let i = 0; i < n; i++) model.push([12, `s${i}`, null, 0], [15, `s${i}:notes_text`, null, 0, `台本${i}`]);
+  globalThis.document = { cookie: "SAPISID=x" };
+  const ok = (o) => ({ ok: true, text: async () => (typeof o === "string" ? o : JSON.stringify(o)) });
+  globalThis.fetch = async (url, opt = {}) => {
+    if (url.endsWith("/edit")) return ok(`"info_params":{"token":"t","ouid":"o"} "espresso_api_key":"k" var modelChunk = ${JSON.stringify({ chunk: model, revision: 1 })}; var modelChunkParseEnd`);
+    if (url.includes("/genai/generate")) return ++tts === failAt ? { ok: false, status: 500, text: async () => "x" } : ok([[`K${tts}`, "bard_storage", null, "lookup_temp_data"]]);
+    if (url.includes("/insertmedia")) return ok({ [Object.keys(JSON.parse(new URLSearchParams(opt.body).get("insert_media_requests")))[0]]: { ms: "OK", ni: "N", sb: "4844" } });
+    if (url.includes("/save")) {
+      const cmds = JSON.parse(new URLSearchParams(opt.body).get("bundles"))[0].commands.flatMap((c) => (c[0] === 4 ? c[1] : [c]));
+      saves.push(cmds.filter((c) => c[0] === 58).length); model.push(...cmds);
+      return ok({ revisionRanges: [[1, 2]] });
+    }
+    throw new Error("fetch " + url);
+  };
+  const run = () => window.VidsClient.updateScenes({ vidsId: "V", scripts: Array.from({ length: n }, (_, i) => `台本${i}`) });
+  const err = await run().then(() => null, (e) => e);
+  if (!err || saves.join() !== `${t.SAVE_EVERY},${n - 1 - t.SAVE_EVERY}`) throw new Error(`updateScenes の途中の保存: ${saves} ${err}`);
+  failAt = 0; saves.length = 0;
+  const r = await run();
+  if (saves.join() !== "1" || r.updated.join() !== String(n)) throw new Error(`updateScenes の続き: ${saves} ${JSON.stringify(r.updated)}`);
+}
 // pool: 1 つ失敗したら、ほかの手は新しく始めない（avatar の回数を捨てる結果に使わない）
 // できたものは残して、失敗を out.stopped で返す（呼んだ側が置いてから投げる）
 const started = [];
@@ -688,8 +909,8 @@ t.pool([1, 2, 3, 4, 5, 6, 7, 8], 3, async (x) => { started.push(x); await new Pr
     // first が理由を返したら、最初の 1 つだけ回して返す（呼んだ側が置いてから止める）
     return t.pool([1, 2, 3], 2, async (x) => x, () => "足りない").then((o) => {
       if (o.length !== 1 || o[0] !== 1 || o.stopped?.message !== "足りない") throw new Error("pool stop: " + JSON.stringify(o));
-      console.log("ok");
-    });
+      return resumes();
+    }).then(() => console.log("ok"));
   }).catch((e) => { console.error(e.message); process.exit(1); });
 """
     if not shutil.which("node"):
