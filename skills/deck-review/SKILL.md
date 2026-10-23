@@ -45,7 +45,7 @@ Basis: the round limit and reverting when things get worse follow research on dr
 
 | Category | Examples | What to do |
 |---|---|---|
-| 直す | lint `要修正`, 「和欧間のスペース」, 「約物」, overflow, overlap, collision with the footer, misaligned arrows, boxes larger than their content, inconsistent notation, first use of abbreviations, line-break positions that do not change the wording | Fix it and write 「直した」 in the table. Do not shrink text to fit (consider rephrasing, a diagram, then splitting the page, in that order; for a split, build it split and then ask; deck-practices-010 in `../deck-practices/SKILL.md`). Shrinking a box so the bottom of the page becomes empty is fine (adding content is a question) |
+| 直す | lint `要修正`, 「和欧間のスペース」, 「約物」, overflow, overlap, collision with the footer, misaligned arrows, boxes larger than their content, inconsistent notation, first use of abbreviations, line-break positions that do not change the wording, changing a page's form when the claim and the facts stay the same (prompt_slides-003) | Fix it and write 「直した」 in the table. Do not shrink text to fit (consider rephrasing, a diagram, then splitting the page, in that order; for a split, build it split and then ask; deck-practices-010 in `../deck-practices/SKILL.md`). Shrinking a box so the bottom of the page becomes empty is fine (adding content is a question) |
 | 聞く | Changing a heading, claim, number, or order; adding, deleting, or splitting pages; adding another example or path for fairness; removing a conclusion band or kicker; preferences in phrasing; items the reviewer rated 「聞く」 (not decided by the rules, or readable either way) | Do not fix. Write 「聞く」 and a proposed fix in the table and return it to the user |
 
 ## Finding format
