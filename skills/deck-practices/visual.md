@@ -124,6 +124,10 @@ Read this before you start writing slides. §1 is this folder's visual rules (th
 
 Choose the pattern from the one sentence you want to say, and use one pattern per page. Write the pattern for each page in the outline (見た目 1-13. The primary source of the pattern names is unconfirmed).
 
+[visual-048] **Choose the body's form for each page from what that page says.** The patterns below are common examples, not a list to pick from. Use any form (a chart, a map on two axes, a screenshot, a table) that lets the reader get the page's one sentence from the shape of the body before reading the text.
+
+[visual-049] **Keep only the frame the same across pages.** The frame is the position of the heading, lead, and source line, text sizes, colors, how each component looks, and drawing the same thing with the same name, color, and position (visual-033–035). Do not copy the body's form from the representative pages, a past deck, or a sample, because copying it made every page the same composition (three cards, a three-box diagram) whatever the page said. Pages that say the same kind of thing (one page per update item or per product) may keep the same form.
+
 | What you want to say | Pattern | Diagram convention |
 |---|---|---|
 | There are three X | Parallel | Line up boxes of the same size. Same size means peer status |
