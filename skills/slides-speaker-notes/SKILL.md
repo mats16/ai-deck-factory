@@ -5,7 +5,7 @@ description: Write the speaker notes of Google Slides decks as the script for Go
 
 # Speaker notes for Google Vids
 
-When Google Vids makes a video from slides, each page becomes a scene and its speaker notes become the scene's voiceover script. Decks are built without notes (`../deck-practices/content.md` §5). Write them only when the user asks, for the whole deck at once after it is finished (asked while building a deck: after its `/deck-review` rounds and fixes, then the video; deck-practices-022 in `../deck-practices/SKILL.md`), because notes written page by page have no story across scenes. The same steps rewrite the notes of a deck that already has them. Run the request through the normal flow in `../deck-practices/SKILL.md` (read the history, route corrections to the ledger); this file covers only the notes.
+When Google Vids makes a video from slides, each page becomes a scene and its speaker notes become the scene's voiceover script. Decks are built without notes (`../deck-practices/content.md` §5). Write them only when the user asks, for the whole deck at once after it is finished (asked while building a deck: after its `/deck-review` rounds and fixes, then the video if one was asked for; deck-practices-022 in `../deck-practices/SKILL.md`), because notes written page by page have no story across scenes. The same steps rewrite the notes of a deck that already has them. Run the request through the normal flow in `../deck-practices/SKILL.md` (read the history, route corrections to the ledger); this file covers only the notes.
 
 ## Steps
 
