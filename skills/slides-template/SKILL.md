@@ -48,7 +48,7 @@ Switch `[slides] default_theme` (the theme to build with when the material's `de
 ## Limitations
 
 - Pages other than 13.33 × 7.5 in cannot be built (step 2 of the flow in [create.md](create.md)).
-- The font in the theme file applies only to slides. The font of documents (Google Docs) is `font` and `mono` in the document theme file of the same form (`themes/docs/<name>.json`) (docs-write-010 in `../docs-build/themes.md`). The copyright notice in the document footer stays `[brand]`.
+- The font in the theme file applies only to slides. The font of documents (Google Docs) is `font` and `mono` in the document theme file of the same form (`themes/docs/<name>.json`) (docs-write-010 in `../docs-build/SKILL.md`, then its `themes.md`). The copyright notice in the document footer stays `[brand]`.
 - Only the `JP_FONTS` fonts and DM Sans can be written in `font` (`slides.py lint` and `template.py` reject others). To use another Latin font, measure its alphanumeric widths and add it to `FONT_EM` in `../deck-practices/scripts/brand.py` (check in rendered images which version Google Slides renders). To use another Japanese Google Font, check in a trial deck's images that it renders, then add it to `JP_FONTS` in `../deck-practices/scripts/brand.py`.
 - The company template's text sizes, line spacing, and layouts do not apply to the pages `slides.py` builds (they are built in the style of `../slides-build/visual.md` §1). To build at the company's sizes, change the `slides.py` components (`factory-kaizen`).
 - Do not adapt for Japanese the company template that people use on screen (with all its layouts).

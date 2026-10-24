@@ -598,9 +598,9 @@ def theme(name):
     if (d := ws_themes()) and (f := d / f"{name}.json").is_file():
         return load_theme(read_theme(f))
     if name in docs_cfg().get("themes", {}):  # 2026-10-19 までの書き方（standard も、書いた値を黙って捨てない）
-        sys.exit(f"テーマ {name} がない（themes/docs/{name}.json）。factory.toml の [docs.themes.{name}] はもう読まない。テーマのファイルに移す（docs-build の ../themes.md の docs-write-010）")
+        sys.exit(f"テーマ {name} がない（themes/docs/{name}.json）。factory.toml の [docs.themes.{name}] はもう読まない。テーマのファイルに移す（docs-build の ../SKILL.md を開いてから、その themes.md の docs-write-010）")
     if name != STANDARD:
-        sys.exit(f"テーマ {name} がない（themes/docs/{name}.json）。docs.py themes が一覧を出す（docs-build の ../themes.md の docs-write-010）")
+        sys.exit(f"テーマ {name} がない（themes/docs/{name}.json）。docs.py themes が一覧を出す（docs-build の ../SKILL.md を開いてから、その themes.md の docs-write-010）")
 
 
 def cmd_themes():
