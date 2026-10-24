@@ -101,7 +101,7 @@ def cmd_check(src, *opts):
     print(f"{p['title']}（{len(p['slides'])} 枚）\n")
     hard = lint.lint_slides(p, r := lint.Report(), "差し替え用" in p["title"], "--talk" in opts)
     if not any(w in p["title"].lower() for w in ("tmp", "template", "作業用", "テンプレート")):  # 一時のデッキ・流用元の作業用の写し・テンプレートは、組み直して直すものでないので数えない
-        textlint.log_run(r, pid)  # 要確認の残り方を textlint.py --stats で数える（dreaming の 5）
+        textlint.log_run(r, pid)  # 要確認の残り方を textlint.py --stats で数える（dreaming/run.md の 5）
     gapi.CLOCK.lap("lint")
     ids = [s["objectId"] for s in p["slides"]]
     shots = f"{d}/shots.json"  # p-NN.png ごとの、取ったときのページの objectId

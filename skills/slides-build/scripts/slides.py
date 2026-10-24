@@ -45,7 +45,7 @@ BLANK = "Content E - Blank"  # テンプレートに残した、置き物のな�
 
 # ---- 版面（visual.md の 1。上端は in） ----
 MONO = MONO_DEFAULT  # 組むデッキの等幅の書体。テーマの mono があればそれ（use_theme）
-MONO_EM = 0.586  # Cascadia Mono の英数字の幅（em。hmtx で測った。2026-10-09）。テーマで等幅の書体を替えても、この幅で見込む（ずれる。slides-template の「Fonts」）
+MONO_EM = 0.586  # Cascadia Mono の英数字の幅（em。hmtx で測った。2026-10-09）。テーマで等幅の書体を替えても、この幅で見込む（ずれる。slides-template の fonts.md）
 EMU = 914400
 INSET = 0.1  # 文字の枠の内側の余白（API で変えられない）。枠をこの分だけ外に出し、文字の端を箱の端にそろえる
 PAD = 0.08   # 箱と、その上に重ねる文字の枠の間（INSET と合わせて、枠と文字の間が 1 字分ほどになる）
@@ -74,7 +74,7 @@ RED_SOFT, STAGE_TEXT, DECOR = "FFECE8", "0B2026", "6B8089"  # 淡い赤／札の
 # TEXT・RULE と上の 3 色は既定の値。テーマのファイルの colors に同じ名前で書くと、そのテーマのデッキでは paint とアイコンが置き換える（use_theme）。
 # pages.py には名前（か既定の 6 桁）で書く。マスターの配色に枠が残っていない（12 の枠をすべて使う）ので、組むときに置き換える
 FIXED = {"TEXT": TEXT, "RULE": RULE, "RED_SOFT": RED_SOFT, "STAGE_TEXT": STAGE_TEXT, "DECOR": DECOR}
-# 名前で引く役割（名前 → 書かないときの色）。既定は今の色（役割の枠か、上の色）と同じで、暗い本文のテーマ（../../slides-template/SKILL.md）が分けて書く。
+# 名前で引く役割（名前 → 書かないときの色）。既定は今の色（役割の枠か、上の色）と同じで、暗い本文のテーマ（../../slides-template/dark.md）が分けて書く。
 # 既定の値を WHITE や NAVY と共有するので、FIXED のように値では置き換えない。pages.py には名前で書く
 NAMED = {"HEAD": NAVY, "CARD": WHITE, "SUB_ON_NAVY": RULE, "ON_RED": WHITE}
 HEAD, CARD, SUB_ON_NAVY, ON_RED = NAMED  # 本文のページの見出しの文字／カードと表のセルの地／濃紺の上の補足の文字とフッター／RED の塗りの上の文字

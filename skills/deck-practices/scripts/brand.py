@@ -11,7 +11,7 @@ import gapi  # noqa: E402
 
 # ---- 書体（../../slides-build/visual.md の 2） ----
 FONT = "Noto Sans JP"  # Google Fonts の名前。Noto Sans CJK JP と字形・文字幅は同じ（Google Fonts にない書体は黙って別の書体になる）
-# Google Slides で描けることを確かめた、和文のある Google Fonts（2026-10-07。../../slides-template/SKILL.md の「Fonts」）。会社のテーマの書体はここから選ぶ
+# Google Slides で描けることを確かめた、和文のある Google Fonts（2026-10-07。../../slides-template/fonts.md）。会社のテーマの書体はここから選ぶ
 JP_FONTS = {FONT, "Noto Serif JP", "BIZ UDPGothic", "BIZ UDGothic", "BIZ UDPMincho", "M PLUS 1p", "M PLUS 2", "M PLUS Rounded 1c", "Zen Kaku Gothic New",
             "Zen Maru Gothic", "Sawarabi Gothic", "Kosugi Maru", "IBM Plex Sans JP", "LINE Seed JP", "Murecho", "Shippori Mincho", "Zen Old Mincho", "Klee One"}
 MONO_DEFAULT = "Cascadia Mono"  # コードの箱・コマンドの等幅の書体の既定（Google Fonts。Windows Terminal の既定でリガチャがない。visual.md の 2）。和文の字形がないので、ASCII の続きにだけ付ける（mono_reqs）
@@ -52,7 +52,7 @@ TEXT, RULE = "303F47", "DCE0E2"  # 本文／罫線（スライドでは濃紺の
 
 # ---- 会社の著作権表示とロゴ ----
 def _brand():
-    """factory.toml の [brand]（社名と著作権表示。../../slides-template/SKILL.md）。import のときに読むので gapi.locate で探し、gapi の覚えた結果を作らない。
+    """factory.toml の [brand]（社名と著作権表示。../../slides-template/create.md）。import のときに読むので gapi.locate で探し、gapi の覚えた結果を作らない。
     書き方の誤りでは止めない（factory() を呼ぶところと factory-doctor が止める）。"""
     try:
         return tomllib.loads(p.read_text()).get("brand", {}) if (p := gapi.locate()) else {}
@@ -81,7 +81,7 @@ def theme_font(t):
     """テーマの表 t（スライドのテーマ・[docs.themes]）の本文の書体。書いていなければ FONT。和文を描けると確かめた書体（JP_FONTS）か、英数字の幅を測った
     欧文の書体（FONT_EM の DM Sans。和文は Google が別のゴシックで描く）でなければ止める（ほかの書体は、和文が別の書体になるか、描けない。deck_font も FONT に戻す）。"""
     if not isinstance(f := t.get("font", FONT), str) or f not in JP_FONTS | set(FONT_EM):
-        sys.exit(f"テーマの font {f!r} は、和文を描けると確かめた書体（slides.py の JP_FONTS）にも、字幅を測った欧文の書体（FONT_EM）にもない。slides-template の SKILL.md の「Fonts」から選ぶ")
+        sys.exit(f"テーマの font {f!r} は、和文を描けると確かめた書体（slides.py の JP_FONTS）にも、字幅を測った欧文の書体（FONT_EM）にもない。slides-template の SKILL.md を開いてから、その fonts.md から選ぶ")
     return f
 
 
