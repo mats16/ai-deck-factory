@@ -41,7 +41,7 @@ mkdir -p .codex && { grep -qs 'ai-deck-factory@ai-deck-factory' .codex/config.to
 
 - 信頼は hook の中身のハッシュに付く。`hooks/hooks.json` が変わった版を取ると、信頼し直すまで止まる（起動のときに `/hooks` を開くよう知らせが出る）。
 - `codex exec`（dreaming の `run.sh codex`、レビューの子）は聞けない。先に対話の Codex で信頼しておく。
-- Codex はファイルをシェル（`cat`・`sed` など）で読むので、PostToolUse は `Bash` で効く。`$ai-deck-factory:deck-build` のように呼んだスキルは、道具を使わずに SKILL.md が入るので、UserPromptSubmit がプロンプトから拾って `rules/<スキル>/SKILL.md` を出す。
+- Codex はファイルをシェル（`cat`・`sed` など）で読むので、PostToolUse は `Bash` で効く。`$ai-deck-factory:slides-build` のように呼んだスキルは、道具を使わずに SKILL.md が入るので、UserPromptSubmit がプロンプトから拾って `rules/<スキル>/SKILL.md` を出す。
 
 ## そのフォルダだけで効いているかを確かめる
 
@@ -61,8 +61,8 @@ cd <ワークスペース> && (printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"
 
 | フォルダ | 出たスキル | hook |
 |---|---|---|
-| ワークスペース（信頼した） | `ai-deck-factory:` の 14 個 | `sed -n 1,3p ../skills/deck-practices/visual.md` のあとと、`$ai-deck-factory:factory-doctor` で呼んだときに、`rules/` の目印が差し込まれた |
-| ワークスペースのサブフォルダ | 14 個（親の `.codex/config.toml` も読まれる） | |
+| ワークスペース（信頼した） | `ai-deck-factory:` の 15 個 | `sed -n 1,3p ../skills/slides-build/visual.md` のあとと、`$ai-deck-factory:factory-doctor` で呼んだときに、`rules/` の目印が差し込まれた |
+| ワークスペースのサブフォルダ | 15 個（親の `.codex/config.toml` も読まれる） | |
 | `/tmp` | 0 | |
 
 ## ワークスペースを作る

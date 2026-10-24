@@ -16,7 +16,7 @@ usage（資料のフォルダで）:
 import contextlib, datetime, html, json, math, os, re, shlex, sys, time, urllib.parse
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "deck-build" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "deck-practices" / "scripts"))
 import gapi
 from gapi import DRIVE, SLIDES, file_id, run
 

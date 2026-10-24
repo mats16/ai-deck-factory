@@ -1,6 +1,6 @@
 # Request to the child agent that checks facts against sources
 
-The request you give the source-check child agent (deck-practices-019 in "How to start" §5 of `../deck-practices/SKILL.md`). It opens the sources of the rows in the 「出典の表」 and checks the values against the source text, because the maker's 「済」 is self-attested, and errors whose source was a chat, a meeting, or the maker's own reading passed every review so far (only a proofread that reopened the URLs caught them). Start it in the background and do not wait for it (deck-practices-013); it never blocks writing or building. Fill in the `<>`. How to start it (a new child agent without the conversation, the same model as the main agent) is "How to ask" in [SKILL.md](SKILL.md).
+The request you give the source-check child agent (deck-flow-019 in step 5 of `../deck-practices/start.md`). It opens the sources of the rows in the 「出典の表」 and checks the values against the source text, because the maker's 「済」 is self-attested, and errors whose source was a chat, a meeting, or the maker's own reading passed every review so far (only a proofread that reopened the URLs caught them). Start it in the background and do not wait for it (deck-agents-013); it never blocks writing or building. Fill in the `<>`. How to start it (a new child agent without the conversation, the same model as the main agent) is `../deck-practices/agents.md`.
 
 - **Pass 1 (rows):** after the 「出典の表」 is written in step 5. Delete the "Pages" section of the request.
 - **Pass 2 (rows and pages):** after building the whole in step 8, together with round 1 of `/deck-review`. Keep the "Pages" section and pass the text that `gslides.py check` wrote (`$D/deck.md`; for documents `$D/text.md`). Rows marked 「照合済」 in pass 1 are not listed again.
@@ -13,14 +13,14 @@ You check the facts of a material against their sources. Open each source yourse
 ## What to read
 - Rows to check: run `python3 <deck-practices folder>/scripts/refs.py check <material folder>` and take the section 「照合していない行」. It lists the rows in order of risk (`提供` → `計算` → `数字` → `顧客` → `名前`) with the source's ID, kind, date checked, and URL. Check them in that order.
 - The outline's 「出典の表」 (<outline path>) and <material folder>/references.md, for the full rows and for `使い道`.
-- Rules: "Sources" and content-024, 025, 027, and 064 in <deck-practices folder>/content.md (what counts as a source, conflicting values, model generations, availability tables).
+- Rules: "Sources" and deck-content-024, 025, 027, and 064 in <deck-practices folder>/content.md (what counts as a source, conflicting values, model generations, availability tables).
 
 ## How to open sources
 - Public pages: fetch the page itself (WebFetch, or `curl -sL`). A search result snippet is not the source. Read the tables and footnotes (legends such as ‡ in availability tables).
 - GitHub: `gh api repos/<owner>/<repo>`, `gh api repos/<owner>/<repo>/contents/<path>`, or raw.githubusercontent.com (README, package.json, Cargo.toml, and so on).
-- Google Slides and Docs: the file-storage tool in <workspace>/factory.toml `[sources]`, or `python3 <deck-build folder>/scripts/gslides.py export <URL> /tmp/<name>.pptx` and the slide XML text; for Docs `docs.py export <URL> /tmp/<name>.pdf` and `pdftotext`. Do not run `gslides.py check` (it takes page images and shares the parent's rate limit).
+- Google Slides and Docs: the file-storage tool in <workspace>/factory.toml `[sources]`, or `python3 <slides-build folder>/scripts/gslides.py export <URL> /tmp/<name>.pptx` and the slide XML text; for Docs `python3 <docs-build folder>/scripts/docs.py export <URL> /tmp/<name>.pdf` and `pdftotext`. Do not run `gslides.py check` (it takes page images and shares the parent's rate limit).
 - Meetings and chat: the `meetings` and `chat` tools in `[sources]`. Read the part the `出典` cell points to (time, message).
-- Local data (kind `データ`): open the file and recompute. For `計算` rows, recompute from the original values of the rows it cites, not from rounded values (content-037).
+- Local data (kind `データ`): open the file and recompute. For `計算` rows, recompute from the original values of the rows it cites, not from rounded values (deck-content-037).
 
 ## How to judge each row
 - `合う`: the source says the same value or statement, within the same scope and conditions.

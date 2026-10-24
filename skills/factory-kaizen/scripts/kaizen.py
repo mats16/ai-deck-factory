@@ -14,12 +14,12 @@ from functools import cached_property
 from pathlib import Path
 
 sys.dont_write_bytecode = True
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "deck-build" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "deck-practices" / "scripts"))
 import gapi
 
 SECTIONS = ("## 変えること", "## 理由", "## 背景", "## 過去資料での検証", "## 影響", "## 迷ったところ")
 MAX_BODY = 60000  # GitHub の Issue の本文は 65536 字まで
-DESIGN = re.compile(r"skills/(deck-practices/visual(_doc)?\.md|deck-build/(scripts/(slides|template|docs|box_pad|doc_layout)\.py|assets/))")  # 見た目が変わりうるファイル
+DESIGN = re.compile(r"skills/((slides|docs)-build/visual\.md|slides-build/(scripts/(slides|template|box_pad)\.py|assets/)|docs-build/scripts/(docs|doc_layout)\.py|deck-practices/scripts/brand\.py)")  # 見た目が変わりうるファイル
 URL_ID = re.compile(r"https://docs\.google\.com/(?:presentation|document)/d/([\w-]+)")
 COUNT = re.compile(r"^== (要修正|要確認)[^:]*: (\d+) ==$", re.M)
 HIT = re.compile(r"^\[(.+?)\] (.*)$", re.M)
@@ -73,8 +73,8 @@ class Work:
         f.write_text(json.dumps(labels, ensure_ascii=False, indent=1))
         return labels[key]
 
-    def scripts(self, side):
-        return (self.base if side == "base" else self.repo) / "skills" / "deck-build" / "scripts"
+    def scripts(self, side, skill="slides-build"):
+        return (self.base if side == "base" else self.repo) / "skills" / skill / "scripts"
 
     def log(self, detail, public):
         self.verify.mkdir(parents=True, exist_ok=True)
@@ -119,7 +119,8 @@ def lint_cmd(w, urls):
         kind, data = ("ドキュメント", gapi.request("GET", f"{gapi.DOCS}/{fid}")) if "/document/" in url else ("スライド", gapi.request("GET", f"{gapi.SLIDES}/{fid}"))
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             json.dump(data, f)
-        outs = [sh(sys.executable, w.scripts(side) / "lint.py", f.name, cwd=w.ws, env={"FACTORY_VERIFY": "1"}, check=False).stdout for side in ("base", "head")]
+        skill, script = ("docs-build", "doc_lint.py") if kind == "ドキュメント" else ("slides-build", "lint.py")
+        outs = [sh(sys.executable, w.scripts(side, skill) / script, f.name, cwd=w.ws, env={"FACTORY_VERIFY": "1"}, check=False).stdout for side in ("base", "head")]
         os.unlink(f.name)
         detail, public = report(w.label(url), kind, *compare(*outs), title=f"{data.get('title', '')} {url}")
         w.log("### lint\n\n" + detail, "### lint\n\n" + public)
@@ -147,7 +148,7 @@ def rebuild(w, folders, pages=None, keep=False):
         made, outs, shots = [], [], {}
         try:
             for side in ("base", "head"):
-                s = w.scripts(side)
+                s = w.scripts(side, "slides-build" if slides else "docs-build")
                 r = sh(sys.executable, s / ("slides.py" if slides else "docs.py"), "new", out_dir, f"{time.strftime('%Y%m%d')}_検証_{w.name}_{label.replace(' ', '')}_{side}", cwd=build, env={"FACTORY_VERIFY": "1"})
                 fid = URL_ID.findall(r.stdout)[-1]
                 made.append(fid)
@@ -164,7 +165,7 @@ def rebuild(w, folders, pages=None, keep=False):
                 continue  # 選んでいないページと、前後で同じ画像のページ
             num = re.sub(r"\D", "", label)  # f-string の中の \ は Python 3.12 から
             out = img / f"deck{num}_p{page}.png"  # エージェントが読み書きするファイルは英数字の名前
-            sh("uv", "run", "-q", w.scripts("head") / "sheet.py", out, shots["base"][n], shots["head"][n], "--cols", "2", "--width", "800")
+            sh("uv", "run", "-q", w.scripts("head", "deck-practices") / "sheet.py", out, shots["base"][n], shots["head"][n], "--cols", "2", "--width", "800")
             changed.append((page, out))
         detail, public = report(label, "スライド" if slides else "ドキュメント", *compare(*outs), title=str(folder))
         pics = "変わったページ: " + (", ".join(f"p{p}" for p, _ in changed) or "なし") + "（左が前の版、右が変えた版）\n\n" + "".join(f"<!-- img:{o.name} -->\n" for _, o in changed)
@@ -306,9 +307,9 @@ def selftest():
     detail, public = report("資料 1", "スライド", cb, ca, delta, gone, new, title="Acme様_秘密の資料")
     assert "Acme" in detail and "Acme" not in public and "✅" not in public  # Issue には資料の名前も本文も出さない
     body = "\n".join(SECTIONS)
-    assert check_body(body, ["skills/deck-build/scripts/lint.py"], "x", []) == []
-    assert len(check_body(body, ["skills/deck-practices/visual.md"], "x", [])) == 1  # 見た目なのに画像がない
-    assert len(check_body("## 理由", ["skills/deck-build/scripts/lint.py"], "", [])) == 6  # 節が 5 つと、検証がない
+    assert check_body(body, ["skills/slides-build/scripts/lint.py"], "x", []) == []
+    assert len(check_body(body, ["skills/slides-build/visual.md"], "x", [])) == 1  # 見た目なのに画像がない
+    assert len(check_body("## 理由", ["skills/slides-build/scripts/lint.py"], "", [])) == 6  # 節が 5 つと、検証がない
     assert check_body(body + "\n検証しない理由: 文の直しだけ", ["skills/dreaming/SKILL.md"], "", []) == []
     urls = {"deck1_p2.png": "u1", "sample_p1.png": "u2"}
     placed = place_images("### 組み直し\n\n<!-- img:deck1_p2.png -->\n", urls)
@@ -316,7 +317,7 @@ def selftest():
     assert place_images("x\n<!-- img:deck1_p2.png -->\n", {"deck1_p2.png": "u1"}) == "x\n![deck1_p2.png](u1)\n"  # みな目印があれば、末尾には足さない
     full = issue_body(body, ["skills/x.md"], "abc1234", "### lint\n", "+++ b/skills/x.md\n+顧客向けの資料\n")
     assert full.index("## 検証の記録") < full.index("`abc1234`") < full.index("## 変更案の差分") and "+顧客向けの資料" in full
-    assert binary_files("3\t1\tskills/x.md\n-\t-\tskills/deck-build/assets/gcp/a b.png\n") == ["skills/deck-build/assets/gcp/a b.png"]
+    assert binary_files("3\t1\tskills/x.md\n-\t-\tskills/slides-build/assets/gcp/a b.png\n") == ["skills/slides-build/assets/gcp/a b.png"]
     long = issue_body(body, [], "abc1234", "", "+x\n" * MAX_BODY)
     assert "載せていない" in long and "+x" not in long  # 長い差分は載せない
     fenced = issue_body(body, [], "abc1234", "", " ````` 前からある行\n+x\n")

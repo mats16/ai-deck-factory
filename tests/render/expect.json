@@ -1,5 +1,5 @@
 {
- "_": "ページのファイルごとの、Google が描いた画像で見るところ（run.py が report.md に写す）。見本（skills/deck-build/samples/json/）のページを足したら、ここにも足す。どのページにも見るところは run.py の COMMON",
+ "_": "ページのファイルごとの、Google が描いた画像で見るところ（run.py が report.md に写す）。見本（skills/slides-build/samples/json/）のページを足したら、ここにも足す。どのページにも見るところは run.py の COMMON",
  "cover.json": [
   "濃紺の地の表紙。上に赤の小さな kicker「AI Deck Factory｜slides/v1」",
   "白の太字の大きなタイトルが「JSON のページの」「見本」の 2 行（改行の位置が書いたとおり）",

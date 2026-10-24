@@ -105,21 +105,22 @@ def selftest():
     with tempfile.TemporaryDirectory() as ws:
         (Path(ws) / "factory.toml").write_text("")
         (Path(ws) / "rules" / "deck-practices").mkdir(parents=True)
-        (Path(ws) / "rules" / "deck-practices" / "visual.md").write_text("本文は 16pt")
+        (Path(ws) / "rules" / "slides-build").mkdir()
+        (Path(ws) / "rules" / "slides-build" / "visual.md").write_text("本文は 16pt")
         (Path(ws) / "rules" / "deck-practices" / "SKILL.md").write_text("最初に聞くこと")
         sub = Path(ws) / "Customers" / "x"
         sub.mkdir(parents=True)
-        assert "16pt" in overlays(sub, "/plug/skills/deck-practices/visual.md")
-        assert "16pt" in overlays(ws, "sed -n 1,40p deck-practices/visual.md")  # Bash で読んだとき
-        assert overlays(ws, f"{ws}/rules/deck-practices/visual.md") == ""  # rules/ そのものを読んだときは出さない
+        assert "16pt" in overlays(sub, "/plug/skills/slides-build/visual.md")
+        assert "16pt" in overlays(ws, "sed -n 1,40p slides-build/visual.md")  # Bash で読んだとき
+        assert overlays(ws, f"{ws}/rules/slides-build/visual.md") == ""  # rules/ そのものを読んだときは出さない
         assert overlays(ws, "/plug/skills/deck-practices/content.md") == ""  # rules/ に同じファイルがない
         assert "最初に聞くこと" in overlays(ws, "", "ai-deck-factory:deck-practices")
-        assert CALL.findall("/ai-deck-factory:deck-build と $ai-deck-factory:deck-review、ai-deck-factory:doc-build、$ai-deck-factory:deck-builds") == ["deck-build", "deck-review"]  # 呼んだものだけ
-        assert CALL.findall("さっきの /ai-deck-factory:deck-build は x/$ai-deck-factory:doc-build") == []  # 文の途中の / とパスの中は呼んでいない
-        assert CALL.findall("資料を$ai-deck-factory:deck-buildで作る") == ["deck-build"] and CALL.findall("/ai-deck-factory:doc-buildで") == ["doc-build"]  # 和文が続いても切る
-        assert "最初に聞くこと" in called(ws, "/ai-deck-factory:deck-practices を回して") and called(ws, "$ai-deck-factory:deck-build") == ""  # rules/ に SKILL.md のないスキル
+        assert CALL.findall("/ai-deck-factory:slides-build と $ai-deck-factory:deck-review、ai-deck-factory:docs-build、$ai-deck-factory:slides-builds") == ["slides-build", "deck-review"]  # 呼んだものだけ
+        assert CALL.findall("さっきの /ai-deck-factory:slides-build は x/$ai-deck-factory:docs-build") == []  # 文の途中の / とパスの中は呼んでいない
+        assert CALL.findall("資料を$ai-deck-factory:slides-buildで作る") == ["slides-build"] and CALL.findall("/ai-deck-factory:docs-buildで") == ["docs-build"]  # 和文が続いても切る
+        assert "最初に聞くこと" in called(ws, "/ai-deck-factory:deck-practices を回して") and called(ws, "$ai-deck-factory:slides-build") == ""  # rules/ に SKILL.md のないスキル
         assert called(ws, "/ai-deck-factory:deck-practices $ai-deck-factory:deck-practices").count("最初に聞くこと") == 1
-        assert overlays("/", "/plug/skills/deck-practices/visual.md") == ""  # ワークスペースの外
+        assert overlays("/", "/plug/skills/slides-build/visual.md") == ""  # ワークスペースの外
         deck = Path(ws) / "Customers" / "acme" / "deck_202610"
         deck.mkdir(parents=True)
         (Path(ws) / "Customers" / "acme" / "memory.md").write_text("- [ws-memory-001] 敬称は様")
@@ -142,10 +143,10 @@ def selftest():
         assert "ACME" in overlays(ws, "(cd /tmp && ls); cd -P x; cd; cat 'Customers/Acme Corp/d 1/構成案.md'")  # サブシェル・cd -P・引数のない cd
         assert "ACME" not in overlays(ws, "cat ~nosuchuser/構成案.md") and "ACME" in overlays(ws, "cat 'Customers/Acme Corp/x/../d 1/references.md'")  # ~user で落ちない、.. を畳む
         (spaced / "memory.md").write_text("い" * (LIMIT + 10))
-        both = overlays(ws, f"cat '{spaced}/d 1/構成案.md' deck-practices/visual.md")
+        both = overlays(ws, f"cat '{spaced}/d 1/構成案.md' slides-build/visual.md")
         assert "本文は 16pt" in both and "残りは memory.md を" in both  # 長い memory が決まりを押し出さない
-        (Path(ws) / "rules" / "deck-practices" / "visual.md").write_text("あ" * (LIMIT + 10))
-        assert "ここで切った" in overlays(ws, "deck-practices/visual.md")  # 切ったら黙らない
+        (Path(ws) / "rules" / "slides-build" / "visual.md").write_text("あ" * (LIMIT + 10))
+        assert "ここで切った" in overlays(ws, "slides-build/visual.md")  # 切ったら黙らない
     print("selftest ok")
 
 

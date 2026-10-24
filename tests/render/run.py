@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""JSON のページの見本（skills/deck-build/samples/json/）をすべて Google Slides に組み、Google が描いた全ページの画像を、ページごとの見るところ（expect.json）と並べる。
+"""JSON のページの見本（skills/slides-build/samples/json/）をすべて Google Slides に組み、Google が描いた全ページの画像を、ページごとの見るところ（expect.json）と並べる。
 usage（sandbox のようなワークスペースの中で回す。factory.toml の [drive] internal に一時のデッキを作る）:
   python3 <リポジトリ>/tests/render/run.py [--keep] [--judge]
   --keep   組んだデッキを残す（既定は、画像を取ったらゴミ箱に移す）
@@ -12,9 +12,10 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
-K = ROOT / "skills" / "deck-build" / "scripts"
-SAMPLES = ROOT / "skills" / "deck-build" / "samples" / "json"
+K = ROOT / "skills" / "slides-build" / "scripts"
+SAMPLES = ROOT / "skills" / "slides-build" / "samples" / "json"
 sys.path.insert(0, str(K))
+sys.path.insert(0, str(ROOT / "skills" / "deck-practices" / "scripts"))  # gapi.py
 sys.dont_write_bytecode = True
 import gapi  # noqa: E402
 

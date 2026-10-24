@@ -4,7 +4,7 @@
 # スクリプトは、今いるフォルダから上へたどって最初に見つかった factory.toml を読み、そのフォルダをワークスペースとして扱う。
 # 実行のたびに書く記録（lint の記録、dreaming の前回の時刻・報告・写し、コメントを前に取った時刻と見張りの起点）は、ワークスペースの .factory/ に置かれる。
 #
-# - ここに書くもの: 人や組織で変わる値だけ（社名は下の brand。会社のテンプレートの書体と色は、下のテーマのファイルに書く）。見た目の決まり（色の役割・余白・版面）は slides.py と deck-practices/visual.md。
+# - ここに書くもの: 人や組織で変わる値だけ（社名は下の brand。会社のテンプレートの書体と色は、下のテーマのファイルに書く）。見た目の決まり（色の役割・余白・版面）は slides.py と slides-build/visual.md。
 # - 値の形: Google Slides と Drive のフォルダは URL のまま書く（スクリプトが ID を取り出す）。
 # - テーマ: 色・書体・使い分けの description はワークスペースの themes/slides/<名前>.json に書き（組み込みは visual・company）、ここの [slides.templates] には
 #   テーマごとのテンプレートの URL だけを書く（エージェントが slides.py themes で一覧を見て、資料ごとに選ぶ）。URL は template.py <名前> --from-base が書き込む。
@@ -22,7 +22,7 @@ profile = ""  # 使う人の名前・メール・会社・役割・担当の顧�
 quota_project = ""  # gcloud の既定の OAuth クライアントで取ったトークンは、これがないと Slides・Docs で 403。自分の OAuth クライアントなら空でよい
 
 [slides]
-default_theme = "visual"  # 説明で決まらないときのテーマ。テーマは資料ごとに選ぶ（slides.py themes が名前と説明を出す）。切り替えは deck-template の「Choosing the default theme」
+default_theme = "visual"  # 説明で決まらないときのテーマ。テーマは資料ごとに選ぶ（slides.py themes が名前と説明を出す）。切り替えは slides-template の「Choosing the default theme」
 
 [brand]  # 表紙の社名と著作権表示（ドキュメントのフッターも）、ドキュメントの表紙のロゴ。copyright は要る（factory-doctor が見る）
 # company = "アクメ・ジャパン株式会社"  # 表紙の左下。書かなければ置かない
@@ -35,9 +35,9 @@ default_theme = "visual"  # 説明で決まらないときのテーマ。テー�
 # [docs]
 # default_theme = "acme"  # doc.md に theme: を書かないときのテーマ（themes/docs/acme.json）。書かなければ既定（A4）
 
-# ドキュメントのテーマ（版面・見出しの大きさと色・書体）は、ワークスペースの themes/docs/<名前>.json に書く（doc-build の SKILL.md の doc-build-010）。doc.md の頭に theme: <名前>
+# ドキュメントのテーマ（版面・見出しの大きさと色・書体）は、ワークスペースの themes/docs/<名前>.json に書く（スキル docs-build の SKILL.md の docs-write-010）。doc.md の頭に theme: <名前>
 
-[docs.templates]  # ドキュメントのテンプレート（Google Docs）。正本は rules/doc-build/templates/<名前>/doc.md。そのフォルダで docs.py new して URL を書く
+[docs.templates]  # ドキュメントのテンプレート（Google Docs）。正本は rules/docs-build/templates/<名前>/doc.md。そのフォルダで docs.py new して URL を書く
 
 [review]  # レビューの進め方（deck-practices の 5 と 9）。既定のままでよい
 plan_reviewer = "ai"        # 構成を決めたあと、誰が見るか。"ai"（AI がレビューして、そのまま作る）か "human"（人が確かめてから作る）。資料ごとに言われたら、そちらを使う
