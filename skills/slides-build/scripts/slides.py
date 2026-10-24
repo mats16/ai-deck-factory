@@ -23,7 +23,7 @@ usage（資料の build/ で。deck.json か pages.py は今いるフォルダ�
                      [drive] shared_themes と [drive] factory の下の Themes の、[slides.templates] にないテンプレートも候補に出す
   slides.py theme <URL か ID> [<名前>] [--force]   テンプレートかデッキが持つテーマ（マスターの配色・書体・目印）を、ワークスペースの themes/slides/<名前>.json に書く。
                      テンプレートなら [slides.templates] にも書く（共有テーマを使い始めるとき、画面で直した色を戻すとき）
-  slides.py merge <ファイル>...   pages.py の資料で、子が別のファイルに書いたページの関数を pages.py に合わせる（組まない。../../deck-review/SKILL.md の手順 5）
+  slides.py merge <ファイル>...   pages.py の資料で、子が別のファイルに書いたページの関数を pages.py に合わせる（組まない。../../deck-review/prompt_fix.md）
   slides.py --selftest
 テンプレートの管理は template.py。色は下の「色の役割」の名前で渡す。役割の名前はテーマの色（マスターの配色）を指すので、テンプレートを替えると色が変わる。
 見た目の決まりは ../visual.md の 1。"""
@@ -3549,7 +3549,7 @@ def lint_local(path="pages.py", url=None, talk=False, pages=None):
 
 
 def merge(pages, fixes):
-    """[slides-component-014] 子が別のファイル（build/fix_<担当>.py）に書いたページの関数を pages.py に合わせる（../../deck-review/SKILL.md の deck-review-011）。
+    """[slides-component-014] 子が別のファイル（build/fix_<担当>.py）に書いたページの関数を pages.py に合わせる（../../deck-review/prompt_fix.md の deck-review-011）。
     子は pages.py を書かず、親がここで合わせて 1 回だけ組む。同じ名前の関数は置き換え、pages.py にない関数は make の前に足す。import と docstring は読み飛ばす
     （名前は pages.py の import を使う）。make と、関数でない文（定数など）があれば合わせずに止める（共通のものとページの順は親が書く）。2 つのファイルが同じ関数を
     書いても止める。足した関数を make が呼んでいなければ警告する。前の pages.py は pages.py.bak に残す（直して欠陥が増えたら戻すため。あれば上書きせず pages.py.bak1 …）。

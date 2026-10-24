@@ -1,6 +1,6 @@
 # Review prompt (documents)
 
-[deck-review-012] The prompt given to the review child for a Google Docs review (step 3 of `SKILL.md`). For slides, see [prompt_slides.md](prompt_slides.md). Fill in the `<>` and pass it as the Agent tool's prompt. Do not have the child read the slide rules (`../slides-build/visual.md`). They do not apply to documents (body character counts, conclusion bands, the ban on 「です・ます」, and so on).
+[deck-review-012] The prompt given to the review child for a Google Docs review (step 3 of `SKILL.md`; [ask.md](ask.md)). For slides, see [prompt_slides.md](prompt_slides.md). Fill in the `<>` and pass it as the Agent tool's prompt. Do not have the child read the slide rules (`../slides-build/visual.md`). They do not apply to documents (body character counts, conclusion bands, the ban on 「です・ます」, and so on).
 
 When there are many pages and you split and ask in parallel, change it the same way as for slides (a whole-material child and page owners; the top of `prompt_slides.md`). Page owners check only aspect 2's matters within one section and aspect 5's checks on single-page images.
 
@@ -37,7 +37,7 @@ Write all of the above to <findings file>, and in your reply write only the coun
 
 ## Reader test (documents only)
 
-Separately from the defect review, check whether a reader can reach the answers from the document alone (step 3 of `SKILL.md`; modeled on Reader Testing in Anthropic's official doc-coauthoring skill; 1-13 of `Research/deck_research/log/20261009_en_gdocs_generation.md` in the workspace). From the outline's 「聞き手の問い」 and 「読んだあと聞き手ができること」, the main agent makes 5–10 questions the reader is likely to have, and keeps the key points of the answers on hand (do not write them in the prompt). Do not pass the rules or the outline. Like the reader, have the child read only the document (the text and the page images) (in a trial on 2026-10-09, the figures were not visible from the text alone).
+Separately from the defect review, check whether a reader can reach the answers from the document alone (deck-review-004 in [ask.md](ask.md); modeled on Reader Testing in Anthropic's official doc-coauthoring skill; 1-13 of `Research/deck_research/log/20261009_en_gdocs_generation.md` in the workspace). From the outline's 「聞き手の問い」 and 「読んだあと聞き手ができること」, the main agent makes 5–10 questions the reader is likely to have, and keeps the key points of the answers on hand (do not write them in the prompt). Do not pass the rules or the outline. Like the reader, have the child read only the document (the text and the page images) (in a trial on 2026-10-09, the figures were not visible from the text alone).
 
 ```text
 You are <audience (department, role, technical level)> who received this document. Read only the document and answer the questions below. Do not fill in what the document does not say with guesses; answer 「書いていない」.

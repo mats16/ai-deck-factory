@@ -52,7 +52,7 @@ You are the researcher. Today is <YYYY-MM-DD>.
 ## Background
 <the person in [user] profile of factory.toml (company and role)> has Claude Code make materials (Google Slides and Google Docs). Read these first.
 - <workspace>/AGENTS.md
-- <plugin>/skills/deck-practices/ (SKILL.md, content.md), slides-build/visual.md, docs-build/visual.md, and deck-review/SKILL.md
+- <plugin>/skills/deck-practices/ (SKILL.md, content.md), slides-build/visual.md, docs-build/visual.md, and deck-review/ (SKILL.md, ask.md, fix.md)
 - <workspace>/Research/deck_research/state.md and <plugin>/skills/deck-research/sources.md
 
 ## Your theme: <theme>
