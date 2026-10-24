@@ -25,7 +25,7 @@ SPLIT = {  # 中身を場面ごとに分けたプラグインのファイル。�
     "deck-practices/SKILL.md": "deck-practices/SKILL.md・start.md・agents.md・deliver.md・revise.md、slides-build/workflow.md",
     "slides-build/pages.md": "slides-build/pages.md・diagrams.md・commands.md・themes.md・images.md・api.md・legacy.md（前の deck-build/slides.md）",
     "slides-build/SKILL.md": "slides-build/SKILL.md・lint.md、deck-practices/drive.md（前の deck-build/SKILL.md）",
-    "docs-build/SKILL.md": "docs-build/SKILL.md・lint.md・api.md（前の doc-build/SKILL.md）",
+    "docs-build/SKILL.md": "docs-build/SKILL.md・lint.md・api.md・themes.md・templates.md（前の doc-build/SKILL.md）",
     "deck-review/SKILL.md": "deck-review/SKILL.md・ask.md・fix.md・prompt_fix.md、deck-practices/agents.md（子の起こし方）",
     "dreaming/SKILL.md": "dreaming/SKILL.md・run.md・apply.md",
     "slides-template/SKILL.md": "slides-template/SKILL.md・create.md・dark.md・fonts.md",

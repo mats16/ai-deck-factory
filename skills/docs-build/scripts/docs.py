@@ -3,7 +3,7 @@
 資料ごとの build/doc.md（markdown）が中身の正本。頭の front matter に名前・テーマ・テンプレートを書き、本文は markdown で書く（書き方は from_md）。
 markdown で内容を詰め、テンプレートとともに API で組み、直しを繰り返す（doc.py の make(d) から移した）。
 usage（資料の build/ で。doc.md は今いるフォルダのもの）:
-  docs.py themes   テーマ（既定とワークスペースの themes/docs/<名前>.json）の名前と説明。資料ごとに選ぶ（docs-build の SKILL.md の 1.2）
+  docs.py themes   テーマ（既定とワークスペースの themes/docs/<名前>.json）の名前と説明。資料ごとに選ぶ（docs-build の SKILL.md の 1.2。テーマのファイルの書き方は ../themes.md）
   docs.py init <テンプレートの名前>   テンプレート（ワークスペースの rules/docs-build/templates/<名前>/doc.md）を写して doc.md を作る
   docs.py new <Drive のフォルダの URL か ID> <Drive 上の名前>   空の Google Doc を作って組む
   docs.py build <URL か ID> [--force]   組み直す（本文をすべて入れ替える。URL は変わらない）。前に組んだあとに画面で直されているか、
@@ -47,7 +47,7 @@ STYLES = {
     "NORMAL_TEXT": (BODY_PT, False, TEXT, 0, 6, 100),
 }
 # テーマ: doc.md の頭に theme: <名前> と書くと、ワークスペースの themes/docs/<名前>.json の版面・名前付きスタイル・色・書体に入れ替える（from_md・load_theme）。
-# 会社の文書のテンプレートに合わせるもの（docs-build の ../SKILL.md の docs-write-010）なので、プラグインには持たない
+# 会社の文書のテンプレートに合わせるもの（docs-build の ../themes.md の docs-write-010）なので、プラグインには持たない
 TABLE_HEAD = (NAVY, WHITE)  # 表の見出しの行の地と文字の色
 SCALE = 1  # 図の幅は、本文の幅 150 mm で書く。テーマで本文の幅が変わったら、この比で広げる（表は Doc.table が本文の幅に合わせる）
 TIGHT, CODE_LS = 80, 85  # 表の中・図表の題・出典の行間と、コードの行間（%）
@@ -598,9 +598,9 @@ def theme(name):
     if (d := ws_themes()) and (f := d / f"{name}.json").is_file():
         return load_theme(read_theme(f))
     if name in docs_cfg().get("themes", {}):  # 2026-10-19 までの書き方（standard も、書いた値を黙って捨てない）
-        sys.exit(f"テーマ {name} がない（themes/docs/{name}.json）。factory.toml の [docs.themes.{name}] はもう読まない。テーマのファイルに移す（docs-build の ../SKILL.md の docs-write-010）")
+        sys.exit(f"テーマ {name} がない（themes/docs/{name}.json）。factory.toml の [docs.themes.{name}] はもう読まない。テーマのファイルに移す（docs-build の ../themes.md の docs-write-010）")
     if name != STANDARD:
-        sys.exit(f"テーマ {name} がない（themes/docs/{name}.json）。docs.py themes が一覧を出す（docs-build の ../SKILL.md の docs-write-010）")
+        sys.exit(f"テーマ {name} がない（themes/docs/{name}.json）。docs.py themes が一覧を出す（docs-build の ../themes.md の docs-write-010）")
 
 
 def cmd_themes():

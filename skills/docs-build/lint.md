@@ -2,6 +2,20 @@
 
 Open when you read the output of `docs.py check`, or when deciding whether a `要確認` may stay.
 
+## What docs.py check does
+
+1. Writes the `documents.get` JSON to `/tmp/docs_<first 8 chars of the ID>/doc.json`
+2. Writes the text to `text.md` (headings as `#`, each table row joined with ` | `, images as `［画像］`. Passed to reviews)
+3. Runs `lint_gdoc` in `doc_lint.py` on the JSON ("lint (Docs rules)" below)
+4. Saves Drive's PDF export (the pages Google rendered) as `doc.pdf` and page images as `p-N.png` (110 dpi. 910 × 1286 for A4)
+5. `doc_layout.py` measures the layout from line positions in the PDF (`bbox.html` from `pdftotext -bbox-layout`) and the images ("What is measured on images" below)
+6. Prints the fonts used in the PDF (Arial for bullet symbols and numbers is fine, because the API cannot change it)
+7. **Matching doc.md against the built document** (turns the doc.md in the current folder and the built document's JSON into the same one-element-per-line form and compares them. `canon_doc`, `canon_json`): paper and margins, named styles (font, size, bold, color), order and kind of blocks (headings, paragraphs, source lines, quotes, bullet levels and numbering, table size and column widths, cells, figure widths, figure and table titles, code, page breaks, cover), and text, bold, links, and code. Differences are `要修正`. The cause is one of: not rebuilt, edited in the UI, or docs.py's building is broken. Rebuild, or fix docs.py
+8. **Matching against the template** (when the header has `template:`. [templates.md](templates.md)). Missing sections, table columns, cover, theme, and leftover tags and notes are `要修正`; section order and added sections are `要確認`
+9. **Comparing the skeleton with the original document** (when the header has `source:`. Run in the template's folder). Differences are `要確認` (only counts for sections listed in `skeleton_ok:`)
+
+[docs-write-004] If the lint or matching has `要修正`, it returns exit 1. If the doc.md to match against is not in the current folder, it is looked up from the folder that `docs.py build` recorded in the document (`docs_py_src` in Drive's appProperties. A path relative to Documents). So 7–9 run no matter where you run it from, as with `/deck-review`. If it is not found, or the doc.md `name` is not in the document's name, it reports that matching was not done.
+
 ## lint (Docs rules)
 
 The content and sources of the rules are in `visual.md` and `content.md`. They are `lint_gdoc` in `scripts/doc_lint.py`; the text rules shared with slides are in `../deck-practices/scripts/textlint.py`.

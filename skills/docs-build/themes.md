@@ -1,0 +1,22 @@
+# Document themes
+
+Open when you write a theme file to match a company document template, or need the keys of one. Choosing a theme per material is in §1.2 of [SKILL.md](SKILL.md).
+
+[docs-write-010] **Theme:** The default is A4, 10.5pt body, navy headings (visual.md §1). To match a company document template, write the workspace's `themes/docs/<name>.json` (a theme file. The file name is the theme name, alphanumerics and - _), and write `theme: <name>` in the header of doc.md. Match the format to the slide theme files (slides-theme-036 in `../slides-build/themes.md`): the header `apiVersion` (`docs/v1`) and `kind`, and `description`, `font`, `mono`, and `colors` are the same keys (role names in `colors` are also the same as for slides when they mean the same thing). `page`, `margins`, and `styles` are document-only keys. Values not written stay at the default. Unknown keys and roles, and values that cannot be written (colors that are not 6 hex digits, sizes that are not positive, and so on), stop before building with their location (factory-doctor checks with the same function). Color contrast is not checked (to match the colors of company document templates), so when you write colors, check on the images that the text is readable. A doc.md without `theme:` uses `[docs] default_theme` (or the default `standard` if absent). However, if theme files exist and `theme:` is missing, `docs.py new` prints the list and stops (to make you choose. To keep the default, write `theme: standard`). Choose which one to use per material (`docs.py themes` prints names and descriptions. step 5 in `../deck-practices/start.md`). Themes on paper other than A4 (Letter, and so on) do not get the lint findings 「用紙が A4 でない」 or 「1 行の字数が多い」 (A4 themes get 「1 行の字数が多い」 like other A4 documents). `[docs.themes]` in `factory.toml` (the way of writing until 2026-10-19) is not read (factory-doctor reports it as `要修正`).
+```json
+{"apiVersion": "docs/v1", "kind": "theme",
+ "description": "米国の本社に出す文書。英語版のテンプレートに合わせた Letter の版面",
+ "font": "Noto Sans JP", "mono": "Cascadia Mono",
+ "colors": {"HEAD": "4A86E8", "TABLE_HEAD": "F3F3F3", "TABLE_HEAD_TEXT": "303F47"},
+ "page": [215.9, 279.4], "margins": [12.7, 12.7],
+ "styles": {"BODY": {"size": 10}, "H1": {"size": 12, "above": 16, "below": 6},
+            "H2": {"size": 11}, "H3": {"size": 10.5, "color": "303F47", "spacing": 90}}}
+```
+| Key | Content |
+|---|---|
+| `description` | Which materials and audiences it is for, and when not to use it (printed by `docs.py themes`. Same as slides) |
+| `font`, `mono` | Body font and monospace font for code. Allowed are `JP_FONTS` in `../deck-practices/scripts/brand.py` (fonts confirmed to render Japanese) and DM Sans (Japanese falls back to a Gothic font Google chooses. Not confirmed in Docs). For monospace, fonts with ligatures (`LIGATURE_MONO`) are stopped |
+| `colors` | Role → 6 hex digits without `#`. `HEAD` (title and headings. Default `1B3139`), `TEXT` (body. `303F47`), `SUB` (subtitle, figure and table titles, source lines, quotes, footer. `5A6F77`), `RULE` (rules and the quote line. `DCE0E2`), `PANEL` (code background. `EEEDE9`), `RED_TEXT` (`***red bold***`. `CC2B17`), `TABLE_HEAD` and `TABLE_HEAD_TEXT` (background and text of the table header row. `1B3139` and `FFFFFF`). Colors of mermaid diagrams are also taken from here |
+| `page`, `margins` | Paper width and height, and top/bottom and left/right margins (mm) |
+| `styles` | Per named style (`TITLE`, `SUBTITLE`, `H1`, `H2`, `H3`, `BODY`): `size` (pt), `color` (6 digits. If not written, title and headings use `HEAD`, subtitle `SUB`, body `TEXT`), `above` and `below` (space above and below. pt), `spacing` (line spacing in %. Line pitch is "1.88 × font size × %". [api.md](api.md)). Defaults are `STYLES` in `docs.py` |
+If `font` and `mono` are not written, they are Noto Sans JP and Cascadia Mono. The line pitch and character-width estimates stay at the values measured with these 2 fonts (with other fonts, characters per line and page breaks shift). A name not in Google Fonts is silently rendered in another font. When you write one, build a document with that theme and check 「PDF の書体」 in `docs.py check` and the images. The lint's font check in `docs.py check` compares against the font that `docs.py build` recorded in the document (the theme's font at build time). Documents without that record (built with an earlier version), and document JSON passed directly to `lint.py`, are compared against the default font.
