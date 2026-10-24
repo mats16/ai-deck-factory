@@ -11,6 +11,7 @@ Run in the workspace (the folder with `factory.toml`). `migrate.py` changes only
 M=<this skill's folder>/scripts/migrate.py
 python3 $M check                 # what would move and change. Changes nothing
 python3 $M apply                 # backup to .factory/migrate/<time>/, then move and rewrite
+python3 $M relink <P-ID> <rules/ file>|--split   # decide where a ledger proposal goes after the split (from 「要判断」)
 python3 $M rename-id <old> <new> # rename one workspace rule ID everywhere (rules/, AGENTS.md, memory.md, the ledger); only for a mistyped or colliding ID
 ```
 
@@ -25,14 +26,18 @@ python3 $M rename-id <old> <new> # rename one workspace rule ID everywhere (rule
    - For each `ws-` rule listed under the line, `migrate.py` names the plugin file of the rules it refers to. Open that plugin file and check that the rule adds to or overrides that section. If it names nothing, decide from the content.
    - Move the rule line (with its ID) to `rules/<skill>/<that file>`. A rule may stay where it is when its plugin section is still in that file.
    - Keep the rule's ID when you move it: IDs name what a rule is about, not its file (`deck-practices/rules.md` "Rule IDs").
-   - After moving the rules, run `apply` again. Proposals in the ledger that target a split file keep the old `file`, so `ledger.py apply`, `undo`, and `drift` would not find their text; `apply` moves each one to the file that now holds its text (「台帳を合わせた」). `check` and factory-doctor keep reporting the workspace as an earlier version until this is done.
-   - 「要判断: 台帳の P… の文が …」: the proposal's text is in no file or in several (you split it across files, or rewrote it). Read it with `ledger.py pending --status all`. If it is still needed, withdraw it (`ledger.py withdraw`) and propose again per file. An applied proposal can then no longer be undone; say so in the report.
+   - After moving the rules, run `apply` again. Proposals in the ledger that target a split file (still to apply, or applied) keep the old `file`, so `ledger.py apply`, `undo`, and `drift` would not find their text. When the text now sits in exactly one other file, `apply` moves the proposal there (「台帳を合わせた」). Rejected, withdrawn, undone, and sent proposals are left alone.
+   - 「要判断: 台帳の P… の変更先 …」: the destination cannot be read from the text. Decide it, and record the decision with `relink`, because `check` and factory-doctor keep reporting the workspace as an earlier version until every one is decided:
+     - an add proposal not applied yet (no old text): `migrate.py relink <P-ID> <rules/ file>`, the file it should add to (the same file if it still fits there);
+     - a proposal not applied yet whose old text moved: `relink` to the file that now holds that text, or withdraw it with `ledger.py withdraw <P-ID>` if it is no longer needed;
+     - an applied proposal whose text you split across files: `migrate.py relink <P-ID> --split`. It records the split; that proposal can then no longer be undone, and `ledger.py drift` lists it as text that is gone (say both in the report). If its text is in one file, `relink` to that file instead.
 4. **Check again.** Run `check` (it should print 「移すものはない（今の版）」) and `factory-doctor` (`python3 <factory-doctor folder>/scripts/doctor.py --local`).
 5. **Report.** In one message: what moved, the rules you split and where they went, and the backup folder. Tell the user that deleting the backup is their call.
 
 ## Notes
 
 - `apply` and `check` can be run any number of times. Files already in the current form are not changed.
+- `.factory/migrate/relink.json` (applied proposals whose text was in place at migration) and `relink_done.json` (the decisions made with `relink`) are kept next to the backups. Keep them until the overrides are split; the backup folders themselves can be deleted.
 - It does not touch the material folders (`Customers/<customer>/<material>/`, `Internal/`, `Research/`), because they are records of past work. Old IDs and paths in an outline or memo stay as they were; look them up in `scripts/ids_20261024.json` when needed.
 - In the ledger, the fields that hold people's own words (`quote`, `a`, `reason`) are not rewritten, so the user's words stay as said; old IDs or names in them stay too.
 - The ID map is `scripts/ids_20261024.json` (`ids`: old → new plugin ID; `prefixes`: old → new prefix, used for `ws-` IDs and for plugin IDs no longer in the plugin). From now on IDs do not change (`deck-practices/rules.md` "Rule IDs"); if a future version must rename some, it adds another dated map, and `migrate.py` applies the maps in date order.
