@@ -1,6 +1,6 @@
 ---
 name: docs-build
-description: Write Japanese documents (proposals, research reports, explanatory materials, PoC plans) in markdown (build/doc.md), build them in Google Docs with the Docs API, and run the loop of checking and fixing. Covers docs.py (doc.md syntax, mermaid diagrams, theme files, init to start from a template, rebuilding to the same URL, detecting edits made in the UI) and docs.py check (lint, page images and layout, matching doc.md against the built document and the template). The visual rules are visual.md, reading the lint is lint.md, and Docs API pitfalls are api.md. When delivering as Word, export from Google Docs. Always use before you start writing a document and before you deliver it.
+description: Write Japanese documents (proposals, research reports, explanatory materials, PoC plans) in markdown (build/doc.md), build them in Google Docs with docs.py, and check and fix them with docs.py check (lint, page images, matching against the template). When delivering as Word, export from Google Docs. Always use before you start writing a document and before you deliver it.
 ---
 
 # Build and finish Japanese documents in Google Docs
@@ -10,6 +10,8 @@ description: Write Japanese documents (proposals, research reports, explanatory 
 | What you make | Read before you start writing |
 |---|---|
 | Google Docs (default) | This file and [visual.md](visual.md) (the visual rules for documents) |
+| Reading `docs.py check` and lint output | [lint.md](lint.md) |
+| Changing `docs.py`, or a build that fails or looks wrong in an unexpected way (Docs API pitfalls) | [api.md](api.md) |
 
 ```sh
 K=<docs-build folder>/scripts   # the folder that holds this file. From other skills, ../docs-build/scripts relative to that skill's folder. docs.py imports the parts shared with slides (gapi.py, textlint.py, brand.py, sheet.py) from ../deck-practices/scripts

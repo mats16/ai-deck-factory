@@ -1,6 +1,6 @@
 ---
 name: deck-practices
-description: Read first when making or editing materials (decks and documents). Holds the overall flow (11 steps, what each prevents, and when to move on), the working practices that hold at every step (run through without waiting for the user, never change confirmed claims silently, summarizing context and what to re-read), and which file to open in each situation. The steps themselves are in files opened only when needed: start.md (1–5: folder, past materials, sources, agreeing on the structure, plan review), slides-build/workflow.md (6–8 for decks), deliver.md (10–11), agents.md (starting and waiting for child agents), revise.md (requests after delivery), drive.md (placing files on Drive), content.md, materials.md, rules.md. Read when asked 「資料を作って」「構成案を書いて」「このページを直して」, and when the user gives a correction to a material or asks about its content.
+description: Read first when making or editing materials (decks and documents). Holds the overall flow of 11 steps, the working practices that hold at every step, and a table of which file to open in each situation (the steps, content and wording, sources, Drive, child agents, requests after delivery). Read when asked 「資料を作って」「構成案を書いて」「このページを直して」, and when the user gives a correction to a material or asks about its content.
 ---
 
 # Practices for making materials
@@ -68,7 +68,7 @@ Do not wait for skills to be called automatically; open the following file when 
 | Creating or refreshing a customer profile | `customer-profile/SKILL.md` (business, organization, technical setup, engineers' preferences; how it differs from memory) |
 | Gathering sources | `deck-practices/materials.md` (how to use search, meeting records, and internal chat; the `references.md` ledger) |
 | Reusing pages of internal decks | `slides-build/reuse.md` (deciding among the four stages, exporting Google Slides and page images) |
-| Outline and wording | `deck-practices/content.md` (writing by material type, headings, 「文体」 and sources) |
+| Outline and wording | `deck-practices/content.md` (writing by material type, headings, 「文体」 and sources), and the §1 files for the material that its §1 table names (`content_customer.md`, `content_internal.md`, `content_explain.md`) |
 | Writing slides | `slides-build/pages.md` (writing pages [JSON]) and `slides-build/visual.md` (color, placement, font size, Japanese typesetting); `slides-build/diagrams.md` for pages with a free-form diagram, arrows, a Gantt chart, a bar chart, or a gridded diagram; the other files in `slides-build/SKILL.md`'s table (commands, themes, images, legacy decks) when needed |
 | Writing a document | `docs-build/SKILL.md` (writing doc.md and the check loop, templates, Docs API pitfalls) and `docs-build/visual.md` (page area, headings, tables and figures) |
 | Building, checking, delivering | `slides-build/SKILL.md` (three layers of checks, reading `gslides.py check` and lint, deliverables); for documents, `docs-build/SKILL.md` |

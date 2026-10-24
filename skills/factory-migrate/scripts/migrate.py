@@ -26,7 +26,8 @@ SPLIT = {  # 中身を場面ごとに分けたプラグインのファイル。�
     "slides-build/pages.md": "slides-build/pages.md・diagrams.md・commands.md・themes.md・images.md・api.md・legacy.md（前の deck-build/slides.md）",
     "slides-build/SKILL.md": "slides-build/SKILL.md・lint.md、deck-practices/drive.md（前の deck-build/SKILL.md）",
     "docs-build/SKILL.md": "docs-build/SKILL.md・lint.md・api.md（前の doc-build/SKILL.md）",
-    "deck-review/SKILL.md": "deck-review/SKILL.md、deck-practices/agents.md（子の起こし方）"}
+    "deck-review/SKILL.md": "deck-review/SKILL.md、deck-practices/agents.md（子の起こし方）",
+    "deck-practices/content.md": "deck-practices/content.md・content_customer.md・content_internal.md・content_explain.md（§1 の資料の種類ごとの決まり）"}
 B = "A-Za-z0-9_-"  # ID とスキルの名前の前後の区切り（和文は続けて書いてもよいので、英数字だけを見る）
 PATHS = [  # 本文の中のパスとスキルの名前（決まりの ID は先に替えるので、deck-build-005 などはもう残っていない）
     (r"deck-practices/visual_doc\.md", "docs-build/visual.md"), (r"deck-practices/visual\.md", "slides-build/visual.md"),

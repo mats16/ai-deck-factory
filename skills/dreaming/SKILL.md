@@ -1,6 +1,6 @@
 ---
 name: dreaming
-description: Periodically tidies this folder's instructions (AGENTS.md) and skills from conversation logs (modeled on Devin's Dreaming). From Claude Code, Codex, and pi conversations since the last run and the findings in the rule ledger (`.factory/ledger.jsonl`), it picks up user instructions that were never written back into rules and instructions that repeat, finds overlaps, stale text, and broken paths, and measures whether the rules are read. Rule changes drawn from conversations become proposals with a recommendation and wait for the user's reply. Changes not sourced from conversations (adding index entries, cleaning up overlaps and stale text) are applied directly and reported. Once a month it also reruns the deck-research survey. A scheduler (T3 Code, Claude Code Desktop, Omnigent, Codex app, launchd, etc.) calls it with the one line in prompt.txt. Also read it when the user says 「整理して」「dreaming して」「提案を適用して」「推奨どおり」.
+description: Periodically tidies this folder's instructions (AGENTS.md), rules, and skills from conversation logs and the rule ledger (modeled on Devin's Dreaming). Rule changes drawn from conversations become proposals that wait for the user's reply. Safe cleanups (index entries, overlaps, stale text, broken paths) are applied directly and reported. Once a month it also reruns the deck-research survey. A scheduler calls it with the one line in prompt.txt. Also read it when the user says 「整理して」「dreaming して」「提案を適用して」「推奨どおり」.
 ---
 
 # Scheduled cleanup (dreaming)

@@ -10,14 +10,14 @@ You are the reviewer of this material. Look with eyes other than the maker's and
 
 ## What to read
 - Rules: the 「社外秘と顧客の情報」 and 「書き方」 sections of <workspace>/AGENTS.md
-- Rules: <deck-practices folder>/content.md (§0 is what is the same for every material; §6 has 「文体」 and "Sources") and <slides-build folder>/visual.md
+- Rules: <deck-practices folder>/content.md (§0 is what is the same for every material; §6 has 「文体」 and "Sources"), <the §1 files for this material in <deck-practices folder>: content_customer.md or content_internal.md (no audience file for community-facing materials), and content_explain.md if the material explains a tool or a mechanism, reports research or an investigation (including industry trends), explains an article, a talk, or a release, or guides setup or usage>, and <slides-build folder>/visual.md
 - Outline: <outline path>
 - Text: <text path> (below `### Notes:` are the speaker notes)
 - Images: open all p-* in <image folder>
 - Contact sheet: sheet*.png in <image folder> (all pages in 4 columns, with the number above each page)
 
 ## Material type and audience
-<customer-facing, internal, or community>. The audience is <department, role, technical level>. <If the material aligns understanding with the customer (a regular meeting deck, a schedule, a progress list, a summary of action items), add the following sentence; for other materials, delete it: 「顧客と認識を合わせる資料なので、観点 3 で、こちらが紹介・提案しただけのもの（顧客と合意しておらず、顧客が言った・持ち帰ったものでもないもの）が、合意した予定と見分けられない形で本文・表・チャート・宿題に載っていないかも見る（../deck-practices/content.md の deck-content-042）。」>
+<customer-facing, internal, or community>. The audience is <department, role, technical level>. <If the material aligns understanding with the customer (a regular meeting deck, a schedule, a progress list, a summary of action items), add the following sentence; for other materials, delete it: 「顧客と認識を合わせる資料なので、観点 3 で、こちらが紹介・提案しただけのもの（顧客と合意しておらず、顧客が言った・持ち帰ったものでもないもの）が、合意した予定と見分けられない形で本文・表・チャート・宿題に載っていないかも見る（../deck-practices/content_customer.md の deck-content-042）。」>
 
 ## What to check
 List pages that look text-heavy first. For a spoken material such as an LT, also check the body character count from `gslides.py check --talk` (up to 125 characters), and list pages that say two or more things. Consider fixes in this order: rephrase, diagram the relationship, split the page; do not shrink text to fit. Where to keep the basis of a reading material follows "Explanation and evidence in materials meant to be read" in content.md §1. If the outline has a 「書き方の決め」 section, also check that every page (headings, cards, table cells) follows it (it is the writing style decided with the three representative pages, and other pages easily miss it).

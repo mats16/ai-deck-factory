@@ -1,6 +1,6 @@
 ---
 name: vids-build
-description: Make a Google Vids video from a built Google Slides deck, or update one made this way. Beta: Vids has no public editing API, so it uses the editor's internal calls through a signed-in Chrome, kept in scripts/vids_internal.py to be replaced when an API ships. Make a video only when the user explicitly asks 「スライドから動画を作って」「Vids にして」「動画も作り直して」「声を替えて」, also when building or updating a deck; never suggest one. Without asking, only update the video after the deck's speaker notes change; after pages change, make a new one only on request. Every page becomes a scene read by a Conversational voice (Elio by default); an AI avatar only on scenes the user names. Covers setup, `scripts/vids.py create`, `layout`, `update` (only changed scenes), `check`, `voices`, `avatars`, `download`, settings kept outside the editor, and the pitfalls of the internal calls. The script itself is vids-voice.
+description: Make a Google Vids video from a built Google Slides deck, or update one made this way (beta; uses the editor's internal calls through a signed-in Chrome). Make a video only when the user explicitly asks 「スライドから動画を作って」「Vids にして」「動画も作り直して」「声を替えて」, also when building or updating a deck; never suggest one. Without asking, only update the video after the deck's speaker notes change; after pages change, make a new one only on request. Uses a Conversational voice (Elio by default), and an AI avatar only on scenes the user names. The script itself is vids-voice.
 ---
 
 # Build videos from slides (Google Vids, beta)
