@@ -5,7 +5,7 @@ description: Create, refresh, or add to a customer's profile (`Customers/<custom
 
 # Customer profile
 
-Keep, per customer, what the materials assume about the other side in `Customers/<customer>/profile.md`. Read it when starting a customer-facing material (step 2 of "How to start" in `deck-practices`). Recurring materials also start from here every time.
+Keep, per customer, what the materials assume about the other side in `Customers/<customer>/profile.md`. Read it when starting a customer-facing material (step 2 in `deck-practices/start.md`). Recurring materials also start from here every time.
 
 Separate it from the customer memory ("Customer memory" in `deck-practices/rules.md`) by content.
 
@@ -38,7 +38,7 @@ If unsure, decide by the form of the sentence. 「〜である」 (a fact) goes 
 - **One item per line, with (source, date checked) at the end of the line.** The source is the role name in `[sources]` (`crm`, `search`, `chat`, `meetings`, `wiki`), `公開: <URL>`, or `ユーザー` for what you heard from the user.
 - **Do not write:** personal names (write the role, e.g. 「情報システム部の部長」), spend, deal stage, or internal assessments. So they do not leak into customer-facing materials, write them in that material's `社内メモ_*.md` when needed (「社外秘と顧客の情報」 in AGENTS.md).
 - **Do not delete the one-line notice at the top.** It keeps lines taken from internal tools and from the user out of customer-facing materials (「社外秘と顧客の情報」 in AGENTS.md). Keep it inside the file so every agent that reads the profile (the building conversation, review child agents, re-reading after a summary) sees it. If something goes into a material, keep it to what public information supports.
-- [customer-profile-001] **For customers whose counterpart differs by business unit or department, split by domain.** For a customer whose counterpart, cloud, technical strength, and way of deciding differ by department, place a bold one-sentence 「領域ごとの違い」 under the top notice and a per-domain table (counterpart, center of cloud and data, relation to our products, way of deciding and what resonates), and split each of the five sections into 「全社」 and per-domain subheadings. Do not write a preference heard in one domain (technical depth, way of working) on a company-wide line (each meeting has a different department on the other side, and mixing them gives a wrong premise for another department's material).
+- [deck-profile-001] **For customers whose counterpart differs by business unit or department, split by domain.** For a customer whose counterpart, cloud, technical strength, and way of deciding differ by department, place a bold one-sentence 「領域ごとの違い」 under the top notice and a per-domain table (counterpart, center of cloud and data, relation to our products, way of deciding and what resonates), and split each of the five sections into 「全社」 and per-domain subheadings. Do not write a preference heard in one domain (technical depth, way of working) on a company-wide line (each meeting has a different department on the other side, and mixing them gives a wrong premise for another department's material).
 - **Keep it to an amount you read at the start of work.** Do not write details that are not premises for materials (ledger IDs, day-to-day exchanges).
 
 ## Create or refresh

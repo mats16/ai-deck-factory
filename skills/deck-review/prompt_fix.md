@@ -1,16 +1,16 @@
 # Fix prompt (slide page owners)
 
-[prompt_fix-001] The prompt that gives the rows the parent marked 「直す」 to the children that own pages, between rounds of `/deck-review` (deck-review-011 in `SKILL.md`). Slides only (the parent fixes documents). Fill in the `<>` once per owner and ask them at the same time. Use a different child from the review child (do not have review children fix; they do not know what was agreed while building, so they conflict with claims, numbers, order, and corrections).
+[deck-review-015] The prompt that gives the rows the parent marked 「直す」 to the children that own pages, between rounds of `/deck-review` (deck-review-011 in `SKILL.md`). Slides only (the parent fixes documents). Fill in the `<>` once per owner and ask them at the same time. Use a different child from the review child (do not have review children fix; they do not know what was agreed while building, so they conflict with claims, numbers, order, and corrections).
 
 - `<your rows>` are the rows of the step 4 table rewritten as `p<ページ> | <ページのファイル> | <何が起きているか> | <直し方>`. The parent decides and writes the fix (also when adding a cross-page fix to a child's rows, write the fix the parent decided).
-- Assign owners by page file (`build/p<number>.json`; slides-031 in `../deck-build/slides.md`). The child edits its files in place. For pages.py decks, ask with the prompt in "When the deck uses pages.py" below.
+- Assign owners by page file (`build/p<number>.json`; slides-pages-031 in `../slides-build/pages.md`). The child edits its files in place. For pages.py decks, ask with the prompt in "When the deck uses pages.py" below.
 
 ```text
 You fix slides. Fix only the rows under "Your rows", editing your page files (<your files, e.g. <build>/p05.json, <build>/p06.json>) in place. Do not write other page files, deck.json, or the outline. Do not build (do not run slides.py build or new, or gslides.py).
 
 ## What to read
-- Rules: <workspace>/AGENTS.md, and deck-practices/visual.md and deck-build/slides.md under <workspace>/rules/ (if present; they take priority over the plugin files of the same name)
-- Rules: <deck-practices folder>/visual.md, and slides-034 (writing JSON pages) and "4. Laying out shapes and text" in <deck-build folder>/slides.md
+- Rules: <workspace>/AGENTS.md, and slides-build/visual.md and slides-build/pages.md under <workspace>/rules/ (if present; they take priority over the plugin files of the same name)
+- Rules: <slides-build folder>/visual.md, and <slides-build folder>/pages.md (writing JSON pages, and "Laying out shapes and text")
 - Outline: <outline path> (the agreed claims, numbers, and order)
 - Corrections: the output of `python3 <deck-practices folder>/scripts/ledger.py list --deck <material folder>` (the corrections received from the user on this material; run it in <workspace>)
 - Images of your pages: <p-05.png etc.> in <image folder> (drawn by Google before the fix)
@@ -20,9 +20,9 @@ You fix slides. Fix only the rows under "Your rows", editing your page files (<y
 
 ## How to fix
 - Fix only your files.
-- Do not shrink text to fit (consider rephrasing, then a diagram). Use the JSON components (slides-034).
+- Do not shrink text to fit (consider rephrasing, then a diagram). Use the JSON components (slides-pages-034).
 - Return the following rows without fixing them: ones that conflict with the outline's claims, numbers, or order or with the corrections, ones that change a heading or what the page says, ones that add or split pages, ones that cannot be fixed without touching anything outside your files (other pages, deck.json), and ones whose fix conflicts with a rule. Do not decide them yourself.
-- After writing, run `python3 <deck-build folder>/scripts/slides.py lint <your file>` in <build> for each file, and confirm that it does not stop on a JSON error and that `要修正` is 0 (this lints locally without building; errors and findings come out with their location).
+- After writing, run `python3 <slides-build folder>/scripts/slides.py lint <your file>` in <build> for each file, and confirm that it does not stop on a JSON error and that `要修正` is 0 (this lints locally without building; errors and findings come out with their location).
 
 ## How to reply
 In your reply, write one line each in the following form. Write nothing else.
@@ -32,14 +32,14 @@ In your reply, write one line each in the following form. Write nothing else.
 
 ## When the deck uses pages.py
 
-For decks made earlier with pages.py, assign owners by page function (slides-030 in `../deck-build/slides.md`), and make the second field of `<your rows>` the function name. Give `<owner>` a short name such as `a` or `b`, and have the child write to `<build>/fix_<owner>.py` (the parent merges with `slides.py merge`).
+For decks made earlier with pages.py, assign owners by page function (slides-legacy-030 in `../slides-build/legacy.md`), and make the second field of `<your rows>` the function name. Give `<owner>` a short name such as `a` or `b`, and have the child write to `<build>/fix_<owner>.py` (the parent merges with `slides.py merge`).
 
 ```text
 You fix slides. Fix only the rows under "Your rows", and write the fixed page functions to <build>/fix_<owner>.py. Do not write pages.py, the outline, or any other file. Do not build (do not run slides.py or gslides.py).
 
 ## What to read
-- Rules: <workspace>/AGENTS.md, and deck-practices/visual.md and deck-build/slides.md under <workspace>/rules/ (if present; they take priority over the plugin files of the same name)
-- Rules: <deck-practices folder>/visual.md, and "Writing pages.py" in §2 and "4. Laying out shapes and text" in <deck-build folder>/slides.md
+- Rules: <workspace>/AGENTS.md, and slides-build/visual.md and slides-build/pages.md under <workspace>/rules/ (if present; they take priority over the plugin files of the same name)
+- Rules: <slides-build folder>/visual.md, and "Writing pages.py" in <slides-build folder>/legacy.md and "Laying out shapes and text" in <slides-build folder>/pages.md
 - Outline: <outline path> (the agreed claims, numbers, and order)
 - Corrections: the output of `python3 <deck-practices folder>/scripts/ledger.py list --deck <material folder>` (the corrections received from the user on this material; run it in <workspace>)
 - Current pages.py: <build>/pages.py (read only; use the shared functions, constants, and imports found here)

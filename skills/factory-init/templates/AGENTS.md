@@ -7,7 +7,7 @@ AI Deck Factory（プラグイン）で、スライドとドキュメントを�
 ## 決まりの優先
 
 - **このワークスペースの決まりが、プラグインのスキルより優先する。** ワークスペースの決まりは、このファイルと `rules/<スキル>/<ファイル>`（プラグインの同じパスのファイルへの足しと上書き）。食い違うときは、こちらに従う。
-- **このワークスペースは、やり取りで育てる 1 つのプロダクト。** 修正の指示は、決まり（このファイルと `rules/`）と点検（`rules/deck-build/checks.py`）に戻す。プラグインの入った場所は書き換えない（入れ直すと消える）。
+- **このワークスペースは、やり取りで育てる 1 つのプロダクト。** 修正の指示は、決まり（このファイルと `rules/`）と点検（`rules/slides-build/checks.py`・`rules/docs-build/checks.py`）に戻す。プラグインの入った場所は書き換えない（入れ直すと消える）。
 - **大元を直すべきものは Issue にする。** ほかの人にも効くものは、dreaming が「プラグインに上げる」提案にし、スキル `factory-kaizen` で過去の資料で確かめてから Issue を出す（スキル `deck-practices` の `rules.md` の「Rule layers」）。
 
 ## 基本方針
@@ -15,8 +15,8 @@ AI Deck Factory（プラグイン）で、スライドとドキュメントを�
 - **日本語で作る。** 英語でと言われたときだけ英語にする（本文、スピーカーノート、ファイル名まで）。
 - **車輪の再発明をしない。** 作る前に社内の既存資料を探して、使えるものは積極的に流用する。ページや図だけでなく、メッセージング（製品の位置づけ、言い回し、用語の訳）も社内の資料にそろえる。
 - **顧客の情報は、会議の記録と社内のチャットから取る。** 顧客との会議のほか、営業との事前の打ち合わせも、相手と経緯を知るのに役に立つ（道具の使い方は `deck-practices` の `materials.md`）。
-- **スライドは Google Slides を Slides API で、ドキュメントは Google Docs を Docs API で直接組む。** スライドは `deck-build` の `slides.py`、ドキュメントは `doc-build` の `docs.py` で組む。pptx・docx は作らない。Word が要るときは Google Docs から書き出す。
-- **納品は Google Drive の URL で渡し、確認を頼む。** PDF は作らない（`deck-build` の SKILL.md の「Deliverables」）。
+- **スライドは Google Slides を Slides API で、ドキュメントは Google Docs を Docs API で直接組む。** スライドは `slides-build` の `slides.py`、ドキュメントは `docs-build` の `docs.py` で組む。pptx・docx は作らない。Word が要るときは Google Docs から書き出す。
+- **納品は Google Drive の URL で渡し、確認を頼む。** PDF は作らない（`slides-build` の SKILL.md の「Deliverables」）。
 - **サブエージェントを呼ぶときは、必ずモデルを指定し、原則メインと同じモデルにする。** 省くと、会社の設定や既定値で別のモデルになる。Claude Code ではメインと同じ別名（Opus なら `opus`）を渡す。
 - **環境を確かめるときは `factory-doctor`、ワークスペースを作るときは `factory-init`。** 401・403 や、スクリプトが設定を見つけられないときも `factory-doctor` から始める。
 
@@ -33,10 +33,10 @@ AI Deck Factory（プラグイン）で、スライドとドキュメントを�
 
 ## 資料を作る・直すとき
 
-「〇〇の資料を作って」「このページを直して」と言われたら、作業に入る前にスキル `deck-practices` の SKILL.md を開き、「Overall flow」と「How to start」の順に進める（スライドもドキュメントも同じ）。場面ごとに開くファイルは、同じ SKILL.md の「What to read when」の表。開く前から、次の 2 つは守る。
+「〇〇の資料を作って」「このページを直して」と言われたら、作業に入る前にスキル `deck-practices` の SKILL.md を開き、「Overall flow」の順に、「Where each step is」の表のファイルを開いて進める（スライドもドキュメントも同じ）。場面ごとに開くファイルは、同じ SKILL.md の「What to read when」の表。開く前から、次の 2 つは守る。
 
 - 作り始める前に、資料の種類・聞き手・聞き手の問い・読んだあと聞き手ができることをユーザーに確かめる（依頼から書けても確かめる）。
-- 新しく作った資料は、ユーザーに返す前に、スキル `deck-review` で全体をレビューする。返したあとの直しと問いは、`deck-practices` の SKILL.md の「Requests after delivery」で、どこまで確かめるかを決める。
+- 新しく作った資料は、ユーザーに返す前に、スキル `deck-review` で全体をレビューする。返したあとの直しと問いは、`deck-practices/revise.md`（Requests after delivery）で、どこまで確かめるかを決める。
 
 ### 修正の指示
 
@@ -52,7 +52,7 @@ AI Deck Factory（プラグイン）で、スライドとドキュメントを�
 
 - 先に `grep -rln <語> Research/ references_index.md` で前の調査を探す。あれば読み、足りないところだけ調べて同じファイルに足す（末尾の「更新」に日付と変わったこと）。
 - 書くこと: 依頼（ユーザーの言葉のまま）、結論（冒頭に数行）、根拠と出典（URL と確かめた日）、確かめたことと推測の区別、未確認のこと。社外秘が入るなら冒頭に【社内】と書く。
-- **書いたら・足したら、Google Drive に写す。** `python3 <スキル deck-build のフォルダ>/scripts/drive_put.py research Research/<内容>_<YYYYMMDD>.md`。Google Docs に変えて、`factory.toml` の `drive.factory` の下の `Research`（なければ作る）に上げる。同じ名前があれば上書きし、URL は変わらない。初めて上げたら、`references_index.md` の「Google Drive の置き場所」の `Research` の行（なければ足す）の下に `- 上げた: Research/<内容>_<YYYYMMDD>.md → [<YYYYMMDD>_<内容>](URL)（初めて上げた日）` を足す。写しは控えと、人がブラウザで読むためのもの。元はこのフォルダの md で、探すのも読むのもこちらでする。Drive の写しは直さず、コメントも付けない（上げ直すと、直しは消え、コメントは付け先を失う）。
+- **書いたら・足したら、Google Drive に写す。** `python3 <スキル deck-practices のフォルダ>/scripts/drive_put.py research Research/<内容>_<YYYYMMDD>.md`。Google Docs に変えて、`factory.toml` の `drive.factory` の下の `Research`（なければ作る）に上げる。同じ名前があれば上書きし、URL は変わらない。初めて上げたら、`references_index.md` の「Google Drive の置き場所」の `Research` の行（なければ足す）の下に `- 上げた: Research/<内容>_<YYYYMMDD>.md → [<YYYYMMDD>_<内容>](URL)（初めて上げた日）` を足す。写しは控えと、人がブラウザで読むためのもの。元はこのフォルダの md で、探すのも読むのもこちらでする。Drive の写しは直さず、コメントも付けない（上げ直すと、直しは消え、コメントは付け先を失う）。
 - ある資料のための調べものは、`Research/` ではなく、その資料のフォルダ（`references.md`・`社内メモ_*.md`）に書く。出典は `refs.py add` で `references.md` に 1 行ずつ足し、ページに出す事実は構成案の「出典の表」に、出典の ID と一緒に書く（deck-practices の materials.md の "Ledger"）。資料に使えそうな出典は `references_index.md` にも足す。
 
 ## 社外秘と顧客の情報
@@ -80,7 +80,7 @@ Internal/<内容>_<YYYYMM か YYYYMMDD>/           … 社内向けの資料（�
 Research/<内容>_<YYYYMMDD>.md                    … 調べもの
 Research/deck_research/                           … deck-research の調べ直しの記録（state.md・log/）
 rules/<スキル>/<ファイル>                         … このワークスペースの決まり（プラグインの同じファイルへの足しと上書き）
-rules/deck-build/checks.py                        … このワークスペースの点検（lint が読み込む）
+rules/slides-build/checks.py・rules/docs-build/checks.py … このワークスペースの点検（スライドとドキュメントの lint が読み込む）
 themes/slides/<名前>.json                         … スライドのテーマ（色・書体・表紙と扉のレイアウト。テンプレートの URL は factory.toml の [slides.templates]）
 assets/                                           … 自分だけの画像（ページの JSON の "src": "asset:<名前>" が先に探す）
 .factory/                                         … スクリプトが書く記録（lint・dreaming・コメントの見張り）と、顧客の profile の前の版。手で直さない

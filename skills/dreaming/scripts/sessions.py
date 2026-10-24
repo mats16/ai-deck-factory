@@ -11,10 +11,12 @@ from pathlib import Path
 ROOT = next((str(d) for d in (Path.cwd(), *Path.cwd().parents) if (d / "factory.toml").is_file()), os.getcwd())  # ワークスペース（今いるフォルダから上へ、最初の factory.toml のフォルダ）
 AREAS = ("customers", "internal", "research", ".agents")
 RULE = re.compile(r"skills/([\w-]+/[\w./-]+\.(?:md|py|sh))|(AGENTS\.md|references_index\.md)|(?<![\w-])(rules/[\w-]+/[\w./-]+\.md)")  # 最後はワークスペースの rules/（rules/ を付けたまま数え、プラグインのファイルと分ける）
-TABLE = ("deck-practices/SKILL.md", "deck-build/slides.md", "deck-practices/visual.md", "deck-practices/content.md", "doc-build/SKILL.md",
-         "deck-practices/visual_doc.md", "doc-build/docx.md", "deck-build/docx.md",
+TABLE = ("deck-practices/SKILL.md", "deck-practices/start.md", "slides-build/SKILL.md", "slides-build/pages.md", "slides-build/workflow.md", "slides-build/visual.md",
+         "slides-build/commands.md", "slides-build/lint.md", "deck-practices/content.md", "docs-build/SKILL.md", "docs-build/visual.md", "docs-build/lint.md",
+         "deck-build/slides.md", "deck-practices/visual.md", "doc-build/SKILL.md", "deck-practices/visual_doc.md", "doc-build/docx.md", "deck-build/docx.md",
          "office-jp/slides.md", "office-jp/docx.md")  # 2026-10-07 に pptx.md から slides.md へ。office-jp は 2026-10-08 に deck-build と改名した。
-# docx.md は 2026-10-09 に deck-build から doc-build へ移した（前の会話の記録のため、前の名前も残す）
+# docx.md は 2026-10-09 に deck-build から doc-build へ移した。2026-10-24 に deck-build を slides-build、doc-build を docs-build と改め、
+# visual.md を slides-build へ、visual_doc.md を docs-build/visual.md へ移し、slides.md を pages.md などに分けた（前の会話の記録のため、前の名前も残す）
 SKIP = ("<", "# AGENTS.md instructions", "Another Claude session sent a message", "Base directory for this skill",
         "This session is being continued", "Caveat:", "Delegated task ")  # 最後は、任せた仕事が終わったという T3 Code の知らせ
 
@@ -480,12 +482,12 @@ def selftest_decks():
 
 
 def selftest():
-    assert rules("cat ~/ws/rules/deck-practices/visual.md ~/p/skills/deck-practices/visual.md AGENTS.md") == ["rules/deck-practices/visual.md", "deck-practices/visual.md", "AGENTS.md"]
+    assert rules("cat ~/ws/rules/slides-build/visual.md ~/p/skills/slides-build/visual.md AGENTS.md") == ["rules/slides-build/visual.md", "slides-build/visual.md", "AGENTS.md"]
     import tempfile
     from pathlib import Path
     root = "/x/Documents"
-    rule = root + "/.agents/skills/deck-practices/visual.md"
-    check = root + "/.agents/skills/deck-build/scripts/check.sh"
+    rule = root + "/.agents/skills/slides-build/visual.md"
+    check = root + "/.agents/skills/slides-build/scripts/check.sh"
     selftest_decks()
     s = Session("claude", "abc", "test")
     s.tool_input("Bash", {"command": f'rg check.sh notes.md; echo "{rule}"'}, "mention")
@@ -496,10 +498,10 @@ def selftest():
     assert not s.opened
     s.tool_input("Read", {"file_path": rule}, "read")
     s.tool_result("read", "rules", False)
-    assert s.opened["deck-practices/visual.md"] == 1
+    assert s.opened["slides-build/visual.md"] == 1
     s.tool_input("Read", {"file_path": rule}, "read2")
     s.tool_result("read2", "403 Permission denied のときは…（規則の本文）", False)
-    assert s.opened["deck-practices/visual.md"] == 2  # 中身に失敗の言葉があっても、Read の成功は読めたと数える
+    assert s.opened["slides-build/visual.md"] == 2  # 中身に失敗の言葉があっても、Read の成功は読めたと数える
     s.tool_input("Skill", {"skill": "deck-practices"}, "skill")
     s.tool_result("skill", "Launching skill: deck-practices", False)
     assert s.opened["deck-practices/SKILL.md"] == 1  # スキルとして呼んだものも読んだと数える
@@ -511,10 +513,10 @@ def selftest():
     assert s.built
     assert shell_evidence(f'cat {check} | head -40')[1] == 0
     assert shell_evidence(f'rg {rule} {check} a.pptx')[0:2] == ([], 0)
-    assert shell_evidence(f'K={root}/.agents/skills/deck-build/scripts; F="a.pptx"; $K/check.sh "$F"')[1] == 1
-    assert shell_evidence("python3 ~/Documents/.agents/skills/deck-build/scripts/docs.py check https://docs.google.com/document/d/x/edit")[1] == 1
+    assert shell_evidence(f'K={root}/.agents/skills/slides-build/scripts; F="a.pptx"; $K/check.sh "$F"')[1] == 1
+    assert shell_evidence("python3 ~/Documents/.agents/skills/docs-build/scripts/docs.py check https://docs.google.com/document/d/x/edit")[1] == 1
     assert shell_evidence(f'python3 - <<EOF\nprint("cat {rule}")\nEOF')[0] == []
-    gs = root + "/.agents/skills/deck-build/scripts/gslides.py"
+    gs = root + "/.agents/skills/slides-build/scripts/gslides.py"
     assert shell_evidence(f'python3 {gs} check https://docs.google.com/presentation/d/x/edit')[1] == 1
     assert shell_evidence(f'python3 {gs} pages https://docs.google.com/presentation/d/x/edit')[1] == 0
     pipe = Session("claude", "pipeline", "test")
@@ -536,7 +538,7 @@ def selftest():
     assert not c.opened
     c.tool_input("exec", js, "nested2")
     c.tool_result("nested2", [{"text": json.dumps({"exit_code": 0, "output": "rule"})}], None)
-    assert c.opened["deck-practices/visual.md"] == 1
+    assert c.opened["slides-build/visual.md"] == 1
     c.tool_input("exec_command", {"cmd": check + " a.docx"}, "running")
     c.tool_result("running", json.dumps({"session_id": 123, "exit_code": None, "output": "running"}))
     assert not c.built
@@ -566,7 +568,7 @@ def selftest():
         ]
         (folder / 'abc.jsonl').write_text('\n'.join(json.dumps(x, ensure_ascii=False) for x in rows))
         [a] = list(claude_sessions(root, '2026-10-06T00:00:00Z', home))
-        assert a.built and a.opened['deck-practices/visual.md'] == 1 and a.title == '見本'
+        assert a.built and a.opened['slides-build/visual.md'] == 1 and a.title == '見本'
         assert [t for _, t in a.said] == ['文字をもっと大きく', '矢印がずれている']
         assert a.md(root).count("（確認のあと）") == 1 and "（確認のあと）: 「矢印がずれている」" in a.md(root)  # 確認が通ったあとの発言だけに印
         assert "- ユーザー 2026-10-06T02:00:00Z（確認のあと）" in a.md(root)  # 時刻は秒まで出す（--at に渡す）
@@ -587,7 +589,7 @@ def selftest():
             rows.append({"type": "response_item", "timestamp": ts, "payload": payload})
         (folder / 'rollout-test.jsonl').write_text('\n'.join(json.dumps(x) for x in rows))
         [a] = list(codex_sessions(root, '2026-10-06T00:00:00Z', home))
-        assert not a.built and a.opened['deck-practices/visual.md'] == 1 and a.errors
+        assert not a.built and a.opened['slides-build/visual.md'] == 1 and a.errors
         rows[0]["payload"]["thread_source"] = "guardian_review"
         (folder / 'rollout-guardian.jsonl').write_text('\n'.join(json.dumps(x) for x in rows))
         assert len(list(codex_sessions(root, '2026-10-06T00:00:00Z', home))) == 1  # 承認の審査の会話は数えない
@@ -605,7 +607,7 @@ def selftest():
         rows[0] = {"type": "session", "id": "q", "timestamp": "2026-10-06T03:00:00Z", "cwd": root, "parentSession": str(folder / 'p.jsonl')}
         (folder / 'q.jsonl').write_text('\n'.join(json.dumps(x, ensure_ascii=False) for x in rows + [say("user", "続き", "2026-10-06T03:00:01Z")]))
         p, q = sorted(pi_sessions(root, '2026-10-06T00:00:00Z', home), key=lambda x: x.sid)
-        assert p.built and p.opened['deck-practices/visual.md'] == 1 and p.title == '見本' and [t for _, t in p.said] == ['資料を作って']
+        assert p.built and p.opened['slides-build/visual.md'] == 1 and p.title == '見本' and [t for _, t in p.said] == ['資料を作って']
         assert [t for _, t in q.said] == ['続き'] and not q.opened  # /fork の会話は、元の会話から写した行を数えない
         assert is_delegated([(ts, 'Act as the review sub-agent for this task. 日本語で')]) and not is_delegated(p.said)
     print("selftest ok")

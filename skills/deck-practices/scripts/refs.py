@@ -180,7 +180,7 @@ def fetch(t):
     """出典の今の更新日（と名前）。取れなければ {}。止まらない（網がない・認証がない・サイトが拒む）。"""
     with contextlib.suppress(Exception, SystemExit):
         if m := GDOC.search(t):
-            sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "deck-build" / "scripts"))
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
             import gapi
             f = gapi.request("GET", f"https://www.googleapis.com/drive/v3/files/{m.group(1)}?supportsAllDrives=true&fields=name,modifiedTime")
             return {"updated": f["modifiedTime"][:10], "name": f["name"]}

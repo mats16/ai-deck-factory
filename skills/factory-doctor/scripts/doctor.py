@@ -7,7 +7,11 @@ from pathlib import Path
 
 SKILLS = Path(__file__).resolve().parents[2]  # プラグインの skills/
 sys.dont_write_bytecode = True
-sys.path.insert(0, str(SKILLS / "deck-build" / "scripts"))
+sys.path.insert(0, str(SKILLS / "deck-practices" / "scripts"))
+sys.path.insert(0, str(SKILLS / "slides-build" / "scripts"))
+sys.path.insert(0, str(SKILLS / "docs-build" / "scripts"))
+sys.path.insert(0, str(SKILLS / "factory-migrate" / "scripts"))
+import migrate  # noqa: E402  前の版のワークスペースか（factory-migrate）
 
 
 def find_ws(start):
@@ -44,7 +48,9 @@ def check(ws, local=False):
     if "人がレビューするかも選んでもらう" in agents:  # 2026-10-13 までの雛形
         warn("AGENTS.md の方針のレビュー", "前の雛形の「人がレビューするかも選んでもらう」が残っている。ワークスペースの決まりが優先するので、factory.toml の [review] plan_reviewer が効かず、資料ごとに聞く。factory-init の雛形の今の文（plan_reviewer に従う）に替える")
     if "- ユーザーに返す前に、スキル `deck-review` で全体をレビューする。" in agents:  # 2026-10-19 までの雛形
-        warn("AGENTS.md の返したあとの直し", "前の雛形の「ユーザーに返す前に、スキル deck-review で全体をレビューする」が残っている。ワークスペースの決まりが優先するので、返したあとの小さな直しや問いでも全体のレビューを回す。factory-init の雛形の今の文（新しく作った資料は deck-review、返したあとは deck-practices の「Requests after delivery」）に替える")
+        warn("AGENTS.md の返したあとの直し", "前の雛形の「ユーザーに返す前に、スキル deck-review で全体をレビューする」が残っている。ワークスペースの決まりが優先するので、返したあとの小さな直しや問いでも全体のレビューを回す。factory-init の雛形の今の文（新しく作った資料は deck-review、返したあとは deck-practices/revise.md）に替える")
+    if old := migrate.needs(root):  # 前の名前の rules/ は読まれず、前の ID は台帳とつながらない
+        ng("前の版のワークスペース", f"factory-migrate で今の版へ移す（スキルの名前・ファイルの分け方・決まりの ID を 2026-10-24 に変えた）: {', '.join(old[:5])}" + (f" ほか {len(old) - 5} 件" if len(old) > 5 else ""))
     if cfg.get("factory", {}).get("source"):  # 2026-10-14 まで、factory-kaizen が worktree を作る checkout
         warn("factory.source", "使わなくなった（factory-kaizen は .factory/kaizen/ に自分で clone する）。factory.toml から消す")
     names = sorted(p.parent.name for p in SKILLS.glob("*/SKILL.md"))
@@ -58,7 +64,7 @@ def check(ws, local=False):
     g, sl, dr = cfg.get("google", {}), cfg.get("slides", {}), cfg.get("drive", {})
     if not g.get("quota_project"):
         warn("google.quota_project", "空。gcloud の既定の OAuth クライアントで取ったトークンなら、Slides・Docs が 403 になる")
-    from lint import COPYRIGHT_FOOTER  # 9pt で通す著作権表示の形（slides.py が全ページに書く）
+    from brand import COPYRIGHT_FOOTER  # 9pt で通す著作権表示の形（slides.py が全ページに書く）
     import slides  # 仮の著作権表示（PLACEHOLDER_COPYRIGHT。need_brand と同じ）と、テーマのファイルの読み方（read_theme）
     brand = cfg.get("brand", {})
     marks = [("brand.copyright", brand.get("copyright", ""))]  # テーマの copyright は、そのテーマのデッキで [brand] の代わりに書く（slides.py の use_theme）
@@ -90,7 +96,7 @@ def check(ws, local=False):
     theme, temps = sl.get("default_theme", "visual"), {k: v for k, v in sl.get("templates", {}).items() if v}
     if old := sl.get("themes"):  # 2026-10-16 までの書き方
         ng("slides.themes", f"{', '.join(old)} はプラグインが読まない。テーマはワークスペースの themes/slides/<名前>.json（kind theme。色は colors の下に同じ名前で書く）に、"
-                            "テンプレートの url は [slides.templates] の「<名前> = \"<url>\"」に移して消す（テンプレートのある名前は slides.py theme <url> でも写せる。../../deck-build/slides.md の 3）")
+                            "テンプレートの url は [slides.templates] の「<名前> = \"<url>\"」に移して消す（テンプレートのある名前は slides.py theme <url> でも写せる。../../slides-build/themes.md）")
     if "base_template" in sl:  # 2026-10-14 までの書き方
         ng("slides の base", "slides.base_template を消す。元のテンプレートは factory.toml に持たず、template.py <テーマ> --from-base <元の URL> で渡す（渡さなければ白紙の pptx から作る）")
     if sl.get("template_folder"):  # 2026-10-12 までの書き方
@@ -105,7 +111,7 @@ def check(ws, local=False):
         warn("テーマの説明", f"{', '.join(no_desc)} に description がない。エージェントが資料ごとにテーマを選べない（themes/slides/<名前>.json の description に、どの資料・聞き手に使うかを書く）")
     if old := docs.get("themes"):  # 2026-10-19 までの書き方
         ng("docs.themes", f"{', '.join(old)} はプラグインが読まない。ワークスペースの themes/docs/<名前>.json（kind theme。見出しの大きさは styles、色は colors）に移して消す"
-                          "（../../doc-build/SKILL.md の doc-build-010）")
+                          "（../../docs-build/SKILL.md の docs-write-010）")
     if bad := [n for n, t in doc_themes.items() if not t.get("description")]:
         warn("ドキュメントのテーマの説明", f"{', '.join(bad)} に description がない。エージェントが資料ごとにテーマを選べない（themes/docs/<名前>.json の description に書く）")
     if (d := docs.get("default_theme")) and d not in doc_themes and d != "standard":  # standard は組み込み（docs.py の STANDARD）
@@ -177,8 +183,8 @@ def selftest():
         kinds = lambda: {n: k for k, n, _ in check(Path(tmp), local=True)}
         assert kinds()["factory.toml"] == "要修正"
         subprocess.run([sys.executable, str(SKILLS / "factory-init" / "scripts" / "init.py"), tmp], check=True, capture_output=True)
-        (Path(tmp) / ".agents" / "skills" / "deck-build").mkdir(parents=True)
-        (Path(tmp) / ".agents" / "skills" / "deck-build" / "SKILL.md").write_text("x")
+        (Path(tmp) / ".agents" / "skills" / "slides-build").mkdir(parents=True)
+        (Path(tmp) / ".agents" / "skills" / "slides-build" / "SKILL.md").write_text("x")
         k = kinds()
         assert k["AGENTS.md"] == "OK" and k["スキルの重なり"] == "要確認" and k["slides.templates"] == "要確認" and k["drive.customers"] == "要確認"
         (Path(tmp) / "Customers" / "acme").mkdir(parents=True, exist_ok=True)
@@ -190,7 +196,11 @@ def selftest():
         (Path(tmp) / "Customers" / "acme" / "CLAUDE.md").rename(Path(tmp) / "Customers" / "acme" / "memory.md")
         assert "顧客の memory" not in kinds()
         agents = Path(tmp) / "AGENTS.md"
-        assert "AGENTS.md の方針のレビュー" not in kinds()  # 今の雛形
+        assert "AGENTS.md の方針のレビュー" not in kinds() and "前の版のワークスペース" not in kinds()  # 今の雛形
+        (Path(tmp) / "rules" / "deck-build").mkdir()
+        (Path(tmp) / "rules" / "deck-build" / "checks.py").write_text("x")
+        assert kinds()["前の版のワークスペース"] == "要修正"
+        shutil.rmtree(Path(tmp) / "rules" / "deck-build")
         agents.write_text(agents.read_text() + "\n同じ問いで、方針を決めたあとを AI のレビューでそのまま作るか、人がレビューするかも選んでもらう。\n")
         assert kinds()["AGENTS.md の方針のレビュー"] == "要確認"
         assert "AGENTS.md の返したあとの直し" not in kinds()  # 今の雛形
