@@ -1,6 +1,6 @@
 ---
 name: deck-review
-description: Full review of a material (Google Slides or Google Docs) before returning it to the user. Uses lint, a contact sheet of all pages, and a separate subagent's eyes to find cross-page defects and single-page defects, verifies the findings, fixes and rebuilds what may be fixed, and asks about anything that changes a claim, number, or order. Checks and fixes during building are done with slides-build's gslides.py check and docs-build's docs.py check; this one runs before delivery. The review prompts are per-format files (prompt_slides.md, prompt_doc.md). `/deck-review <URL>`. Use when asked 「レビューして」「見直して」「渡す前に確認して」, and always before returning a newly made material to the user. For fixes after delivery, run only the scope decided in deck-practices/revise.md.
+description: Full review of a material (Google Slides or Google Docs) before returning it to the user. Uses lint, a contact sheet of all pages, and a separate subagent's eyes, verifies the findings, fixes and rebuilds what may be fixed, and asks about anything that changes a claim, number, or order. `/deck-review <URL>`. Use when asked 「レビューして」「見直して」「渡す前に確認して」, and always before returning a newly made material to the user. Checks during building are slides-build and docs-build. For fixes after delivery, run only the scope decided in deck-practices/revise.md.
 ---
 
 # Full review before delivery

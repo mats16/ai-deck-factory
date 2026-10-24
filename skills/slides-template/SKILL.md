@@ -1,6 +1,6 @@
 ---
 name: slides-template
-description: Create or adjust an AI Deck Factory template (theme) from a company's slide template (Google Slides). Splits into three cases (a Japanese template exists; only an English template exists, e.g. the Japan branch of a foreign company; no template exists, so make a new one), and keeps the fonts, text sizes, and overall colors while meeting the standards for fonts that render Japanese and for contrast. Uses template.py audit / --from-base and slides.py lint <theme file>. Also switches the default theme ([slides] default_theme) by choosing from the list of templates. Use when asked 「会社のテンプレートを使いたい」「テンプレートを作って」「テンプレートを整えて」「既定のテンプレートを変えたい」, and when invoked without saying what to do.
+description: Create or adjust an AI Deck Factory template (theme) from a company's slide template (Google Slides), in three cases (a Japanese template, only an English one, or none), keeping the fonts, text sizes, and overall colors while meeting the standards for Japanese fonts and contrast. Also switches the default theme ([slides] default_theme). Use when asked 「会社のテンプレートを使いたい」「テンプレートを作って」「テンプレートを整えて」「既定のテンプレートを変えたい」, and when invoked without saying what to do.
 ---
 
 # Create an AI Deck Factory template from a company template

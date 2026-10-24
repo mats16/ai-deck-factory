@@ -1,6 +1,6 @@
 ---
 name: slides-build
-description: Build Japanese slides directly in Google Slides with the Slides API, then finish and check them: slides.py (the page JSON, copying templates, rebuilding only changed pages, a local lint that runs without building) and gslides.py check (lint on the presentations.get JSON, text, and Google-rendered images of changed pages), and the three layers of checks. SKILL.md holds the build-and-check loop and a table of the files to open per task: pages.md (writing the page JSON) and visual.md (the visual rules) for writing pages, diagrams.md (frame diagrams, arrows, gantt, bars), workflow.md (steps 6–8 of a new deck), commands.md, themes.md, images.md, lint.md (reading the lint), reuse.md (reusing pages of internal decks), api.md, legacy.md (pages.py and pptx decks). Documents (Google Docs) are docs-build; where to place files on Drive is deck-practices/drive.md. Always use before you start writing slides and before you deliver them.
+description: Build Japanese slides directly in Google Slides with the Slides API (slides.py and the page JSON), then check and finish them (slides.py lint without building, gslides.py check on Google-rendered images, the three layers of checks). SKILL.md has the build-and-check loop and a table of which file to open for each task (writing pages, diagrams, the steps of a new deck, themes, images, reuse, older decks). Documents are docs-build. Always use before you start writing slides and before you deliver them.
 ---
 
 # Build and finish Japanese slides

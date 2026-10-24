@@ -1,6 +1,6 @@
 ---
 name: vids-voice
-description: Write the voiceover script of a Google Vids video made from a Google Slides deck. The script lives in each page's speaker notes (when Vids makes a video from slides, each page becomes a scene and its notes become the scene's voiceover), so the notes are only its container. Decks are built without notes; write the script only when the user asks, after the whole deck is built. Use when asked to write or rewrite notes for a video 「字幕」「ナレーション」「読み上げ」「Vids」「動画にする」, to make the voice shorter or longer, or to fix audio tags. Covers the story across scenes, what to leave out of the voice, writing for speech, the audio tags Vids reads, the per-scene limit, one review by a child agent, and replacing only the notes without rebuilding pages (`scripts/speaker_notes.py pull`, `lint`, `push`). Rules that depend on the language are in ja.md and en.md. Settings that exist only inside the Vids (voice, avatar, music) are vids-build.
+description: Write the voiceover script of a Google Vids video made from a Google Slides deck, in each page's speaker notes (each page becomes a scene and its notes become the scene's voiceover). Decks are built without notes; write the script only when the user asks, after the whole deck is built. Use when asked to write or rewrite notes for a video 「字幕」「ナレーション」「読み上げ」「Vids」「動画にする」, to make the voice shorter or longer, or to fix audio tags. Replaces only the notes without rebuilding pages. Settings that exist only inside the Vids (voice, avatar, music) are vids-build.
 ---
 
 # Voiceover scripts for Google Vids

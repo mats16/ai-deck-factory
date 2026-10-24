@@ -1,6 +1,6 @@
 ---
 name: factory-kaizen
-description: Improve the factory (the plugin, upstream). Of the rules, checks, and script fixes that grew in the field (a workspace), take those that help other people too, verify them on past materials, and file them as an Issue on the plugin repository. Clones the upstream repository and writes the proposed change, runs lint with the changed and previous versions and compares, rebuilds pages from the source of truth with both versions and lays the images side by side, and creates an Issue with the reason, background, verification results, images, and the diff of the proposed change. The owner creates the PR from the Issue. Use when applying dreaming's 「プラグインに上げる」 proposals, or when asked 「工場を改善して」, 「プラグインに Issue を出して」, or 「大元を直して」.
+description: Improve the factory (the plugin, upstream). Takes the rules, checks, and script fixes that grew in a workspace and help other people too, verifies them on past materials with the changed and previous versions, and files an Issue on the plugin repository with the reason, verification results, images, and the diff of the proposed change. The owner creates the PR. Use when applying dreaming's 「プラグインに上げる」 proposals, or when asked 「工場を改善して」, 「プラグインに Issue を出して」, or 「大元を直して」.
 ---
 
 # Improve the factory (file an Issue upstream)
