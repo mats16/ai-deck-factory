@@ -9,7 +9,7 @@ You are the reviewer of this material. Look with eyes other than the maker's and
 
 ## What to read
 - Rules: the 「社外秘と顧客の情報」 and 「書き方」 sections of <workspace>/AGENTS.md
-- Rules: <deck-practices folder>/content.md (§0 is what is the same for every material; §6 has 「文体」 and "Sources"), <the §1 files for this material in <deck-practices folder>: content_customer.md or content_internal.md (no audience file for community-facing materials), and content_explain.md if the material explains a tool or a mechanism, reports research or an investigation (including industry trends), explains an article, a talk, or a release, or guides setup or usage>, and <docs-build folder>/visual.md (the visual rules for documents)
+- Rules: <deck-practices folder>/content.md (§0 is what is the same for every material; §6 has 「文体」 and "Sources"), <the §1 files for this material in <deck-practices folder>: content_customer.md or content_internal.md (no audience file for community-facing materials), and content_explain.md if the material explains a tool or a mechanism, reports research or an investigation (including industry trends), recommends a protection such as isolation or a sandbox, explains an article, a talk, or a release, or guides setup or usage>, and <docs-build folder>/visual.md (the visual rules for documents)
 - Outline: <outline path>
 - Text: <text path> (headings are #, a table row is its cells joined with ` | `, `［画像］` marks the position of a figure, links are [text](URL))
 - Images: open all p-* in <image folder> (pages of the PDF exported by Drive)
