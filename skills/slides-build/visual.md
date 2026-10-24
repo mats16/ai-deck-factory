@@ -79,7 +79,7 @@ Read this before you start writing slides. §1 is this folder's visual rules (th
 
 ## 2. Text
 
-- **1 行の字数:** 本文は 1 行 15〜25 字。10 字以下で終わる行を作らない。1 つのボックスの本文は 8 行まで。字数は `幅（in）× 72 ÷ 文字サイズ（pt）` で見積もる（全角 1 字と、矢印・丸数字・× は 1 em。英数字は 0.5〜0.6 em だが、大文字の B・D・N・O・U は 0.66〜0.74 em と広い。スペースは 0.22 em。`slides.py` の `ASCII_EM` が Noto Sans JP Regular の実測。太字は 6〜7% 広く、`ASCII_BOLD_EM` で見込む）。例: 幅 3.0 in・11pt で 19 字（見た目 1-3）。
+- **1 行の字数:** 本文は 1 行 15〜25 字。10 字以下で終わる行を作らない。1 つのボックスの本文は 8 行まで。字数は `幅（in）× 72 ÷ 文字サイズ（pt）` で見積もる（全角 1 字と、矢印・丸数字・× は 1 em。英数字は 0.5〜0.6 em だが、大文字の B・D・N・O・U は 0.66〜0.74 em と広い。スペースは 0.22 em。`../deck-practices/scripts/brand.py` の `ASCII_EM` が Noto Sans JP Regular の実測。太字は 6〜7% 広く、`ASCII_BOLD_EM` で見込む）。例: 幅 3.0 in・11pt で 19 字（見た目 1-3）。
 - **Line spacing:** Set the line spacing of multi-line body text (`spacing` of `d.text`, in %) to 125–135. Japanese line gaps are generally 0.5–1.0 em, wider for longer lines (W3C Requirements for Japanese Text Layout). Two-line headings use 110. Do not set it on one-line frames (見た目 1-2). Line advance in Google Slides has not been measured. If it looks cramped in the image, widen it.
 - [slides-visual-013] **改行:** 最終行は句読点を入れて 3 字以上にする。単語や文節の途中で折り返さない。「のは」「ので」「には」「によって」は前の行に残す。数字と単位（「1.56 em」「10 倍」）を 2 行に割らない。太字や括弧で強調した語を 2 行に割らない。全角の開き括弧（「（」「「」）の前で手で改行しない（行頭に来ると半字下がって見え、左端がそろわない）。直すときは、文を短くするか、ボックスの幅を変える（見た目 1-4）。Google Slides は和文を 1 字ずつ折り返すので、自動の折り返しが文節の途中に入る見込みを lint が要確認に出す（slides-lint-024。文節は BudouX で分ける。位置は見積もりで 1 字ずれることがあるので、画像で確かめる）。
 - **和欧間:** 半角スペースを入れる（AGENTS.md の「書き方」）。ただし、句読点と閉じ括弧の前、開き括弧の後ろには入れない。和文の中の括弧は全角にする。中黒「・」の前後には入れない（見た目 1-10）。lint が数える。

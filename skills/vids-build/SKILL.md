@@ -26,7 +26,7 @@ Make the video from the deck itself, and do not copy the Slides into a separate 
 
 ## Steps
 
-Run anywhere under the workspace (factory.toml is found from the current folder upward).
+Run in the material's folder (factory.toml is found from the current folder upward), because `layout --out` defaults to `build/vids_avatar` under the current folder and the `--layout` path is relative to it.
 
 ```sh
 V=<vids-build folder>/scripts/vids.py

@@ -70,7 +70,7 @@ Do not wait for skills to be called automatically; open the following file when 
 | Reusing pages of internal decks | `slides-build/reuse.md` (deciding among the four stages, exporting Google Slides and page images) |
 | Outline and wording | `deck-practices/content.md` (writing by material type, headings, 「文体」 and sources), and the §1 files for the material that its §1 table names (`content_customer.md`, `content_internal.md`, `content_explain.md`) |
 | Writing slides | `slides-build/pages.md` (writing pages [JSON]) and `slides-build/visual.md` (color, placement, font size, Japanese typesetting); `slides-build/diagrams.md` for pages with a free-form diagram, arrows, a Gantt chart, a bar chart, or a gridded diagram; the other files in `slides-build/SKILL.md`'s table (commands, themes, images, legacy decks) when needed |
-| Writing a document | `docs-build/SKILL.md` (writing doc.md and the check loop, templates, Docs API pitfalls) and `docs-build/visual.md` (page area, headings, tables and figures) |
+| Writing a document | `docs-build/SKILL.md` (writing doc.md and the check loop) and `docs-build/visual.md` (page area, headings, tables and figures); `docs-build/templates.md` when writing from a workspace template; the other files in `docs-build/SKILL.md`'s table (themes, lint, Docs API pitfalls) when needed |
 | Building, checking, delivering | `slides-build/SKILL.md` (three layers of checks, reading `gslides.py check` and lint, deliverables); for documents, `docs-build/SKILL.md` |
 | Creating, naming, renaming, or uploading files on Drive (slides, documents, html, csv, research notes) | `deck-practices/drive.md` (location, name, `drive_put.py`) |
 | Review before delivery | `deck-review/SKILL.md` |

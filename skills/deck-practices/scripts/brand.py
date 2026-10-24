@@ -81,7 +81,7 @@ def theme_font(t):
     """テーマの表 t（スライドのテーマ・[docs.themes]）の本文の書体。書いていなければ FONT。和文を描けると確かめた書体（JP_FONTS）か、英数字の幅を測った
     欧文の書体（FONT_EM の DM Sans。和文は Google が別のゴシックで描く）でなければ止める（ほかの書体は、和文が別の書体になるか、描けない。deck_font も FONT に戻す）。"""
     if not isinstance(f := t.get("font", FONT), str) or f not in JP_FONTS | set(FONT_EM):
-        sys.exit(f"テーマの font {f!r} は、和文を描けると確かめた書体（slides.py の JP_FONTS）にも、字幅を測った欧文の書体（FONT_EM）にもない。slides-template の SKILL.md を開いてから、その fonts.md から選ぶ")
+        sys.exit(f"テーマの font {f!r} は、和文を描けると確かめた書体（brand.py の JP_FONTS）にも、字幅を測った欧文の書体（FONT_EM）にもない。slides-template の SKILL.md を開いてから、その fonts.md から選ぶ")
     return f
 
 

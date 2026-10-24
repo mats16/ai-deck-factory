@@ -111,7 +111,7 @@ def check(ws, local=False):
         warn("テーマの説明", f"{', '.join(no_desc)} に description がない。エージェントが資料ごとにテーマを選べない（themes/slides/<名前>.json の description に、どの資料・聞き手に使うかを書く）")
     if old := docs.get("themes"):  # 2026-10-19 までの書き方
         ng("docs.themes", f"{', '.join(old)} はプラグインが読まない。ワークスペースの themes/docs/<名前>.json（kind theme。見出しの大きさは styles、色は colors）に移して消す"
-                          "（../../docs-build/SKILL.md の docs-write-010）")
+                          "（../../docs-build/SKILL.md を開いてから、その themes.md の docs-write-010）")
     if bad := [n for n, t in doc_themes.items() if not t.get("description")]:
         warn("ドキュメントのテーマの説明", f"{', '.join(bad)} に description がない。エージェントが資料ごとにテーマを選べない（themes/docs/<名前>.json の description に書く）")
     if (d := docs.get("default_theme")) and d not in doc_themes and d != "standard":  # standard は組み込み（docs.py の STANDARD）

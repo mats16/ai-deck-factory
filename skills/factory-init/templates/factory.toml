@@ -35,7 +35,7 @@ default_theme = "visual"  # 説明で決まらないときのテーマ。テー�
 # [docs]
 # default_theme = "acme"  # doc.md に theme: を書かないときのテーマ（themes/docs/acme.json）。書かなければ既定（A4）
 
-# ドキュメントのテーマ（版面・見出しの大きさと色・書体）は、ワークスペースの themes/docs/<名前>.json に書く（スキル docs-build の SKILL.md の docs-write-010）。doc.md の頭に theme: <名前>
+# ドキュメントのテーマ（版面・見出しの大きさと色・書体）は、ワークスペースの themes/docs/<名前>.json に書く（スキル docs-build の SKILL.md を開いてから、その themes.md の docs-write-010）。doc.md の頭に theme: <名前>
 
 [docs.templates]  # ドキュメントのテンプレート（Google Docs）。正本は rules/docs-build/templates/<名前>/doc.md。そのフォルダで docs.py new して URL を書く
 

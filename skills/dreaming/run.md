@@ -26,7 +26,7 @@ Open from `SKILL.md` for a scheduled run. `SKILL.md` has why this cleanup propos
    - Corrections written into the outline or internal notes of older workspaces: `grep -rn "戻し先: 未" --include='構成案*.md' --include='社内メモ_*.md' $R/Customers $R/Internal`. If found, move them into the rule ledger with `python3 $L add --deck <material folder> --quote <original line> --once` (do not delete the outline line. `--once` returns the earlier c-ID instead of adding again when the same material and the same words are already in the ledger, so finding the same line on the next run does not raise the count. Do not use `--once` for findings picked up from conversations; those count as repetitions)
    - Ledgers changed since the last run: `find $R/Customers $R/Internal -name references.md -newer $S/last_run` (all of them on the first run)
    - Claude Code memory: `MEMORY.md` and each file (`~/.claude/projects/<$R with / . _ replaced by ->/memory/`, the same as `MEM` in `scripts/run.sh`)
-   If there are no new conversations, no findings whose destination is 「未」, and no changed `references.md`, do only the checks in step 6, write `last_run`, reply 「変化なし」, and stop.
+   If there are no new conversations, no findings whose destination is 「未」, and no changed `references.md`, do only the checks in step 6, the resurvey in step 7 if it is due, and steps 8–9 (step 8 writes the report only when the resurvey ran or could not run, and writes `last_run` last). Reply 「変化なし」 only if the resurvey did not run either.
    When `/tmp/dreaming_sessions.md` exceeds 1,500 lines, have a subagent (in Claude Code, pass `model: "opus"`; if omitted, a hook in the company settings makes it haiku) return only the candidates for 4a, 4c, and 4d. In environments without subagents, read the conversations one at a time.
 2. **Freeze a copy.** Before changing anything in step 3, note the path printed by `sh $D/scripts/snapshot.sh save`.
 3. **Fix directly** (only safe things).
@@ -53,7 +53,7 @@ Open from `SKILL.md` for a scheduled run. `SKILL.md` has why this cleanup propos
    **Also look at writing outside the JSON page format.** `python3 $K/slides.py stats` (records in `$R/.factory/spec_raw.jsonl`) shows, per `raw` key, the number of materials that used it. For keys used in two or more materials, send a proposal to add them to the JSON format to `factory-kaizen`, the same as 「プラグインに上げる」 in i above (slides-pages-035 in `../slides-build/pages.md`). The material text is not recorded, so write only the key, an example value, and the number of materials that used it.
 6. **Check.** `python3 $K/lint.py --selftest`, `python3 $D/scripts/sessions.py --selftest`, and `python3 $L --selftest` pass. The paths written in files changed in step 3 exist. If not, restore with `snapshot.sh restore`.
 7. **Run the resurvey if it is due.** If more than 30 days have passed since the last date in 「前回」 of `Research/deck_research/state.md`, resurvey following the steps in the `deck-research` SKILL.md. You may write the logs, `state.md`, and `sources.md`, but applying results to deck-practices, slides-build, or AGENTS.md (deck-research step 5) becomes a proposal. In environments without web access (Codex `workspace-write`, etc.), do not run it; note it in the report.
-8. **Keep a record.** If you fixed something in step 3 or found something in steps 4 or 5, write it to `$S/log/<YYYYMMDD>.md` ("Report format" below). Finally, `date -u +%Y-%m-%dT%H:%M:%SZ > $S/last_run`.
+8. **Keep a record.** If you fixed something in step 3, found something in steps 4 or 5, or a due resurvey in step 7 ran or could not run, write it to `$S/log/<YYYYMMDD>.md` ("Report format" below). Finally, `date -u +%Y-%m-%dT%H:%M:%SZ > $S/last_run`.
 9. **Reply in 15 lines or fewer.** Include what was fixed directly (P-IDs), the list of proposals (one per line: number, target, gist, recommendation), pending questions (with the recommended answer), and the report path. End with 「推奨どおりでよければ『推奨どおり』、違うものだけ『推奨どおり、P0002 は却下（理由）』、判断待ちには『Q0001 は〜』と返してください。当てた片付けは `ledger.py undo <P-ID>`、消したメモリは `snapshot.sh restore <写し>` で戻せます」. In environments that can ask questions answered by choosing options, ask questions instead of that sentence. Make one question per proposal and per pending question, with the recommendation as the first option (「適用・様子見・却下」 for proposals; the recommended answer and other answers for pending questions). Put the gist and the reason for the recommendation in the question text. If there are many, first ask whether to go 「推奨どおり」 or 「1 件ずつ選ぶ」. When answers arrive, apply them per [apply.md](apply.md). If there is nothing, reply with the single line 「変化なし」.
 
 ## Report format
@@ -73,6 +73,14 @@ Open from `SKILL.md` for a scheduled run. `SKILL.md` has why this cleanup propos
 - 確かめ方: lint <規則名> / レビュー（観点 <N>）/ なし（<理由>）
 - 推奨: 適用 / 様子見 / 却下（<理由>）
 
+### M1. <要点>（Claude Code のメモリ。台帳には入れない）
+- 変更先: <メモリのファイル>
+- 変更: <消す行、または「<今の文>」→「<新しい文>」>
+- 推奨: 適用 / 様子見 / 却下（<理由>）
+
+## 戻さない
+- <c-ID>: <指摘の要点>（<戻さない理由>）
+
 ## 判断待ち
 - Q0001. <いまの決まりと食い違う発言と、その出典>（`ledger.py ask` の Q-ID）。推奨: <答え>。資料のことを聞くときは、資料の URL（Drive）とページ番号を添える（資料があると思い出しやすい）。組み直して前の形が消えているときは、そう書く（版の履歴で見られる）
 
@@ -84,6 +92,12 @@ Open from `SKILL.md` for a scheduled run. `SKILL.md` has why this cleanup propos
 - レビューの結果: 決まりの列のある行 <N>（直した <N>・残した（誤り）<N>・聞く <N>）。2 本以上の資料で「直した」か「残した（誤り）」が出た決まり <ID>、なければ「なし」
 - 構成の見逃し: AI <N> 件（資料 <N> 本）・人 <N> 件（資料 <N> 本）。資料を仕上げた会話 <N> 本のうち。見直すかを聞いたなら Q-ID
 - lint の要確認: 確認 <N> 回・資料 <N> 本。8 割以上が残った規則 <規則名（出た・残った）>、なければ「なし」
+
+## 調べ直し
+- <回したなら、Research/deck_research/log/ の記録のパスと、提案にしたもの（P-ID）。期限でなければ書かない>
+
+## 検証と実行上の制約
+- <安全の確かめや権限で止められた操作と、飛ばしたこと>。調べ直しの期限なのに回せなかったときは、その理由（Web に出られないなど）
 
 ## 戻し方
 `cd <ワークスペース> && sh <dreaming のフォルダ>/scripts/snapshot.sh restore <写し>`

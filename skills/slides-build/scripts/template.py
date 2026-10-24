@@ -196,7 +196,7 @@ def audit(url):
     out += ["", "## 書体", "", "| 書体 | 使っている文字の連なり | 和文 |", "|---|---|---|"]
     out += [f"| {f} | {n} | {kind(f) if f != '（継承）' else ''} |" for f, n in fonts.most_common()]
     out += ["", "## プレースホルダーの文字の大きさ（マスターとレイアウト）", ""] + [f"- {k}: {', '.join(f'{v:g}pt' for v in sorted(vs))}" for k, vs in sorted(sizes.items())]
-    out += ["", "## 和文の有無", "", f"- ページの文字の連なり: 和文を含む {ja}、含まない {latin}" + ("。英語だけのテンプレート（slides-template の B）" if latin and not ja else "")]
+    out += ["", "## 和文の有無", "", f"- ページの文字の連なり: 和文を含む {ja}、含まない {latin}" + ("。英語だけのテンプレート（slides-template の create.md の B）" if latin and not ja else "")]
     print("\n".join(out))
 
 
