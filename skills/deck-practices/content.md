@@ -41,7 +41,7 @@ Then open the files for this material (read only those that apply; the rules in 
 |---|---|
 | Customer-facing proposals and explanations (proposals, PoC plans, explanations to IT departments or executives) | [content_customer.md](content_customer.md) |
 | Internal (study sessions, enablement, account status summaries) | [content_internal.md](content_internal.md) |
-| Explains a tool or a mechanism, reports research or an investigation (including industry trends), explains an article, a talk, or a release, or guides setup or usage (any audience, including community-facing) | [content_explain.md](content_explain.md), in addition to the audience's file |
+| Explains a tool or a mechanism, reports research or an investigation (including industry trends), recommends a protection such as isolation or a sandbox, explains an article, a talk, or a release, or guides setup or usage (any audience, including community-facing) | [content_explain.md](content_explain.md), in addition to the audience's file |
 | Community-facing technical materials | below (no audience file) |
 
 **Community-facing technical materials** (meetups, OSS study sessions, talks that customers also attend)
