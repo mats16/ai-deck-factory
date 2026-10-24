@@ -152,7 +152,7 @@ def plan(ws):
 
 
 def relink_files(ws):
-    """台帳を合わせる控え: 移行した時点で文がそのファイルにあった当て済みの提案（watch）と、エージェントが決めた行き先（done: 提案 → {"to": ファイルか "split", "from": 前の変更先}）。
+    """台帳を合わせる控え: 移行した時点にあった、分け直すファイルへの提案（watch。まだ当てていないものと、文がそのファイルにあった当て済みのもの）と、エージェントが決めた行き先（done: 提案 → {"to": ファイルか "split", "from": 前の変更先}）。
     控えのフォルダ（消してよい）でなく .factory/migrate/ の直下に置く。"""
     d = ws / ".factory" / "migrate"
     load = lambda n, empty: json.loads((d / n).read_text(encoding="utf-8")) if (d / n).is_file() else empty
@@ -169,19 +169,18 @@ def in_split(ws):
 def relinks(ws):
     """分け直しで、提案の変更先（file）と文の置き場所が合わなくなったもの: [(提案の ID, 前のファイル, 今のファイル, 決められない理由)]。
     文がほかの rules/ の 1 つのファイルにだけあれば、それが今のファイル（理由は None）。決められないもの（今のファイルは None）は、relink で決める。
-    file が古いままだと、ledger.py の apply・undo・drift が文を見つけられない。決めたもの（relink_done.json）は見ない。"""
+    file が古いままだと、ledger.py の apply・undo・drift が文を見つけられない。移行した時点になかった提案（そのあとに出したもの、移行していないワークスペースのもの）と、
+    決めたもの（relink_done.json）は見ない。"""
     rules = ws / "rules"
     _, watch, done = relink_files(ws)
     md = {str(f.relative_to(ws)): f.read_text(encoding="utf-8") for f in rules.rglob("*.md")} if rules.is_dir() else {}
     out = []
     for p in in_split(ws):
         f, i = p["file"], p["id"]
-        if i in done:
+        if i in done or i not in watch:
             continue
         if p["status"] == "未適用" and not p["old"].strip():
             out.append((i, f, None, "まだ当てていない足す提案。分け直したので、足す先を決める"))
-            continue
-        if p["status"] == "適用済み" and i not in watch:  # 移行の前から文がない（手で直した）。ledger.py drift の受け持ち
             continue
         needle = (p["new"] if p["status"] == "適用済み" else p["old"]).strip()
         if not needle or needle in md.get(f, ""):
@@ -340,9 +339,10 @@ def apply(ws):
     out += [f"番号を替えた（前の別々の決まりが同じ ID になるため）: {a} → {b}" for a, b in sorted(ws_map.items()) if b != rewrite(a, paths=False)]
     for rel, where in plan(ws)[2]:
         out += [f"要判断: rules/{rel} は、プラグインで {where} に分けた。決まりごとに、足しているプラグインの節のファイルへ移す（ID はそのまま）"] + suggest(ws, rel)
-    d, watch, _ = relink_files(ws)  # 当て済みで、いま文がそのファイルにある提案を見張る（移行の前から文のないものは、drift の受け持ち）
-    now = {p["id"] for p in in_split(ws) if p["status"] == "適用済み" and p["new"].strip() and (ws / p["file"]).is_file() and p["new"].strip() in (ws / p["file"]).read_text(encoding="utf-8")}
-    (d / "relink.json").write_text(json.dumps(sorted(set(watch) | now)), encoding="utf-8")
+    d = relink_files(ws)[0]  # 初めて移行した時点にある提案だけを見張る（そのあとに出した提案は今の版のもの。回し直しても足さない）
+    if not (d / "relink.json").is_file():  # 当て済みは、いま文がそのファイルにあるもの（移行の前から文のないものは、drift の受け持ち）
+        now = {p["id"] for p in in_split(ws) if p["status"] == "未適用" or p["new"].strip() and (ws / p["file"]).is_file() and p["new"].strip() in (ws / p["file"]).read_text(encoding="utf-8")}
+        (d / "relink.json").write_text(json.dumps(sorted(now)), encoding="utf-8")
     out += asks(relinks(ws))
     if off := off_topic(ws):
         mine, plug = [x for x in off if x.startswith("ws-")], [x for x in off if not x.startswith("ws-")]
@@ -431,6 +431,9 @@ def selftest():
         assert not any("P0002" in o for o in out) and [x[0] for x in relinks(ws)] == ["P0003"]  # 却下した提案は見ない。まだ当てていない足す提案は、足す先を決める
         assert any(o.startswith("要判断: 台帳の P0003") and "migrate.py relink P0003" in o for o in out)
         assert decide(ws, "P0003", "rules/slides-build/workflow.md")[0].startswith("決めた: P0003") and relinks(ws) == []
+        with open(ws / ".factory" / "ledger.jsonl", "a", encoding="utf-8") as f:  # 移行のあとに出した普通の足す提案は見ない
+            f.write(json.dumps({"ts": "2026-10-25T00:00:00Z", "kind": "proposal", "id": "P0004", "rule": "", "file": "rules/slides-build/pages.md", "old": "", "new": "- [ws-slides-pages-009] 新しい案"}, ensure_ascii=False) + "\n")
+        assert relinks(ws) == [] and not any("P0004" in x for x in needs(ws))
         assert any(o.startswith("要判断: rules/deck-practices/SKILL.md") for o in out) and any(IDS["deck-practices-007"].rsplit("-", 1)[0] in o or "workflow" in o for o in out)
         assert any(o.startswith("控え: ") for o in out) and list((ws / ".factory" / "migrate").glob("*/rules/deck-practices/visual.md"))
         first = next(x for x in sorted((ws / ".factory" / "migrate").iterdir()) if x.is_dir())
@@ -458,6 +461,14 @@ def selftest():
         assert needs(ws) == [] and apply(ws) == ["移すものはない（今の版）"]  # 2 回目は何もしない
         assert rename_id(ws, "ws-slides-visual-001", "ws-slides-pages-001") and "ws-slides-pages-001" in (ws / ".factory" / "ledger.jsonl").read_text()
         assert "[ws-slides-pages-001]" in (r / "slides-build" / "visual.md").read_text()
+    with tempfile.TemporaryDirectory() as tmp:  # 今の版で作ったワークスペースの、普通の足す提案は前の版にしない
+        ws = Path(tmp)
+        (ws / "factory.toml").write_text("")
+        (ws / "rules" / "slides-build").mkdir(parents=True)
+        (ws / "rules" / "slides-build" / "pages.md").write_text("- [ws-slides-pages-001] x\n")
+        (ws / ".factory").mkdir()
+        (ws / ".factory" / "ledger.jsonl").write_text(json.dumps({"ts": "2026-10-25T00:00:00Z", "kind": "proposal", "id": "P0001", "rule": "", "file": "rules/slides-build/pages.md", "old": "", "new": "y"}, ensure_ascii=False) + "\n")
+        assert relinks(ws) == [] and needs(ws) == []
     print("selftest ok")
 
 

@@ -37,7 +37,7 @@ python3 $M rename-id <old> <new> # rename one workspace rule ID everywhere (rule
 ## Notes
 
 - `apply` and `check` can be run any number of times. Files already in the current form are not changed.
-- `.factory/migrate/relink.json` (applied proposals whose text was in place at migration) and `relink_done.json` (the decisions made with `relink`) are kept next to the backups. Keep them until the overrides are split; the backup folders themselves can be deleted.
+- `.factory/migrate/relink.json` (the proposals to a split file that existed at the first migration: those not applied yet, and applied ones whose text was in place; proposals made later are never watched, so a current workspace is not reported as an earlier version) and `relink_done.json` (the decisions made with `relink`) are kept next to the backups. Keep them until the overrides are split; the backup folders themselves can be deleted.
 - It does not touch the material folders (`Customers/<customer>/<material>/`, `Internal/`, `Research/`), because they are records of past work. Old IDs and paths in an outline or memo stay as they were; look them up in `scripts/ids_20261024.json` when needed.
 - In the ledger, the fields that hold people's own words (`quote`, `a`, `reason`) are not rewritten, so the user's words stay as said; old IDs or names in them stay too.
 - The ID map is `scripts/ids_20261024.json` (`ids`: old → new plugin ID; `prefixes`: old → new prefix, used for `ws-` IDs and for plugin IDs no longer in the plugin). From now on IDs do not change (`deck-practices/rules.md` "Rule IDs"); if a future version must rename some, it adds another dated map, and `migrate.py` applies the maps in date order.
