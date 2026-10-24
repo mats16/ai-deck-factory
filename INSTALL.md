@@ -93,7 +93,7 @@ pi install -l git:github.com/mats16/ai-deck-factory
    時刻は手元の時間帯で書く（UTC が既定の道具もある）。2 つ以上あれば、この会話を動かしているアプリのものにする（T3 Code の中なら T3 Code）。よく使うものの値と注意は schedule.md にある（T3 Code の `schedule_task` は 1、Claude Code Desktop は 2、Omnigent の `sys_scheduled_task_create` は 4）。schedule.md にない道具でも、上を満たせば使い、登録した値を 6 で返す。
 2. **なければ、手で入れてもらう。** Claude Code・Codex の CLI と pi には、会話を閉じても残るスケジューラーがない。launchd（macOS）か cron で `run.sh` を回す設定（schedule.md の 5）を、`<ワークスペース>`・run.sh のパス・時刻・引数（Claude Code なら `claude`、Codex なら `codex`、pi なら `pi`）を埋めて示し、入れる・すぐ回す・止めるのコマンドを添える。`~/Library/LaunchAgents/` と crontab は、エージェントが書かない（会話の外で毎日動くものを足すので、ユーザーが中身を見て入れる）。Claude Code Desktop を使っているなら、その Routines で作ってもよいことも添える（schedule.md の 2）。
 
-登録したら、すぐ回して確かめる（道具の「すぐ回す」、launchd は `kickstart`）。権限の確認が出たら、ユーザーに許してもらう（次からは聞かれないようにする）。初めての回は 7 日前からの会話を見る。この回から 12 時間以内の次の回は、重ねないために止まる（dreaming の SKILL.md の 0）ので、6 で伝える。
+登録したら、すぐ回して確かめる（道具の「すぐ回す」、launchd は `kickstart`）。権限の確認が出たら、ユーザーに許してもらう（次からは聞かれないようにする）。初めての回は 7 日前からの会話を見る。この回から 12 時間以内の次の回は、重ねないために止まる（dreaming の run.md の 0）ので、6 で伝える。
 
 ## 6. 終える
 

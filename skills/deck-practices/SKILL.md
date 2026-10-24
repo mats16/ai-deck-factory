@@ -77,7 +77,7 @@ Do not wait for skills to be called automatically; open the following file when 
 | Fixing from comments on a built material, watching comments | `deck-comments/SKILL.md` (fetching comments, treating them as corrections, replying and resolving) |
 | Writing or rewriting the voiceover script of a video (the speaker notes of a built deck), only when the user asks (content.md §5; asked while building a deck: deck-flow-022) | `vids-voice/SKILL.md` (story across scenes, writing for speech, audio tags, replacing only the notes) |
 | Making a Google Vids video from a deck (only when the user explicitly asks, also when building or fixing a deck), or, after the notes of a deck change, updating the video made from it (without asking) | `vids-build/SKILL.md` (beta; when to make or update, setup, `create`, `update`, voices) |
-| Creating or adjusting a template (from a company template) | `slides-template/SKILL.md` (the three cases, mapping colors to roles, fonts, fixing contrast) |
+| Creating or adjusting a template (from a company template) | `slides-template/SKILL.md` (a table of which file to open: `create.md` for the three cases, mapping colors to roles, and fixing contrast; `fonts.md`; `dark.md`; switching the default theme) |
 | Received a correction, adding a rule | `deck-practices/rules.md` (rule layers, routing corrections, verifying rules) |
 | Editing the plugin | `factory-kaizen/SKILL.md` (verifying on past materials, and the Issue) |
 | factory-doctor reports 「前の版のワークスペース」 | `factory-migrate/SKILL.md` (moving `rules/`, rule IDs, and the ledger to the current version) |

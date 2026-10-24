@@ -2,7 +2,7 @@
 """スライドとドキュメントで同じ lint の部品: 本文の表記の決まり（HARD・WARN）、色のコントラスト、出典の表の照合、指摘の入れ物（Report）、
 ワークスペースの点検（rules/<スキル>/checks.py）、要確認の記録（.factory/lint_runs.jsonl）。スライドは slides-build の lint.py、
 ドキュメントは docs-build の doc_lint.py が読む。標準ライブラリだけ。
-usage: python3 textlint.py --stats   要確認の残り方（規則ごと。dreaming の 5）
+usage: python3 textlint.py --stats   要確認の残り方（規則ごと。dreaming/run.md の 5）
        python3 textlint.py --selftest"""
 import hashlib, json, os, re, sys, time, unicodedata
 from collections import defaultdict
@@ -156,7 +156,7 @@ def log_path():
 
 
 def log_run(r, deck, path=None):
-    """要確認を 1 行で残す（--stats が、組み直しても残った指摘を規則ごとに数える。dreaming の 5）。要修正（r.hard と点検の HARD）は残さない。
+    """要確認を 1 行で残す（--stats が、組み直しても残った指摘を規則ごとに数える。dreaming/run.md の 5）。要修正（r.hard と点検の HARD）は残さない。
     資料の文は残さず、場所（p3・段落 12）を除いた指摘のハッシュだけにする（ページが増えても同じ指摘と分かる）。"""
     warn = {k: sorted({hashlib.sha1(re.sub(r"^(p\d+|段落 \d+)", "", h).encode()).hexdigest()[:8] for h in v})
             for k, v in r.hits.items() if v and k not in r.hard}
