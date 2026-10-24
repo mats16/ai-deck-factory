@@ -1,6 +1,6 @@
 ---
 name: slides-build
-description: Build Japanese slides directly in Google Slides with the Slides API, then finish and check them: slides.py (the page JSON, copying templates, rebuilding only changed pages, a local lint that runs without building) and gslides.py check (lint on the presentations.get JSON, text, and Google-rendered images of changed pages), and the three layers of checks. SKILL.md holds the build-and-check loop and a table of the files to open per task: pages.md (writing the page JSON) and visual.md (the visual rules) for writing pages, workflow.md (steps 6–8 of a new deck), commands.md, themes.md, images.md, lint.md (reading the lint), reuse.md (reusing pages of internal decks), api.md, legacy.md (pages.py and pptx decks). Documents (Google Docs) are docs-build; where to place files on Drive is deck-practices/drive.md. Always use before you start writing slides and before you deliver them.
+description: Build Japanese slides directly in Google Slides with the Slides API, then finish and check them: slides.py (the page JSON, copying templates, rebuilding only changed pages, a local lint that runs without building) and gslides.py check (lint on the presentations.get JSON, text, and Google-rendered images of changed pages), and the three layers of checks. SKILL.md holds the build-and-check loop and a table of the files to open per task: pages.md (writing the page JSON) and visual.md (the visual rules) for writing pages, diagrams.md (frame diagrams, arrows, gantt, bars), workflow.md (steps 6–8 of a new deck), commands.md, themes.md, images.md, lint.md (reading the lint), reuse.md (reusing pages of internal decks), api.md, legacy.md (pages.py and pptx decks). Documents (Google Docs) are docs-build; where to place files on Drive is deck-practices/drive.md. Always use before you start writing slides and before you deliver them.
 ---
 
 # Build and finish Japanese slides
@@ -9,7 +9,8 @@ Slides are built directly in Google Slides with the Slides API (switched from pp
 
 | What you make | Read before you start writing |
 |---|---|
-| Writing or fixing pages | [pages.md](pages.md) (the page JSON, laying out shapes and text) and [visual.md](visual.md) (this folder's visual rules for slides) |
+| Writing or fixing pages | [pages.md](pages.md) (the page JSON) and [visual.md](visual.md) (this folder's visual rules for slides) |
+| Pages with a free-form diagram, arrows, a Gantt chart, a bar chart, or a gridded diagram | [diagrams.md](diagrams.md) (`frame`, `arrow`, `gantt`, `bars`, and the build warnings for positions), in addition to the two above |
 | Building, build warnings, command options | [commands.md](commands.md) |
 | Steps 6–8 of a new deck (three representative pages, remaining pages, building the whole) | [workflow.md](workflow.md) |
 | Choosing, copying, or changing a theme | [themes.md](themes.md) |
@@ -38,7 +39,7 @@ python3 $K/gslides.py check <URL>                                   # after buil
 
 | Layer | When | With | What it checks |
 |---|---|---|---|
-| unit | After every edit | `slides.py lint <URL>` (no build. 2–7 seconds for 53 pages) | Lint on JSON that turns the build requests into the presentations.get shape locally, and build warnings (positions of `frame` diagrams: an arrow line passes over a component, arrowheads gather at one point, components partly overlap. slides-pages-038 in pages.md). By default, pages changed since the last run and pages that still had `要修正` (all pages if the deck or the lint rules changed. `--pages 3,5`, `--all`). Deck-wide rules (number of covers, section dividers, conclusion bands, and so on) and the workspace check always look at all pages |
+| unit | After every edit | `slides.py lint <URL>` (no build. 2–7 seconds for 53 pages) | Lint on JSON that turns the build requests into the presentations.get shape locally, and build warnings (positions of `frame` diagrams: an arrow line passes over a component, arrowheads gather at one point, components partly overlap. slides-pages-038 in diagrams.md). By default, pages changed since the last run and pages that still had `要修正` (all pages if the deck or the lint rules changed. `--pages 3,5`, `--all`). Deck-wide rules (number of covers, section dividers, conclusion bands, and so on) and the workspace check always look at all pages |
 | e2e | When you build at a checkpoint | `slides.py build` → `gslides.py check` | Builds only changed pages, takes images of those pages, and measures the padding inside boxes on the images (box_pad). Writes the changed pages, images, and findings to `changed.json` |
 | whole | Once per checkpoint (before `/deck-review`, and so on) | `gslides.py check --all`, the contact sheet (`sheet.py`), `deck.md` | Things that span pages: size and position of components of the same type, inconsistent naming, the flow of headings |
 

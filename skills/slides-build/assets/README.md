@@ -28,7 +28,7 @@ Do not use:
 
 - `gcp/` in mingrammer/diagrams (old artwork. Google asks people not to use it from 2026) and `onprem/analytics/databricks.png` (old logo). For Google Cloud, use the files in this folder.
 - Assets that require credit (Icons8, Twemoji, the animated Noto Emoji). Others are enough.
-- Services that make diagrams from URLs (mermaid.ink, kroki.io, quickchart.io). The diagram content goes to a third party, so do not give them customer information. Build slide diagrams from tables and shapes (pages.md "Laying out shapes and text"). For mermaid diagrams in documents, `docs.py` draws them with the local mermaid-cli (docs-write-009 in `../../docs-build/SKILL.md`).
+- Services that make diagrams from URLs (mermaid.ink, kroki.io, quickchart.io). The diagram content goes to a third party, so do not give them customer information. Build slide diagrams from tables and shapes (slides-pages-009 in `../diagrams.md`). For mermaid diagrams in documents, `docs.py` draws them with the local mermaid-cli (docs-write-009 in `../../docs-build/SKILL.md`).
 
 ## Files in this folder
 

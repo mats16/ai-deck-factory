@@ -23,7 +23,7 @@ MOVES = [  # rules/ の下の前のパス → 今のパス（上から当てる�
     ("slides-speaker-notes", "vids-voice"), ("vids-beta", "vids-build")]
 SPLIT = {  # 中身を場面ごとに分けたプラグインのファイル。ワークスペースの上書きも、どの節への足しかで分け直す
     "deck-practices/SKILL.md": "deck-practices/SKILL.md・start.md・agents.md・deliver.md・revise.md、slides-build/workflow.md",
-    "slides-build/pages.md": "slides-build/pages.md・commands.md・themes.md・images.md・api.md・legacy.md（前の deck-build/slides.md）",
+    "slides-build/pages.md": "slides-build/pages.md・diagrams.md・commands.md・themes.md・images.md・api.md・legacy.md（前の deck-build/slides.md）",
     "slides-build/SKILL.md": "slides-build/SKILL.md・lint.md、deck-practices/drive.md（前の deck-build/SKILL.md）",
     "docs-build/SKILL.md": "docs-build/SKILL.md・lint.md・api.md（前の doc-build/SKILL.md）",
     "deck-review/SKILL.md": "deck-review/SKILL.md、deck-practices/agents.md（子の起こし方）"}

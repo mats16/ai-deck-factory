@@ -401,7 +401,7 @@ def src_without_link(sh):  # [slides-lint-015] 出典の行なのに、リンク
 
 
 def off_center_arrows(lines, boxes):  # [slides-lint-016] 2 つの箱をつなぐ横の線の高さが、どちらかの箱の上下の中央から 0.02 in を超えてずれている（言葉の置き場所のために矢印をずらすことがある）
-    # 同じ 2 つの箱の間に 2 本以上の横の線があれば、上下にずらすのが意図なので見ない（行きと帰りの矢印。../pages.md の arrow の offset）
+    # 同じ 2 つの箱の間に 2 本以上の横の線があれば、上下にずらすのが意図なので見ない（行きと帰りの矢印。../diagrams.md の arrow の offset）
     pairs, gap, tol = {}, 0.3 * EMU, 0.02 * EMU
     for x, y, w, h in lines:
         if h > 0:
@@ -622,7 +622,7 @@ def lint_slides(p, r, reuse=False, talk=False, only=None, scope="deck", facts=No
                     r.hits[TWO_LINES].append(f"p{i} のリード: 「{lead[:30]}」")
         r.hits[ARROW_MID].extend(f"p{i}: {m}" for m in off_center_arrows(lines, boxes))
         r.hits[TEXT_OVER].extend(f"p{i}: {m}" for m in text_over(els))
-        r.hits[LINE_GRID].extend(f"p{i}: 同じ長さの縦線が {n} 本。格子は表にし、月をまたぐバーなどだけ図形で上に置く（pages.md の「Laying out shapes and text」）" for n in line_grid(grid))
+        r.hits[LINE_GRID].extend(f"p{i}: 同じ長さの縦線が {n} 本。格子は表にし、月をまたぐバーなどだけ図形で上に置く（diagrams.md の slides-pages-009）" for n in line_grid(grid))
         n = body_chars(els, best[1])
         chars.append(f"p{i} {n}")
         if talk and n > TALK_MAX:

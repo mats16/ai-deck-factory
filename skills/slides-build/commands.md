@@ -44,9 +44,9 @@ python3 $K/slides.py merge fix_a.py fix_b.py          # for pages.py materials: 
   | The content of a component with `h` likely does not fit that height | Remove `h` (height comes from the content), or shorten the text |
   | The body likely overlaps the conclusion band or the source line | Reduce the content, or split the page (deck-flow-010) |
   | A filled box was made square (`shape: rectangle`) | Remove `shape` unless there is a reason (`visual.md` §4) |
-  | A diagram laid out in one horizontal row and joined by arrows | Write it with `"arrows": true` on a `row` (slides-pages-038 below) |
-  | An arrow becomes diagonal, a line passes over a component, a label of a diagonal or bent line overlaps a line, arrowheads gather at one point | Change the arrow ends, sides, `route`, or `label_side`, or align the box heights (slides-pages-038) |
-  | Components partly overlap | Separate them, or put one fully inside the other (slides-pages-038) |
+  | A diagram laid out in one horizontal row and joined by arrows | Write it with `"arrows": true` on a `row` (slides-pages-038 in diagrams.md) |
+  | An arrow becomes diagonal, a line passes over a component, a label of a diagonal or bent line overlaps a line, arrowheads gather at one point | Change the arrow ends, sides, `route`, or `label_side`, or align the box heights (slides-pages-038 in diagrams.md) |
+  | Components partly overlap | Separate them, or put one fully inside the other (slides-pages-038 in diagrams.md) |
   | Text of a Gantt bar is 3 lines or more; a bar chart's name or number wraps | Shorten it, split it with `\n`, or use horizontal bars |
 - slides.py runs on plain `python3` (standard library). Only when inserting local images and icons by react-icons name (`Tb…`) does it use global node (pptxgenjs, react-icons, sharp) ([images.md](images.md). Not needed for URL images and Iconify icons).
 - [slides-command-003] Plain `python3` has no Pillow, python-pptx, or markitdown, and there is no ImageMagick. Run anything that needs libraries with uv, and put tools in `scripts/` (like `box_pad.py`). Crop images with `sips -c <height> <width> --cropOffset <top> <left> <input> --out <output>` (px).
