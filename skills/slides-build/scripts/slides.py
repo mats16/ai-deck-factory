@@ -582,7 +582,7 @@ class Deck:
         link は URL か、ページ番号（int。Appendix の出典のページなど）。リンクの文字は周りの色のまま下線を付ける。
         spacing（行間、%）を省くと、2 行以上の見込みなら 125、1 行なら 100（visual.md の 2）。基準（size）の 2 倍以上の文字の段落
         （大きな数字）は、spacing によらず 100 にする（125 だと、Google の行送りでは数字と説明が離れて見えた。2026-10-08）。
-        edge=True で、文字の端を (x, y)・幅 w・高さ h にそろえる（塗りのない文字。枠を INSET だけ外に出す。pages.md の「Laying out shapes and text」）。
+        edge=True で、文字の端を (x, y)・幅 w・高さ h にそろえる（塗りのない文字。枠を INSET だけ外に出す。legacy.md の「Laying out shapes and text」）。
         pad（in）は、塗りか枠線のある文字の、左寄せ・右寄せのときの箱の端と文字の間。省くと 1 字分（枠でいちばん小さい文字の大きさ。lint と同じ測り方）。
         枠の内側の余白は 0.1 in で変えられず 1 字分に足りないので、文字の枠を内に縮める（visual.md の 4。lint が見る）。中央寄せには効かない。
         gap（pt）は段落の間の空き（最後の段落には付けない。付けると上下の中央が上にずれる）。
@@ -698,7 +698,7 @@ class Deck:
                          fill=fill, kind=SHAPES[shape], wide=True)
 
     def label(self, sid, v, x, y, w, h, fill=PANEL, color=HEAD, size=11, bold=True, align="CENTER", radius=CORNER_RADIUS, pad=None, mono=False):
-        """塗りの箱と、その中の短い言葉（札・日付・工程の名前）。図形と文字を 1 つにする（pages.md の「Laying out shapes and text」）。
+        """塗りの箱と、その中の短い言葉（札・日付・工程の名前）。図形と文字を 1 つにする（legacy.md の「Laying out shapes and text」）。
         左寄せ（align="START"）なら、箱の端と文字の間を 1 字分空ける（text の pad）。"""
         return self.text(sid, x, y, w, h, v, size=size, color=color, bold=bold, align=align, valign="MIDDLE", fill=fill, radius=radius, pad=pad, mono=mono)
 
@@ -1922,7 +1922,7 @@ class SpecPage:
                 y = bottom + gap
         if frame and arrows and len(spans) >= 3 and max(a for a, _ in spans) < min(b for _, b in spans):  # どの部品も同じ高さの帯にかかる = 横 1 列
             self.warns.append(f"{loc}: 横 1 列に並べて矢印でつないだ図は、row の \"arrows\": true に印のあるカードか label を並べて書ける（幅を本文いっぱいに使い、"
-                              "高さと矢印の位置がそろう。../pages.md の slides-pages-034 の「Free-form diagrams」）")
+                              "高さと矢印の位置がそろう。../diagrams.md の「Free-form diagrams」）")
         return bottom
 
     def lone_text(self):

@@ -57,7 +57,7 @@ python3 $L next <prefix>                     # the ID for a new rule
   - Visuals: [visual.md](../slides-build/visual.md) in slides-build (decks), [visual.md](../docs-build/visual.md) in docs-build (documents)
   - Reuse: [reuse.md](../slides-build/reuse.md)
   - Sources and the ledger: [materials.md](materials.md)
-  - Building with the Slides API: the files listed in `../slides-build/SKILL.md` (`pages.md`, `commands.md`, `themes.md`, `images.md`, `api.md`, `legacy.md`)
+  - Building with the Slides API: the files listed in `../slides-build/SKILL.md` (`pages.md`, `diagrams.md`, `commands.md`, `themes.md`, `images.md`, `api.md`, `legacy.md`)
   - Building with the Docs API, and checking and delivering documents: `../docs-build/SKILL.md`
   - Checking and delivery: `../slides-build/SKILL.md` and `../deck-review/SKILL.md` (the review aspects are in the request texts `prompt_slides.md` and `prompt_doc.md`)
   - How to edit these rules: this file
