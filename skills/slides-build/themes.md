@@ -12,7 +12,7 @@ Open when you choose, copy, or change a theme, or create a deck from a template.
 - Set the page-number frame to the same 9pt as the copyright line (`COPYRIGHT_PT`), line spacing 100, and the secondary color (SUB), with its right edge at the body's right edge (12.73 in) and its top edge at the copyright text (7.18 in) (this frame has 0 inner padding). Since size and top edge are the same, text heights on the left and right match.
 - Built the sample pages (cover, section divider, color quick reference, and two component pages) with slides.py. The component samples follow the rules (visual.md); after changing components, check here for breakage (2026-10-08, `Research/slides_template_review_20261008.md`). When copied by `new`, the sample pages are removed and replaced by the pages of deck.json (pages.py).
 
-There are two built-in themes (`themes/visual.json`, `themes/company.json`). The mapping of roles to colors is `visual.md` §1. Themes made from other companies' templates (the company's fonts and colors) are in `../slides-template/SKILL.md`.
+There are two built-in themes (`themes/visual.json`, `themes/company.json`). The mapping of roles to colors is `visual.md` §1. Themes made from other companies' templates (the company's fonts and colors) are in `../slides-template/create.md`.
 
 - [slides-theme-036] **Write a theme in a theme file (`kind: theme`).** The workspace's `themes/slides/<name>.json` (the file name is the theme name; alphanumerics and - _). It takes priority over a built-in theme of the same name. It uses the same `apiVersion` as page JSON (slides-pages-035), and its format is in `slides.py schema`. Document themes will later go in `themes/docs/<name>.json` in the same format.
   ```json

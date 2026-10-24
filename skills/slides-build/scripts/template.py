@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""AI Deck Factory のテンプレートを作る・合わせ直す（../themes.md。会社のテンプレートから作る流れは ../../slides-template/SKILL.md）。
+"""AI Deck Factory のテンプレートを作る・合わせ直す（../themes.md。会社のテンプレートから作る流れは ../../slides-template/create.md）。
 テーマはテーマのファイル（kind theme。組み込みの ../themes/<名前>.json と、ワークスペースの themes/slides/<名前>.json）。色は役割の名前で書く。
 テーマのファイルだけを見る（形と役割の組のコントラスト）のは slides.py lint <ファイル>（Google を読まない）。
 usage:
@@ -240,7 +240,7 @@ def specimen(theme, t, origin=()):
             x, y = X + (i % 5) * (cw + 0.2), Y_BODY + (i // 5) * (ch + 0.15)
             d.box(s, x, y, cw, ch, c, line)
             d.text(s, x + PAD, y + PAD, cw - 2 * PAD, ch - 2 * PAD, [(f"{name}\n", {"bold": True}), f"{tone(T, c)}\n", use], color=on(c, fg), spacing=115)
-        d.source(s, ["出典: visual.md の 1（色の決まり）、slides-template の SKILL.md（暗い本文のテーマ）。", *origin])
+        d.source(s, ["出典: visual.md の 1（色の決まり）、slides-template の dark.md（暗い本文のテーマ）。", *origin])
         d.note(s, f"テーマ「{theme}」の、テーマに入れない {len(FIXED)} の色です。HEAD・CARD・SUB_ON_NAVY・ON_RED は、書かなければ NAVY・白・RULE・白と同じ色です。"
                   "DECOR は slides.py の章の扉が使い、ページには書きません。")
 
