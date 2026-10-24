@@ -59,7 +59,7 @@ python3 $L next <prefix>                     # the ID for a new rule
   - Sources and the ledger: [materials.md](materials.md)
   - Building with the Slides API: the files listed in `../slides-build/SKILL.md` (`pages.md`, `diagrams.md`, `commands.md`, `themes.md`, `images.md`, `api.md`, `legacy.md`)
   - Building with the Docs API, and checking and delivering documents: `../docs-build/SKILL.md`
-  - Checking and delivery: `../slides-build/SKILL.md` and `../deck-review/SKILL.md` (the review aspects are in the request texts `prompt_slides.md` and `prompt_doc.md`)
+  - Checking and delivery: `../slides-build/SKILL.md` and `../deck-review/SKILL.md` (asking in `ask.md`, verifying and fixing findings in `fix.md`, splitting fixes in `prompt_fix.md`; the review aspects are in the request texts `prompt_slides.md` and `prompt_doc.md`)
   - How to edit these rules: this file
   - Per-customer preferences: the customer's `memory.md` ("Customer memory" above)
   - About the customer (business, setup, engineers' preferences): the customer's `profile.md` (`../customer-profile/SKILL.md`)
@@ -79,6 +79,6 @@ python3 $L next <prefix>                     # the ID for a new rule
 | Principle | 「いい資料の考え方」 in AGENTS.md (details in content.md §0) | Do not make it a condition. Use it as the basis for review questions |
 
 - [deck-rules-003] **Do not force what cannot be counted into lint.** It leads to writing just to pass lint (「禁句をほかの空疎な語に置き換えるだけにしない」 in content.md §6). Do not remove the places where AI judges by looking at images and the rule text.
-- [deck-rules-004] **Do not force a good-or-bad binary.** For a lint `要確認`, either fix it or state why it stays. In review, things the rules do not decide, things that can be read either way, and things whose fix would change the point become 「聞く」, and are returned to the user with the reason for hesitating and proposals ("What to fix" in deck-review).
+- [deck-rules-004] **Do not force a good-or-bad binary.** For a lint `要確認`, either fix it or state why it stays. In review, things the rules do not decide, things that can be read either way, and things whose fix would change the point become 「聞く」, and are returned to the user with the reason for hesitating and proposals ("What to fix" in `../deck-review/fix.md`).
 - **Fix or remove conditions with many false hits.** Rules whose `要確認` always end as 「残した」 (`lint.py --stats`), and conditions that missed something the user fixed after the check passed, are reviewed in dreaming's 5.
 - **Count how well rules work.** The rule ledger counts, per rule, findings raised even though a rule exists (recurrences) and the results of rows in the deck-review findings table with the rule column filled in (「直した・残した（誤り）・聞く」) (`ledger.py rules`, `why <ID>`). A rule with continuing recurrences and 「直した」 is not being followed when making, so push it down into a check or a making step. A rule with continuing 「残した（誤り）」 needs rewording. A rule that produces no findings may simply be followed, so do not remove it for that reason alone. The next move per rule (push down, rewrite, add a condition, promote, delete the copy, revisit the override) is printed by `ledger.py candidates`.
