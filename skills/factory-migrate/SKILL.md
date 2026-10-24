@@ -16,14 +16,17 @@ python3 $M rename-id <old> <new> # rename one workspace rule ID everywhere (rule
 
 ## Steps
 
-1. **Check.** Run `check` and show the user the list in one message (what moves, which files are rewritten). Do not wait for approval: the backup makes it reversible.
-2. **Apply.** Run `apply` and relay its lines as they are (「控え」「移した」「写した」「書き換えた」「移していない」「要判断」).
+1. **Check.** Run `check` and show the user the list in one message (what moves, which files are rewritten, and the IDs each file changes as old → new). Do not wait for approval: the backup makes it reversible.
+2. **Apply.** Run `apply` and relay its lines as they are (「控え」「移した」「写した」「書き換えた」「番号を替えた」「台帳を合わせた」「移していない」「要判断」).
+   - 「番号を替えた」: two earlier workspace rules would have got the same new ID (for example `ws-prompt_doc-001` and `ws-prompt_slides-001` both become `ws-deck-review-…`), so the later one took the next free number. The rule text and the ledger got the same new ID, so their histories stay apart.
    - 「移していない」: the new path already has a file. Open both, merge the old one's rules into the new one (keep the IDs), and delete the old one.
    - 「写した」 `checks.py`: slides lint reads `slides(p, r)` from `rules/slides-build/checks.py`, and document lint reads `doc(doc, r)` from `rules/docs-build/checks.py`. Delete the function each file does not use.
 3. **Split the overrides of split files (「要判断」).** The plugin split some files (the list after 「要判断」 says into which). A workspace override (`rules/<skill>/<file>`) is shown only when its plugin file at the same path is opened, so a rule that adds to a section that moved would no longer be shown in the right place.
    - For each `ws-` rule listed under the line, `migrate.py` names the plugin file of the rules it refers to. Open that plugin file and check that the rule adds to or overrides that section. If it names nothing, decide from the content.
    - Move the rule line (with its ID) to `rules/<skill>/<that file>`. A rule may stay where it is when its plugin section is still in that file.
    - Keep the rule's ID when you move it: IDs name what a rule is about, not its file (`deck-practices/rules.md` "Rule IDs").
+   - After moving the rules, run `apply` again. Proposals in the ledger that target a split file keep the old `file`, so `ledger.py apply`, `undo`, and `drift` would not find their text; `apply` moves each one to the file that now holds its text (「台帳を合わせた」). `check` and factory-doctor keep reporting the workspace as an earlier version until this is done.
+   - 「要判断: 台帳の P… の文が …」: the proposal's text is in no file or in several (you split it across files, or rewrote it). Read it with `ledger.py pending --status all`. If it is still needed, withdraw it (`ledger.py withdraw`) and propose again per file. An applied proposal can then no longer be undone; say so in the report.
 4. **Check again.** Run `check` (it should print 「移すものはない（今の版）」) and `factory-doctor` (`python3 <factory-doctor folder>/scripts/doctor.py --local`).
 5. **Report.** In one message: what moved, the rules you split and where they went, and the backup folder. Tell the user that deleting the backup is their call.
 

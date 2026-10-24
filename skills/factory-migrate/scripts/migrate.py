@@ -34,6 +34,7 @@ PATHS = [  # 本文の中のパスとスキルの名前（決まりの ID は先
                                                     ("slides-speaker-notes", "vids-voice"), ("vids-beta", "vids-build")))]
 OLD_IDS = [re.compile(rf"(?<![{B}])(ws-)?(" + "|".join(sorted(map(re.escape, m["prefixes"]), key=len, reverse=True)) + rf")-(\d{{3}})(?![{B}])") for m in MAPS]
 WS_ID = re.compile(r"\[(ws-[\w-]+?-\d{3})\]")
+WS_ANY = re.compile(rf"(?<![{B}])ws-[a-z][\w-]*?-\d{{3}}(?![{B}])")  # ワークスペースの決まりの ID（角括弧のあるなしによらない）
 PLUGIN_ID = re.compile(rf"(?<![{B}])(?!ws-)([a-z][\w-]*?)-\d{{3}}(?![{B}])")
 
 
@@ -42,10 +43,16 @@ def workspace(start="."):
     return next((x for x in (d, *d.parents) if (x / "factory.toml").is_file()), None)
 
 
-def rewrite(text, paths=True, seen=None):
+def rewrite(text, paths=True, seen=None, ws_map=None):
     """前の ID とパスを今のものに。接頭辞だけで決める付け替えは、確かに ID だと言えるとき（ws- で始まる、[ID] と角括弧で囲む、
     台帳の値がまるごと ID）だけにする。前の接頭辞には content・assets・template などのふつうの語があり、memory.md の「assets-100」を替えないため。
-    seen を渡すと、替えた (前, 今) を足す。"""
+    ws_map（ws_plan）は、ワークスペースの ID の付け替えを先に当てる（番号がぶつかったものの付け替えも入る）。seen を渡すと、替えた (前, 今) を足す。"""
+    if ws_map:
+        def mapped(x):
+            if seen is not None and x.group(0) in ws_map:
+                seen.add((x.group(0), ws_map[x.group(0)]))
+            return ws_map.get(x.group(0), x.group(0))
+        text = WS_ANY.sub(mapped, text)
     for pat, m in zip(OLD_IDS, MAPS):
         def new_id(x, ids=m["ids"], pre=m["prefixes"]):
             ws, p, num = x.group(1), x.group(2), x.group(3)
@@ -89,8 +96,34 @@ def ledger_lines(path, fn):
     return "\n".join(out) + "\n"
 
 
+def strings(ws):
+    """ID を書き換える文字列: rules/ などの md の本文と、台帳の値（人の言葉の欄 VERBATIM は除く）。"""
+    out = [p.read_text(encoding="utf-8") for p in texts(ws)]
+    led = ws / ".factory" / "ledger.jsonl"
+    if led.is_file():
+        ledger_lines(led, lambda v: out.append(v) or v)
+    return out
+
+
+def ws_plan(ws):
+    """ワークスペースの ws- の ID の、前 → 今。前に別の接頭辞だったものを 1 つの主題にまとめると番号がぶつかる
+    （ws-prompt_doc-001 と ws-prompt_slides-001 がどちらも ws-deck-review-001）ので、あとのものを空いた番号へ移す。
+    今の形の ID（付け替えても変わらないもの）は動かさず、その番号も使ったものに数える。定義と台帳に同じ対応を当てるので、履歴は混ざらない。"""
+    found = {x for t in strings(ws) for x in WS_ANY.findall(t)}
+    target = {x: rewrite(x, paths=False) for x in found}
+    taken, out = {x for x in found if target[x] == x}, {}
+    for x in sorted(found - taken):
+        pre, num = target[x].rsplit("-", 1)
+        n = int(num)
+        while f"{pre}-{n:03d}" in taken:
+            n += 1
+        out[x] = f"{pre}-{n:03d}"
+        taken.add(out[x])
+    return out
+
+
 def plan(ws):
-    """(移すファイル [(前, 今)], 書き換えるファイル [パス], 分け直す上書き [(ファイル, 分けた先)])。"""
+    """(移すファイル [(前, 今)], 書き換えるファイル [パス], 分け直す上書き [(ファイル, 分けた先)], ワークスペースの ID の対応)。"""
     rules, moves, seen = ws / "rules", [], set()
     for old, new in MOVES:
         src = rules / old
@@ -104,21 +137,53 @@ def plan(ws):
             if f not in seen:  # 上の行で移すと決めたものは、下の行で二度移さない
                 seen.add(f)
                 moves.append((f, dst))
-    led = ws / ".factory" / "ledger.jsonl"
-    edit = [p for p in texts(ws) if (t := p.read_text(encoding="utf-8")) != rewrite(t)]
-    if led.is_file() and ledger_lines(led, rewrite) != led.read_text(encoding="utf-8"):
+    led, ws_map = ws / ".factory" / "ledger.jsonl", ws_plan(ws)
+    fix = lambda t: rewrite(t, ws_map=ws_map)
+    edit = [p for p in texts(ws) if (t := p.read_text(encoding="utf-8")) != fix(t)]
+    if led.is_file() and ledger_lines(led, fix) != led.read_text(encoding="utf-8"):
         edit.append(led)
     after = {str(dst.relative_to(rules)) for _, dst in moves}  # 移したあとの rules/ の md
     if rules.is_dir():
         after |= {str(p.relative_to(rules)) for p in rules.rglob("*.md")}
     split = [(k, v) for k, v in SPLIT.items() if k in after]
-    return moves, edit, split
+    return moves, edit, split, ws_map
+
+
+def proposals_in_split(ws):
+    """分け直す上書き（SPLIT）を変更先にする台帳の提案と、その文（new か old）: [(提案, [文])]。"""
+    led = ws / ".factory" / "ledger.jsonl"
+    out = []
+    for line in led.read_text(encoding="utf-8").splitlines() if led.is_file() else []:
+        r = json.loads(line) if line.strip() else {}
+        if r.get("kind") == "proposal" and r.get("file", "").removeprefix("rules/") in SPLIT:
+            out.append((r, [x.strip() for x in (r.get("new", ""), r.get("old", "")) if x.strip()]))
+    return out
+
+
+def relinks(ws):
+    """移行した時点で文がそのファイルにあった提案（控えの relink.json）のうち、分け直しで文がもうそのファイルにないもの:
+    [(提案の ID, 前のファイル, 今のファイル)]。文がほかの rules/ の 1 つのファイルにだけあれば、それが今のファイル。決まらなければ None。
+    file が古いままだと、ledger.py の apply・undo・drift が文を見つけられない。もとから文のない提案（却下・取り下げ・戻した・手で直した）は見ない。"""
+    rules = ws / "rules"
+    watch = {i for f in (ws / ".factory" / "migrate").glob("*/relink.json") for i in json.loads(f.read_text(encoding="utf-8"))}
+    if not watch or not rules.is_dir():
+        return []
+    md = {str(f.relative_to(ws)): f.read_text(encoding="utf-8") for f in rules.rglob("*.md")}
+    out = []
+    for r, needles in proposals_in_split(ws):
+        f = r["file"]
+        if r.get("id") not in watch or not needles or any(n in md.get(f, "") for n in needles):
+            continue
+        hits = sorted(k for k, t in md.items() if k != f and any(n in t for n in needles))
+        out.append((r["id"], f, hits[0] if len(hits) == 1 else None))
+    return out
 
 
 def needs(ws):
     """前の版のまま残っているもの（factory-doctor が出す）。"""
-    moves, edit, _ = plan(ws)
-    return [f"rules/{f.relative_to(ws / 'rules')}" for f, _ in moves] + [str(p.relative_to(ws)) for p in edit]
+    moves, edit, _, _ = plan(ws)
+    return ([f"rules/{f.relative_to(ws / 'rules')}" for f, _ in moves] + [str(p.relative_to(ws)) for p in edit]
+            + [f"台帳の {i} の変更先（{a} → {b}）" for i, a, b in relinks(ws) if b])
 
 
 def suggest(ws, rel):
@@ -134,24 +199,21 @@ def suggest(ws, rel):
 
 
 def off_topic(ws):
-    """書き換えたあとも、主題の表にない接頭辞の ID（もっと前の版や手で付けたもの）。"""
-    found, chunks = set(), [p.read_text(encoding="utf-8") for p in texts(ws)]
-    led = ws / ".factory" / "ledger.jsonl"
-    if led.is_file():  # 台帳は、書き換える欄だけを見る（人の言葉の欄 VERBATIM の古い ID は、原文のまま残すもの）
-        ledger_lines(led, lambda v: chunks.append(v) or v)
-    for t in chunks:
+    """書き換えたあとも、主題の表にない接頭辞の ID（もっと前の版や手で付けたもの）。台帳は書き換える欄だけを見る（人の言葉の欄の古い ID は、原文のまま残すもの）。"""
+    found = set()
+    for t in strings(ws):
         found |= {x for x in re.findall(rf"(?<![{B}])((?:ws-)?[a-z][\w-]*?)-\d{{3}}(?![{B}])", t)
                   if x.removeprefix("ws-") not in TOPICS and not (x.startswith("ws-") and x.removeprefix("ws-") in WS_ONLY) and x not in ("c", "p", "q")}
     return sorted(found)
 
 
-def changed(p):
+def changed(p, ws_map):
     """書き換える ID の (前 → 今) を、5 つまで添える（check で、ID でないものを替えていないかを見られるように）。"""
     seen = set()
     if p.suffix == ".jsonl":
-        ledger_lines(p, lambda v: rewrite(v, seen=seen))
+        ledger_lines(p, lambda v: rewrite(v, seen=seen, ws_map=ws_map))
     else:
-        rewrite(p.read_text(encoding="utf-8"), seen=seen)
+        rewrite(p.read_text(encoding="utf-8"), seen=seen, ws_map=ws_map)
     pairs = [f"{a} → {b}" for a, b in sorted(seen)]
     return f"（{'、'.join(pairs[:5])}{f' ほか {len(pairs) - 5}' if len(pairs) > 5 else ''}）" if pairs else "（パスだけ）"
 
@@ -168,10 +230,25 @@ def defined(rid):
     return [f for f in PLUGIN.rglob("*.md") if f"[{rid}]" in f.read_text(encoding="utf-8")]
 
 
+def relink(ws):
+    """relinks の今のファイルが決まった提案の file を付け替え、決まらない提案を要判断にする。"""
+    todo, out = relinks(ws), []
+    to = {i: b for i, _, b in todo if b}
+    if to:
+        led = ws / ".factory" / "ledger.jsonl"
+        lines = [json.dumps({**r, "file": to[r["id"]]}, ensure_ascii=False) if (r := json.loads(x) if x.strip() else {}).get("kind") == "proposal" and r.get("id") in to else x
+                 for x in led.read_text(encoding="utf-8").splitlines()]
+        led.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    out += [f"台帳を合わせた: {i} の変更先 {a} → {b}" for i, a, b in todo if b]
+    out += [f"要判断: 台帳の {i} の文が {a} になく、ほかの 1 つのファイルにも決まらない（分けた先にまたがるか、消した）。ledger.py pending --status all で中身を見て、"
+            "まだ要る提案なら ledger.py withdraw で取り下げ、ファイルごとに propose し直す（当てた提案は undo で戻せなくなるので、報告に書く）" for i, a, b in todo if not b]
+    return out
+
+
 def apply(ws):
-    moves, edit, split = plan(ws)
+    moves, edit, split, ws_map = plan(ws)
     if not moves and not edit:
-        return ["移すものはない（今の版）"]
+        return relink(ws) or ["移すものはない（今の版）"]
     backup = ws / ".factory" / "migrate" / time.strftime("%Y%m%d-%H%M%S")
     n = 1
     while backup.exists():  # 同じ秒に回し直しても、前の控え（前の版の中身）を上書きしない
@@ -205,17 +282,25 @@ def apply(ws):
                    "こちらの import lint は import doc_lint as lint にした。それぞれ使わない関数は消してよい）")
     for p in texts(ws):
         t = p.read_text(encoding="utf-8")
-        if (n := rewrite(t)) != t:
+        if (n := rewrite(t, ws_map=ws_map)) != t:
             p.write_text(n, encoding="utf-8")
             out.append(f"書き換えた: {p.relative_to(ws)}")
     led = ws / ".factory" / "ledger.jsonl"
-    if led.is_file() and (n := ledger_lines(led, rewrite)) != led.read_text(encoding="utf-8"):
+    if led.is_file() and (n := ledger_lines(led, lambda v: rewrite(v, ws_map=ws_map))) != led.read_text(encoding="utf-8"):
         led.write_text(n, encoding="utf-8")
         out.append(f"書き換えた: {led.relative_to(ws)}")
+    out += [f"番号を替えた（前の別々の決まりが同じ ID になるため）: {a} → {b}" for a, b in sorted(ws_map.items()) if b != rewrite(a, paths=False)]
     for rel, where in plan(ws)[2]:
         out += [f"要判断: rules/{rel} は、プラグインで {where} に分けた。決まりごとに、足しているプラグインの節のファイルへ移す（ID はそのまま）"] + suggest(ws, rel)
+    (backup / "relink.json").write_text(json.dumps(sorted(r["id"] for r, needles in proposals_in_split(ws) if r.get("id") and needles
+                                                     and any(n in (ws / r["file"]).read_text(encoding="utf-8") for n in needles if (ws / r["file"]).is_file()))), encoding="utf-8")
     if off := off_topic(ws):
-        out.append(f"要判断: 主題の表にない接頭辞の ID がある（{'・'.join(off)}）。ledger.py topics から主題を選び、rename-id で付け替える")
+        mine, plug = [x for x in off if x.startswith("ws-")], [x for x in off if not x.startswith("ws-")]
+        if mine:
+            out.append(f"要判断: 主題の表にない接頭辞のワークスペースの ID がある（{'・'.join(mine)}）。ledger.py topics から主題を選び、rename-id で付け替える")
+        if plug:
+            out.append(f"要判断: 角括弧なしで書いた、もうプラグインにない前の ID がある（{'・'.join(plug)}）。ids_20261024.json の prefixes で今の主題を見て、"
+                       "その文を直すか、要らなければ消す（ID だと言い切れないので、ここでは替えない）")
     return out
 
 
@@ -244,14 +329,21 @@ def selftest():
         put("rules/doc-build/templates/a/doc.md", "t")
         put("rules/slides-template/SKILL.md", "mine")
         put("rules/deck-template/SKILL.md", "x")
+        put("rules/deck-review/SKILL.md", "- [ws-deck-review-001] 今の形の ID\n")
+        put("rules/deck-review/prompt_doc.md", "- [ws-prompt_doc-001] 文書の観点\n")
+        put("rules/deck-review/prompt_slides.md", "- [ws-prompt_slides-001] スライドの観点\n")
         put("rules/slides-speaker-notes/ja.md", "- [ws-slides-speaker-notes-ja-001] 間を長く（slides-speaker-notes-ja-002 より優先）。\n")
         put("AGENTS.md", "スキル deck-build の deck-build-005 と、doc-build-010。スキルdeck-templateの手順。")
         put("rules/vids-voice/en.md", "- [ws-speaker-notes-en-001] x\n- [ws-odd-001] y\n")
         put("Customers/acme/memory.md", "- [ws-memory-001] 品番の assets-100 と template-777 は顧客の言葉のまま。[visual-777] は前の決まり\n")
         put(".factory/ledger.jsonl", json.dumps({"kind": "correction", "to": "ws-visual-001", "file": "rules/deck-practices/visual.md", "rule": "visual-012"}, ensure_ascii=False) + "\n"
             + json.dumps({"kind": "proposal", "rule": "sessions-001"}, ensure_ascii=False) + "\n"
+            + json.dumps({"kind": "proposal", "id": "P0001", "file": "rules/deck-practices/SKILL.md", "old": "", "new": "- [ws-deck-practices-001] 代表の 3 枚は 4 枚にする（deck-practices-007 より優先）。"}, ensure_ascii=False) + "\n"
+            + json.dumps({"kind": "proposal", "id": "P0002", "file": "rules/deck-practices/SKILL.md", "old": "", "new": "- [ws-deck-practices-009] 却下した案"}, ensure_ascii=False) + "\n"
+            + json.dumps({"kind": "route", "ref": "c-0002", "to": "ws-prompt_doc-001"}, ensure_ascii=False) + "\n"
+            + json.dumps({"kind": "route", "ref": "c-0003", "to": "ws-prompt_slides-001"}, ensure_ascii=False) + "\n"
             + json.dumps({"kind": "correction", "quote": "deck-build の visual-012 を直して", "to": "visual-012"}, ensure_ascii=False) + "\n")
-        assert "visual-012 → slides-visual-012" in changed(ws / "rules" / "deck-practices" / "visual.md") and "assets-100" not in changed(ws / "Customers" / "acme" / "memory.md")
+        assert "visual-012 → slides-visual-012" in changed(ws / "rules" / "deck-practices" / "visual.md", ws_plan(ws)) and "assets-100" not in changed(ws / "Customers" / "acme" / "memory.md", ws_plan(ws))
         assert needs(ws)
         out = apply(ws)
         r = ws / "rules"
@@ -263,7 +355,7 @@ def selftest():
                               "doc_lint.workspace_checks('doc', {'body': {'content': []}}, r); print(r.hits['段落'])",
                               str(PLUGIN / "docs-build" / "scripts"), str(PLUGIN / "deck-practices" / "scripts")], cwd=ws, capture_output=True, text=True)
         assert run.returncode == 0 and "['0']" in run.stdout, run.stderr  # 写したドキュメントの点検が、ドキュメントの lint から読めて動く
-        assert "[ws-vids-voice-en-001]" in (r / "vids-voice" / "en.md").read_text() and any("主題の表にない" in o and "ws-odd" in o for o in out)
+        assert "[ws-vids-voice-en-001]" in (r / "vids-voice" / "en.md").read_text() and any("主題の表にない接頭辞のワークスペースの ID" in o and "ws-odd" in o for o in out)
         assert not any("主題の表にない" in o and "visual-012" in o for o in out)  # 原文の中の古い ID は、主題の表にない ID として出さない
         assert (r / "vids-voice" / "ja.md").read_text() == "- [ws-vids-voice-ja-001] 間を長く（vids-voice-ja-002 より優先）。\n"
         assert (r / "deck-template" / "SKILL.md").is_file() and any("移していない" in o for o in out)  # 移す先にあるものは上書きしない
@@ -271,9 +363,16 @@ def selftest():
         led = [json.loads(x) for x in (ws / ".factory" / "ledger.jsonl").read_text().splitlines()]
         assert led == [{"kind": "correction", "to": "ws-slides-visual-001", "file": "rules/slides-build/visual.md", "rule": "slides-visual-012"},
                        {"kind": "proposal", "rule": "factory-dreaming-001"},  # 台帳の値がまるごと ID なら、もうない ID も接頭辞で替える
+                       {"kind": "proposal", "id": "P0001", "file": "rules/deck-practices/SKILL.md", "old": "", "new": (r / "deck-practices" / "SKILL.md").read_text().strip()},
+                       {"kind": "proposal", "id": "P0002", "file": "rules/deck-practices/SKILL.md", "old": "", "new": "- [ws-deck-flow-009] 却下した案"},
+                       {"kind": "route", "ref": "c-0002", "to": "ws-deck-review-002"}, {"kind": "route", "ref": "c-0003", "to": "ws-deck-review-003"},  # ぶつかる番号は替え、定義と台帳で同じ
                        {"kind": "correction", "quote": "deck-build の visual-012 を直して", "to": "slides-visual-012"}]  # ユーザーの言葉の原文は替えない
+        assert (r / "deck-review" / "SKILL.md").read_text().startswith("- [ws-deck-review-001]")  # 今の形の ID は動かさない
+        assert (r / "deck-review" / "prompt_doc.md").read_text().startswith("- [ws-deck-review-002]") and (r / "deck-review" / "prompt_slides.md").read_text().startswith("- [ws-deck-review-003]")
+        assert any(o.startswith("番号を替えた") and "ws-prompt_slides-001 → ws-deck-review-003" in o for o in out)
         mem = (ws / "Customers" / "acme" / "memory.md").read_text()
         assert "assets-100" in mem and "template-777" in mem and "[slides-visual-777]" in mem  # 角括弧のない ID でないものは替えない
+        assert not any("P0002" in o for o in out) and relinks(ws) == []  # もとから文のない提案は見ない
         assert any(o.startswith("要判断: rules/deck-practices/SKILL.md") for o in out) and any(IDS["deck-practices-007"].rsplit("-", 1)[0] in o or "workflow" in o for o in out)
         assert any(o.startswith("控え: ") for o in out) and list((ws / ".factory" / "migrate").glob("*/rules/deck-practices/visual.md"))
         first = next((ws / ".factory" / "migrate").iterdir())
@@ -281,6 +380,17 @@ def selftest():
         assert apply(ws)[0] != f"控え: {first}" and (first / "rules" / "deck-practices" / "visual.md").is_file()  # 同じ秒に回しても、前の控えを残す
         (r / "slides-build" / "x.md").unlink()
         (r / "deck-template" / "SKILL.md").unlink()
+        moved = (r / "deck-practices" / "SKILL.md").read_text()  # 分け直しで、決まりを workflow.md への上書きに移したとする
+        put("rules/slides-build/workflow.md", moved)
+        (r / "deck-practices" / "SKILL.md").write_text("")
+        assert any(x.startswith("台帳の P0001") for x in needs(ws)) and "台帳を合わせる: P0001" in "\n".join(f"台帳を合わせる: {i}" for i, _, b in relinks(ws) if b)
+        assert apply(ws) == ["台帳を合わせた: P0001 の変更先 rules/deck-practices/SKILL.md → rules/slides-build/workflow.md"]
+        assert next(json.loads(x) for x in (ws / ".factory" / "ledger.jsonl").read_text().splitlines() if '"P0001"' in x)["file"] == "rules/slides-build/workflow.md"
+        put("rules/slides-build/workflow.md", "")  # 決まりを分けた先にまたがって書き直し、どこにも元の文がない
+        put(".factory/ledger.jsonl", (ws / ".factory" / "ledger.jsonl").read_text().replace("rules/slides-build/workflow.md", "rules/deck-practices/SKILL.md"))
+        assert apply(ws)[0].startswith("要判断: 台帳の P0001") and needs(ws) == []  # 行き先が決まらないものは名指しで出す（needs には入れない）
+        put("rules/slides-build/workflow.md", moved)
+        assert apply(ws)[0].startswith("台帳を合わせた: P0001")
         assert needs(ws) == [] and apply(ws) == ["移すものはない（今の版）"]  # 2 回目は何もしない
         assert rename_id(ws, "ws-slides-visual-001", "ws-slides-pages-001") and "ws-slides-pages-001" in (ws / ".factory" / "ledger.jsonl").read_text()
         assert "[ws-slides-pages-001]" in (r / "slides-build" / "visual.md").read_text()
@@ -295,9 +405,10 @@ if __name__ == "__main__":
     if not ws:
         sys.exit("factory.toml が見つからない。ワークスペースの中で回す")
     if a in ([], ["check"]):
-        moves, edit, split = plan(ws)
-        print("\n".join([f"移す: {s.relative_to(ws)} → {d.relative_to(ws)}" for s, d in moves] + [f"書き換える: {p.relative_to(ws)}{changed(p)}" for p in edit]
-                        + [f"要判断（apply のあと）: rules/{k} は {v} に分けた" for k, v in split if moves or edit]) or "移すものはない（今の版）")
+        moves, edit, split, ws_map = plan(ws)
+        print("\n".join([f"移す: {s.relative_to(ws)} → {d.relative_to(ws)}" for s, d in moves] + [f"書き換える: {p.relative_to(ws)}{changed(p, ws_map)}" for p in edit]
+                        + [f"要判断（apply のあと）: rules/{k} は {v} に分けた" for k, v in split if moves or edit]
+                        + [f"台帳を合わせる: {i} の変更先 {a} → {b}" if b else f"要判断: 台帳の {i} の文が {a} になく、行き先が決まらない" for i, a, b in relinks(ws)]) or "移すものはない（今の版）")
     elif a == ["apply"]:
         print("\n".join(apply(ws)))
     elif len(a) == 3 and a[0] == "rename-id":
