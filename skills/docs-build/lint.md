@@ -15,7 +15,7 @@ The content and sources of the rules are in `visual.md` and `content.md`. They a
   - Habits typical of AI-made documents (Docs 1-15): too much bold (more than 3 places per 1,000 body characters), bullets that start with bold and a colon, sentences that end in a colon, lists with only one item, mixed use of periods across bullets, runs of empty paragraphs
 - Slide-only rules (「です・ます」, 8 body lines, conclusion band, notes, section dividers) are not checked.
 - [docs-lint-005] **Do not report what the template or theme decides** (it would appear every time and people would learn to skip it): 「冒頭に要旨がない」 for documents written from a template and for template samples (doc.md header has `template:` or `source:`) (the template decides the section order), 「1 行の字数が多い」 for themes on paper other than A4 (`page` in `themes/docs/<name>.json`), and 「図の題がない」 for a figure directly followed by a page break (the cover logo).
-- **Log:** Written to the same `.factory/lint_runs.jsonl` as for slides, and counted with `textlint.py --stats` (in `../deck-practices/scripts/`) (dreaming step 5). Documents whose names contain tmp, 「作業用」, or 「テンプレート」 are not logged.
+- **Log:** Written to the same `.factory/lint_runs.jsonl` as for slides, and counted with `textlint.py --stats` (in `../deck-practices/scripts/`) (step 5 of `dreaming/run.md`). Documents whose names contain tmp, 「作業用」, or 「テンプレート」 are not logged.
 
 ## What is measured on images (doc_layout.py)
 

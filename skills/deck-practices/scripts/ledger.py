@@ -51,8 +51,8 @@ KEY = re.compile(rf"{ID}|lint:.+")  # レビューの表の「決まり」の列
 CITE = re.compile(rf"\[?({ID})\]?\s*「([^」]*)」")  # 決まりの列の ID に添えた、その決まりの文から写した語句（slides-visual-013「単語や文節の途中で折り返さない」）
 RESULTS = ("直した", "残した（誤り）", "残した", "聞く")
 NO_RULE = ("未", "戻さない")  # 決まりにつないでいない戻し先
-TWICE = 2  # 2 本以上の資料・2 社以上の顧客に出たら、たまたまでないとみなす（dreaming の 4c・4i・5）
-AUTO = ("重なり", "古い記述")  # 会話を出典にしない片付け。--auto で、出してすぐ当てる（dreaming の 3d）
+TWICE = 2  # 2 本以上の資料・2 社以上の顧客に出たら、たまたまでないとみなす（dreaming/run.md の 4c・4i・5）
+AUTO = ("重なり", "古い記述")  # 会話を出典にしない片付け。--auto で、出してすぐ当てる（dreaming/run.md の 3d）
 RECS = ("適用", "様子見", "却下")
 TOPICS = {  # 決まりの ID の主題（何についての決まりか）。ID は一度付けたら、ファイルを分けても移しても変えない（../rules.md の "Rule IDs"）
     "deck-flow": "1〜11 の工程と、どの工程でも守ること", "deck-agents": "子の起こし方と待ち方", "deck-content": "構成案と言葉",
@@ -360,7 +360,7 @@ def candidates(ws, plugin=PLUGIN):
 
 def landed(p, plugin):
     """プラグインへの提案の文（Issue で ID を替えたなら、替えた ID にした文）が、入っているプラグインの行き先のファイルにあるか。
-    ID だけでは見ない（今ある決まりを書き直す提案は、ID が前からある）。Issue で文を変えたら届いたとは分からないので、写しを消す案を出さない（重なりは dreaming の 4e で見る）。"""
+    ID だけでは見ない（今ある決まりを書き直す提案は、ID が前からある）。Issue で文を変えたら届いたとは分からないので、写しを消す案を出さない（重なりは dreaming/run.md の 4e で見る）。"""
     tag = f"[{p['proposed']}]"
     want = [x.replace(tag, f"[{p['rule']}]").strip() for x in p["new"].splitlines() if p["proposed"] and tag in x]
     f = plugin / p["file"]

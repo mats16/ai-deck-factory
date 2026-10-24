@@ -1,6 +1,6 @@
 # Registering the scheduled cleanup
 
-Every scheduler gets only the one line in `prompt.txt`. The steps are in SKILL.md, readable from Claude Code, Codex, and pi with the AI Deck Factory plugin installed. Set the working folder to the workspace (the folder with `factory.toml`). When switching schedulers, stop the old one before registering the new one (even if they overlap, step 0 of SKILL.md stops a second run within 12 hours). When installing through a conversation (step 5 of `../../INSTALL.md`), the agent uses a scheduler among its own tools; if it has none, ask the user to set up option 5 by hand. A scheduler not listed below also works if it meets the conditions in step 5 of INSTALL.md.
+Every scheduler gets only the one line in `prompt.txt`. The steps are in SKILL.md and run.md, readable from Claude Code, Codex, and pi with the AI Deck Factory plugin installed. Set the working folder to the workspace (the folder with `factory.toml`). When switching schedulers, stop the old one before registering the new one (even if they overlap, step 0 of run.md stops a second run within 12 hours). When installing through a conversation (step 5 of `../../INSTALL.md`), the agent uses a scheduler among its own tools; if it has none, ask the user to set up option 5 by hand. A scheduler not listed below also works if it meets the conditions in step 5 of INSTALL.md.
 
 A run fixes only safe things such as the index; rule changes become proposals (top of SKILL.md). Proposals are applied when the user replies 「適用」 in the thread or conversation that ran it. With setups that leave no conversation, such as launchd, look at the workspace's `.factory/dreaming/log/<YYYYMMDD>.md` and ask in another conversation, e.g. 「dreaming の P0001 を適用して」 (proposal contents and status are in the rule ledger; `ledger.py pending`).
 
@@ -26,7 +26,7 @@ The default time is 5:00 every day (materials are sometimes made at night, so ru
 - The author's registration (recreated 2026-10-07): the ID is `scheduled-task:command:mcp:91ea5ee6-38a0-49ff-ba0e-6afcd3cc5921:schedule-task:dreaming-daily`. It is bound to the dedicated cleanup thread 「dreaming（指示とスキルの定期の整理）」 (`mcp:d9cb28f9-831a-4767-a164-1da9b0b63a53`).
 - To move it to another thread, call `update_scheduled_task` with `bindToCurrentThread: true` from the destination thread. The ID does not change (confirmed 2026-10-07). If the thread is deleted, the task stays bound to the deleted thread, so move it the same way.
 - Check and stop: `list_scheduled_tasks` (`boundThreadId` is the bound thread), `update_scheduled_task` (`enabled: false`), `delete_scheduled_task`. To run now, `run_scheduled_task_now`.
-- Claude's `auto` safety checks can stop operations (2026-10-06, while writing these steps, an operation writing instructions that run unattended was stopped as "Create Unsafe Agents"). Skip stopped operations and note them in the report (SKILL.md "Rules for running").
+- Claude's `auto` safety checks can stop operations (2026-10-06, while writing these steps, an operation writing instructions that run unattended was stopped as "Create Unsafe Agents"). Skip stopped operations and note them in the report ("Rules for running" in run.md).
 - It was first registered with Codex `gpt-6.1-sol`, which ran the first cleanup (`log/20261006.md`) and applied its proposals.
 
 ## 2. Claude Code Desktop
@@ -48,7 +48,7 @@ Ask in a Codex conversation opened on this folder.
 ```
 
 - The RRULE is `FREQ=DAILY;BYHOUR=5;BYMINUTE=0`. In a folder not under git, it runs directly in that folder.
-- It runs in the default sandbox without human confirmation. `workspace-write` has no web access (the resurvey in step 7 of SKILL.md becomes a report only).
+- It runs in the default sandbox without human confirmation. `workspace-write` has no web access (the resurvey in step 7 of run.md becomes a report only).
 - The definition is stored at `~/.codex/automations/<id>/automation.toml` (the format is not public, so do not write it by hand).
 - Source: https://learn.chatgpt.com/docs/automations?surface=app (checked 2026-10-06)
 
